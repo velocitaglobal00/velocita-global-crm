@@ -7,7 +7,7 @@ Gerador de roteiros virais para afiliados, com login, registro, banco de dados p
 1. `npm install`
 2. Copie `.env.example` para `.env` e preencha:
    - **Banco de dados** (recomendado para produção): `TURSO_DATABASE_URL` e `TURSO_AUTH_TOKEN` — crie grátis em https://turso.tech. Sem isso, usa um arquivo SQLite local (`./data.db`), que funciona bem para testar mas some a cada deploy em provedores sem disco persistente (ex: Render free).
-   - Pelo menos uma chave de IA: `GEMINI_API_KEY` (aistudio.google.com), `OPENROUTER_API_KEY` (openrouter.ai/keys, grátis e sem cartão) e/ou `GROQ_API_KEY` (console.groq.com). Configurar mais de uma deixa o sistema resiliente: se a primeira falhar ou estiver fora do ar, ele tenta a próxima sozinha, na ordem Gemini → OpenRouter → Groq → Anthropic.
+   - Pelo menos uma chave de IA, todas com opção gratuita: `GEMINI_API_KEY` (aistudio.google.com), `OPENROUTER_API_KEY` (openrouter.ai/keys, grátis e sem cartão), `GROQ_API_KEY` (console.groq.com), `CEREBRAS_API_KEY` (cloud.cerebras.ai) e/ou `MISTRAL_API_KEY` (console.mistral.ai). Configurar mais de uma deixa o sistema resiliente: se a primeira falhar ou estiver fora do ar, ele tenta a próxima sozinha, na ordem Gemini → OpenRouter → Groq → Cerebras → Mistral → Anthropic (paga, por último).
    - `ACCESS_CODE` (código que os afiliados usam para registrar e logar)
    - `ADMIN_PASS` (senha do administrador)
 3. `node server.js`

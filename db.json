@@ -241,7 +241,7 @@
       "platform": "Mercado Livre",
       "extraInfo": [],
       "closeDate": "2026-10-15",
-      "status": "open",
+      "status": "lost",
       "createdAt": "2026-09-01T10:00:00.000Z",
       "stageHistory": [
         {
@@ -262,7 +262,7 @@
       "ownerId": "u-3",
       "extraInfo": [],
       "closeDate": "2026-10-20",
-      "status": "open",
+      "status": "lost",
       "createdAt": "2026-09-02T10:00:00.000Z",
       "stageHistory": [
         {
@@ -279,11 +279,11 @@
       "currency": "BRL",
       "personId": "c-3",
       "orgId": "org-3",
-      "stage": "st-2",
+      "stage": "st-4",
       "ownerId": "u-1",
       "extraInfo": [],
       "closeDate": "2026-10-05",
-      "status": "open",
+      "status": "won",
       "createdAt": "2026-09-03T10:00:00.000Z",
       "stageHistory": [
         {
@@ -294,6 +294,16 @@
         {
           "stageId": "st-2",
           "enteredAt": "2026-09-07T09:00:00.000Z",
+          "exitedAt": "2026-09-18T22:05:40.980Z"
+        },
+        {
+          "stageId": "st-3",
+          "enteredAt": "2026-09-18T22:05:40.980Z",
+          "exitedAt": "2026-09-18T22:05:41.541Z"
+        },
+        {
+          "stageId": "st-4",
+          "enteredAt": "2026-09-18T22:05:41.541Z",
           "exitedAt": null
         }
       ]
@@ -305,12 +315,12 @@
       "currency": "BRL",
       "personId": "c-2",
       "orgId": "org-2",
-      "stage": "st-4",
+      "stage": "st-2",
       "ownerId": "u-2",
       "platform": "Shopify",
       "extraInfo": [],
       "closeDate": "2026-11-01",
-      "status": "open",
+      "status": "lost",
       "createdAt": "2026-09-04T10:00:00.000Z",
       "stageHistory": [
         {
@@ -331,6 +341,36 @@
         {
           "stageId": "st-4",
           "enteredAt": "2026-09-13T10:00:00.000Z",
+          "exitedAt": "2026-09-18T22:05:33.406Z"
+        },
+        {
+          "stageId": "st-5",
+          "enteredAt": "2026-09-18T22:05:33.406Z",
+          "exitedAt": "2026-09-18T22:05:36.330Z"
+        },
+        {
+          "stageId": "st-4",
+          "enteredAt": "2026-09-18T22:05:36.330Z",
+          "exitedAt": "2026-09-18T22:05:37.199Z"
+        },
+        {
+          "stageId": "st-3",
+          "enteredAt": "2026-09-18T22:05:37.199Z",
+          "exitedAt": "2026-09-18T22:05:37.907Z"
+        },
+        {
+          "stageId": "st-4",
+          "enteredAt": "2026-09-18T22:05:37.907Z",
+          "exitedAt": "2026-09-18T22:05:39.522Z"
+        },
+        {
+          "stageId": "st-3",
+          "enteredAt": "2026-09-18T22:05:39.522Z",
+          "exitedAt": "2026-09-18T22:05:40.185Z"
+        },
+        {
+          "stageId": "st-2",
+          "enteredAt": "2026-09-18T22:05:40.185Z",
           "exitedAt": null
         }
       ]
@@ -347,7 +387,7 @@
       "platform": "Amazon",
       "extraInfo": [],
       "closeDate": "2026-10-25",
-      "status": "open",
+      "status": "lost",
       "createdAt": "2026-09-05T10:00:00.000Z",
       "stageHistory": [
         {
@@ -639,6 +679,18 @@
       "attachments": [],
       "opens": [],
       "openCount": 0
+    },
+    {
+      "id": "msg-6d49475a90e3",
+      "leadId": "c-1",
+      "channel": "whatsapp",
+      "direction": "out",
+      "text": "ola",
+      "attendantId": "u-2",
+      "attendantName": "Pedro Romanello",
+      "timestamp": "2026-09-18T22:08:52.355Z",
+      "deliveryStatus": "simulated",
+      "deliveryNote": "Integração do WhatsApp não configurada em Configurações > Integrações."
     }
   ],
   "notifications": [
@@ -689,6 +741,10 @@
       {
         "id": "cf-1",
         "name": "Origem do Lead"
+      },
+      {
+        "id": "cf-0aff04ac9b31",
+        "name": "Modelo de cliente"
       }
     ],
     "monthlyGoal": 250000,

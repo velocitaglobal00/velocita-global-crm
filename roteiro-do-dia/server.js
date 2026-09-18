@@ -22,6 +22,12 @@ const GROQ_MODEL = process.env.GROQ_MODEL || 'openai/gpt-oss-120b';
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '';
 const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'openrouter/free';
 
+const CEREBRAS_API_KEY = process.env.CEREBRAS_API_KEY || '';
+const CEREBRAS_MODEL = process.env.CEREBRAS_MODEL || 'llama-3.3-70b';
+
+const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY || '';
+const MISTRAL_MODEL = process.env.MISTRAL_MODEL || 'mistral-small-latest';
+
 const ACCESS_CODE = process.env.ACCESS_CODE || '';
 const ADMIN_USER = process.env.ADMIN_USER || 'admin';
 const ADMIN_PASS = process.env.ADMIN_PASS || '';
@@ -177,11 +183,13 @@ async function callAI(userPrompt, image) {
   if (GEMINI_API_KEY) providers.push({ name: 'Gemini', fn: () => callGemini(userPrompt, image) });
   if (OPENROUTER_API_KEY) providers.push({ name: 'OpenRouter', fn: () => callOpenRouter(userPrompt, image) });
   if (GROQ_API_KEY) providers.push({ name: 'Groq', fn: () => callGroq(userPrompt, image) });
+  if (CEREBRAS_API_KEY) providers.push({ name: 'Cerebras', fn: () => callCerebras(userPrompt) });
+  if (MISTRAL_API_KEY) providers.push({ name: 'Mistral', fn: () => callMistral(userPrompt) });
   if (ANTHROPIC_API_KEY) providers.push({ name: 'Anthropic', fn: () => callAnthropic(userPrompt, image) });
 
   if (!providers.length) {
     const err = new Error('no_key_configured');
-    err.friendly = 'Nenhuma chave de IA configurada. Preencha GEMINI_API_KEY, OPENROUTER_API_KEY, GROQ_API_KEY ou ANTHROPIC_API_KEY no servidor.';
+    err.friendly = 'Nenhuma chave de IA configurada. Preencha GEMINI_API_KEY, OPENROUTER_API_KEY, GROQ_API_KEY, CEREBRAS_API_KEY, MISTRAL_API_KEY ou ANTHROPIC_API_KEY no servidor.';
     throw err;
   }
 
@@ -251,6 +259,60 @@ async function callGroq(userPrompt, image) {
     err.friendly = response.status === 429
       ? 'O limite gratuito do Groq foi atingido por agora. Tente novamente em alguns minutos.'
       : 'Erro ao chamar a API do Groq. Confira sua chave em console.groq.com.';
+    throw err;
+  }
+
+  const data = await response.json();
+  const text = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
+  return cleanJsonText(text);
+}
+
+// Cerebras e Mistral: modelos de texto (sem suporte a foto do produto), usados como
+// mais duas opções gratuitas na cadeia de fallback, depois de Gemini/OpenRouter/Groq.
+async function callCerebras(userPrompt) {
+  const response = await fetch('https://api.cerebras.ai/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${CEREBRAS_API_KEY}` },
+    body: JSON.stringify({
+      model: CEREBRAS_MODEL, max_tokens: 2000, temperature: 0.9,
+      response_format: { type: 'json_object' },
+      messages: [{ role: 'system', content: SYSTEM_PROMPT }, { role: 'user', content: userPrompt }]
+    })
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    console.error('Erro da API Cerebras:', response.status, errText);
+    const err = new Error('cerebras_error');
+    err.friendly = response.status === 429
+      ? 'O limite gratuito do Cerebras foi atingido por agora. Tente novamente em instantes.'
+      : 'Erro ao chamar a API do Cerebras. Confira sua chave em cloud.cerebras.ai.';
+    throw err;
+  }
+
+  const data = await response.json();
+  const text = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
+  return cleanJsonText(text);
+}
+
+async function callMistral(userPrompt) {
+  const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${MISTRAL_API_KEY}` },
+    body: JSON.stringify({
+      model: MISTRAL_MODEL, max_tokens: 2000, temperature: 0.9,
+      response_format: { type: 'json_object' },
+      messages: [{ role: 'system', content: SYSTEM_PROMPT }, { role: 'user', content: userPrompt }]
+    })
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    console.error('Erro da API Mistral:', response.status, errText);
+    const err = new Error('mistral_error');
+    err.friendly = response.status === 429
+      ? 'O limite gratuito do Mistral foi atingido por agora. Tente novamente em instantes.'
+      : 'Erro ao chamar a API do Mistral. Confira sua chave em console.mistral.ai.';
     throw err;
   }
 
@@ -368,6 +430,30 @@ async function testGroq() {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${GROQ_API_KEY}` },
     body: JSON.stringify({ model: GROQ_MODEL, max_tokens: 10, messages: [{ role: 'user', content: 'Responda apenas com a palavra: ok' }] })
+  });
+  if (!response.ok) { const t = await response.text(); throw new Error(`HTTP ${response.status}: ${t.slice(0, 200)}`); }
+  const data = await response.json();
+  const text = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
+  return text.trim() || '(resposta vazia)';
+}
+
+async function testCerebras() {
+  const response = await fetch('https://api.cerebras.ai/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${CEREBRAS_API_KEY}` },
+    body: JSON.stringify({ model: CEREBRAS_MODEL, max_tokens: 10, messages: [{ role: 'user', content: 'Responda apenas com a palavra: ok' }] })
+  });
+  if (!response.ok) { const t = await response.text(); throw new Error(`HTTP ${response.status}: ${t.slice(0, 200)}`); }
+  const data = await response.json();
+  const text = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
+  return text.trim() || '(resposta vazia)';
+}
+
+async function testMistral() {
+  const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${MISTRAL_API_KEY}` },
+    body: JSON.stringify({ model: MISTRAL_MODEL, max_tokens: 10, messages: [{ role: 'user', content: 'Responda apenas com a palavra: ok' }] })
   });
   if (!response.ok) { const t = await response.text(); throw new Error(`HTTP ${response.status}: ${t.slice(0, 200)}`); }
   const data = await response.json();
@@ -707,6 +793,8 @@ app.get('/api/admin/test-ai', requireAuth, requireStaff, async (req, res) => {
     { name: 'Gemini', envVar: 'GEMINI_API_KEY', configured: !!GEMINI_API_KEY, fn: testGemini },
     { name: 'OpenRouter', envVar: 'OPENROUTER_API_KEY', configured: !!OPENROUTER_API_KEY, fn: testOpenRouter },
     { name: 'Groq', envVar: 'GROQ_API_KEY', configured: !!GROQ_API_KEY, fn: testGroq },
+    { name: 'Cerebras', envVar: 'CEREBRAS_API_KEY', configured: !!CEREBRAS_API_KEY, fn: testCerebras },
+    { name: 'Mistral', envVar: 'MISTRAL_API_KEY', configured: !!MISTRAL_API_KEY, fn: testMistral },
     { name: 'Anthropic', envVar: 'ANTHROPIC_API_KEY', configured: !!ANTHROPIC_API_KEY, fn: testAnthropic }
   ];
 
