@@ -2,6 +2,7 @@ const express = require('express');
 const session = require('express-session');
 const crypto = require('crypto');
 const path = require('path');
+const nodemailer = require('nodemailer');
 const db = require('./db');
 
 const APP_PASSWORD = 'Velocita1';
@@ -321,10 +322,19 @@ app.get('/api/users', requireAuth, (req, res) => {
 
 app.post('/api/users', requireAuth, (req, res) => {
   const data = db.read();
-  const user = { id: newId('u'), name: req.body.name || 'Novo usuário' };
+  const user = { id: newId('u'), name: req.body.name || 'Novo usuário', ramal: req.body.ramal || '' };
   data.users.push(user);
   db.write(data);
   res.status(201).json(user);
+});
+
+app.put('/api/users/:id', requireAuth, (req, res) => {
+  const data = db.read();
+  const user = data.users.find((u) => u.id === req.params.id);
+  if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
+  Object.assign(user, req.body);
+  db.write(data);
+  res.json(user);
 });
 
 app.delete('/api/users/:id', requireAuth, (req, res) => {
@@ -390,6 +400,7 @@ function logWebhookEvent(channel, req, res) {
   }
 
   const data = db.read();
+  if (req.method === 'POST') tryIngestInbound(data, channel, req.body);
   if (!data.webhookEvents) data.webhookEvents = [];
   data.webhookEvents.unshift({
     id: newId('evt'),
@@ -402,6 +413,58 @@ function logWebhookEvent(channel, req, res) {
   res.status(200).json({ ok: true });
 }
 
+function pushMessage(data, msg) {
+  if (!data.messages) data.messages = [];
+  data.messages.push({
+    id: newId('msg'),
+    attendantId: null,
+    attendantName: null,
+    deliveryStatus: 'received',
+    deliveryNote: '',
+    timestamp: new Date().toISOString(),
+    ...msg
+  });
+}
+
+// Faz o melhor esforço para interpretar payloads reais de webhook da Meta (WhatsApp/
+// Facebook/Instagram usam formatos parecidos) e registrar a mensagem recebida na
+// conversa do lead correspondente, identificado pelo número/ID do canal.
+function tryIngestInbound(data, channel, body) {
+  try {
+    if (channel === 'whatsapp') {
+      (body.entry || []).forEach((entry) => {
+        (entry.changes || []).forEach((change) => {
+          const value = change.value || {};
+          (value.messages || []).forEach((m) => {
+            const contact = findContactByChannel(data, 'whatsapp', m.from);
+            if (!contact) return;
+            pushMessage(data, {
+              leadId: contact.id,
+              channel: 'whatsapp',
+              direction: 'in',
+              text: (m.text && m.text.body) || `[${m.type}]`,
+              timestamp: new Date(Number(m.timestamp) * 1000).toISOString()
+            });
+          });
+        });
+      });
+    } else if (channel === 'facebook' || channel === 'instagram') {
+      (body.entry || []).forEach((entry) => {
+        (entry.messaging || []).forEach((evt) => {
+          const text = evt.message && evt.message.text;
+          const senderId = evt.sender && evt.sender.id;
+          if (!text || !senderId) return;
+          const contact = findContactByChannel(data, channel === 'facebook' ? 'facebook' : 'instagram', senderId);
+          if (!contact) return;
+          pushMessage(data, { leadId: contact.id, channel, direction: 'in', text });
+        });
+      });
+    }
+  } catch (e) {
+    // Formato de payload não reconhecido; o evento bruto já fica salvo em webhookEvents.
+  }
+}
+
 app.get('/api/webhooks/whatsapp', (req, res) => logWebhookEvent('whatsapp', req, res));
 app.post('/api/webhooks/whatsapp', (req, res) => logWebhookEvent('whatsapp', req, res));
 app.get('/api/webhooks/facebook', (req, res) => logWebhookEvent('facebook', req, res));
@@ -410,65 +473,335 @@ app.get('/api/webhooks/instagram', (req, res) => logWebhookEvent('instagram', re
 app.post('/api/webhooks/instagram', (req, res) => logWebhookEvent('instagram', req, res));
 app.post('/api/webhooks/google-ads-leads', (req, res) => logWebhookEvent('google_ads', req, res));
 
+// Webhook de e-mail recebido (compatível com o formato "Inbound Parse" de provedores
+// como SendGrid/Mailgun/Postmark: campos "from" e "text"/"body-plain").
+app.post('/api/webhooks/email', (req, res) => {
+  const data = db.read();
+  const from = req.body.from || req.body.sender || '';
+  const emailMatch = (from.match(/[\w.+-]+@[\w-]+\.[\w.-]+/) || [])[0];
+  const text = req.body.text || req.body['body-plain'] || req.body.subject || '';
+  const contact = findContactByChannel(data, 'email', emailMatch);
+  if (contact) {
+    pushMessage(data, { leadId: contact.id, channel: 'email', direction: 'in', text });
+  }
+  if (!data.webhookEvents) data.webhookEvents = [];
+  data.webhookEvents.unshift({ id: newId('evt'), channel: 'email', receivedAt: new Date().toISOString(), payload: req.body });
+  data.webhookEvents = data.webhookEvents.slice(0, 200);
+  db.write(data);
+  res.status(200).json({ ok: true });
+});
+
 app.get('/api/webhook-events', requireAuth, (req, res) => {
   res.json((db.read().webhookEvents || []).slice(0, 50));
 });
 
-// ---------- Envio de mensagens (WhatsApp / E-mail) ----------
-// Usa as credenciais salvas em Configurações > Integrações. Retorna erro claro se
-// ainda não houver credenciais configuradas — a chamada real só funciona com uma
-// conta válida da Meta (WhatsApp Cloud API) ou de um provedor de e-mail (SMTP).
-app.post('/api/leads/:id/send-whatsapp', requireAuth, async (req, res) => {
+// ---------- Conversas por canal (WhatsApp / Facebook / Instagram / E-mail) ----------
+// Cada mensagem enviada fica registrada com o atendente (usuário logado no CRM) que
+// a escreveu. O envio real só acontece quando a integração correspondente estiver
+// configurada em Configurações > Integrações; caso contrário a mensagem fica
+// registrada apenas no CRM (deliveryStatus: "simulated"), de forma transparente.
+app.get('/api/leads/:id/messages', requireAuth, (req, res) => {
+  const data = db.read();
+  let msgs = (data.messages || []).filter((m) => m.leadId === req.params.id);
+  if (req.query.channel) msgs = msgs.filter((m) => m.channel === req.query.channel);
+  msgs.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+  res.json(msgs);
+});
+
+app.post('/api/leads/:id/messages', requireAuth, async (req, res) => {
   const data = db.read();
   const contact = data.contacts.find((c) => c.id === req.params.id);
   if (!contact) return res.status(404).json({ error: 'Lead não encontrado' });
 
-  const wa = data.settings.integrations.whatsapp || {};
-  if (!wa.phoneNumberId || !wa.accessToken) {
-    return res.status(400).json({
-      error: 'Integração do WhatsApp não configurada. Adicione o Phone Number ID e o Access Token em Configurações > Integrações.'
-    });
-  }
-  const to = contact.channels && contact.channels.whatsapp;
-  if (!to) return res.status(400).json({ error: 'Este lead não possui número de WhatsApp cadastrado.' });
+  const { channel, text, attendantId } = req.body;
+  if (!text || !text.trim()) return res.status(400).json({ error: 'Mensagem vazia' });
+  const attendant = data.users.find((u) => u.id === attendantId);
+
+  const message = {
+    id: newId('msg'),
+    leadId: contact.id,
+    channel,
+    direction: 'out',
+    text: text.trim(),
+    attendantId: attendantId || null,
+    attendantName: attendant ? attendant.name : 'Atendente',
+    timestamp: new Date().toISOString(),
+    deliveryStatus: 'simulated',
+    deliveryNote: ''
+  };
 
   try {
-    const response = await fetch(`https://graph.facebook.com/v19.0/${wa.phoneNumberId}/messages`, {
+    if (channel === 'whatsapp') {
+      const wa = data.settings.integrations.whatsapp || {};
+      const to = contact.channels && contact.channels.whatsapp;
+      if (wa.phoneNumberId && wa.accessToken && to) {
+        const response = await fetch(`https://graph.facebook.com/v19.0/${wa.phoneNumberId}/messages`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${wa.accessToken}` },
+          body: JSON.stringify({ messaging_product: 'whatsapp', to, type: 'text', text: { body: message.text } })
+        });
+        const result = await response.json();
+        if (response.ok) message.deliveryStatus = 'sent';
+        else {
+          message.deliveryStatus = 'failed';
+          message.deliveryNote = (result.error && result.error.message) || 'Erro na API do WhatsApp';
+        }
+      } else {
+        message.deliveryNote = 'Integração do WhatsApp não configurada em Configurações > Integrações.';
+      }
+    } else if (channel === 'facebook' || channel === 'instagram') {
+      const creds = channel === 'facebook' ? data.settings.integrations.facebook : data.settings.integrations.instagram;
+      const recipientId = channel === 'facebook' ? contact.channels && contact.channels.facebookPsid : contact.channels && contact.channels.instagramId;
+      const token = channel === 'facebook' ? creds && creds.pageAccessToken : creds && creds.accessToken;
+      if (token && recipientId) {
+        const response = await fetch(`https://graph.facebook.com/v19.0/me/messages?access_token=${encodeURIComponent(token)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ recipient: { id: recipientId }, message: { text: message.text } })
+        });
+        const result = await response.json();
+        if (response.ok) message.deliveryStatus = 'sent';
+        else {
+          message.deliveryStatus = 'failed';
+          message.deliveryNote = (result.error && result.error.message) || 'Erro na API';
+        }
+      } else {
+        message.deliveryNote = `Integração do ${channel === 'facebook' ? 'Facebook' : 'Instagram'} não configurada em Configurações > Integrações.`;
+      }
+    } else if (channel === 'email') {
+      const email = data.settings.integrations.email || {};
+      if (email.smtpHost && email.smtpUser && email.smtpPass && contact.email) {
+        try {
+          const transporter = nodemailer.createTransport({
+            host: email.smtpHost,
+            port: Number(email.smtpPort) || 587,
+            secure: Number(email.smtpPort) === 465,
+            auth: { user: email.smtpUser, pass: email.smtpPass }
+          });
+          await transporter.sendMail({
+            from: email.smtpUser,
+            to: contact.email,
+            subject: `Mensagem de ${attendant ? attendant.name : 'Velocita Global'}`,
+            text: message.text
+          });
+          message.deliveryStatus = 'sent';
+        } catch (mailErr) {
+          message.deliveryStatus = 'failed';
+          message.deliveryNote = mailErr.message;
+        }
+      } else {
+        message.deliveryNote = 'Integração de e-mail (SMTP) não configurada em Configurações > Integrações.';
+      }
+    }
+  } catch (err) {
+    message.deliveryStatus = 'failed';
+    message.deliveryNote = err.message;
+  }
+
+  if (!data.messages) data.messages = [];
+  data.messages.push(message);
+  db.write(data);
+  res.status(201).json(message);
+});
+
+// ---------- Assistente de IA ----------
+// Suporta provedores gratuitos: Ollama (modelo local, sem custo, sem chave), Groq e
+// Google Gemini (planos gratuitos na nuvem, só uma API key grátis), além de
+// Anthropic Claude (pago). Escolha em Configurações > Assistente IA.
+async function callAiProvider(ai, systemPrompt, userMessage, history) {
+  const provider = ai.provider || 'ollama';
+  const messages = (history || []).map((h) => ({ role: h.role, content: h.content }));
+  messages.push({ role: 'user', content: userMessage });
+
+  if (provider === 'ollama') {
+    const baseUrl = ai.baseUrl || 'http://localhost:11434';
+    let response;
+    try {
+      response = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: ai.model || 'llama3.1',
+          messages: [{ role: 'system', content: systemPrompt }, ...messages],
+          stream: false
+        })
+      });
+    } catch (netErr) {
+      throw new Error(
+        `Não foi possível conectar ao Ollama em ${baseUrl}. Verifique se o Ollama está instalado e rodando neste computador (comando "ollama serve"), ou escolha outro provedor gratuito em Configurações > Assistente IA.`
+      );
+    }
+    if (!response.ok) throw new Error(`Ollama respondeu ${response.status}. Verifique se o modelo "${ai.model || 'llama3.1'}" foi baixado (ollama pull ${ai.model || 'llama3.1'}).`);
+    const result = await response.json();
+    return (result.message && result.message.content) || '';
+  }
+
+  if (provider === 'groq') {
+    if (!ai.apiKey) throw new Error('Configure a API Key da Groq em Configurações > Assistente IA.');
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${wa.accessToken}` },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ai.apiKey}` },
       body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        to,
-        type: 'text',
-        text: { body: req.body.message || '' }
+        model: ai.model || 'llama-3.1-8b-instant',
+        messages: [{ role: 'system', content: systemPrompt }, ...messages]
       })
     });
     const result = await response.json();
-    if (!response.ok) return res.status(response.status).json({ error: result.error?.message || 'Erro na API do WhatsApp' });
-    res.json({ ok: true, result });
+    if (!response.ok) throw new Error((result.error && result.error.message) || 'Erro na API da Groq');
+    return (result.choices && result.choices[0] && result.choices[0].message.content) || '';
+  }
+
+  if (provider === 'gemini') {
+    if (!ai.apiKey) throw new Error('Configure a API Key do Google Gemini em Configurações > Assistente IA.');
+    const model = ai.model || 'gemini-1.5-flash';
+    const transcript = [systemPrompt, ...messages.map((m) => `${m.role === 'user' ? 'Usuário' : 'Assistente'}: ${m.content}`)].join('\n\n');
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${ai.apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: transcript }] }] })
+      }
+    );
+    const result = await response.json();
+    if (!response.ok) throw new Error((result.error && result.error.message) || 'Erro na API do Gemini');
+    return (result.candidates && result.candidates[0] && result.candidates[0].content.parts[0].text) || '';
+  }
+
+  if (provider === 'anthropic') {
+    if (!ai.apiKey) throw new Error('Configure a API Key da Anthropic em Configurações > Assistente IA.');
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': ai.apiKey, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: ai.model || 'claude-sonnet-4-5', max_tokens: 500, system: systemPrompt, messages })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error((result.error && result.error.message) || 'Erro na API da Anthropic');
+    return (result.content && result.content[0] && result.content[0].text) || '';
+  }
+
+  throw new Error('Provedor de IA desconhecido.');
+}
+
+app.post('/api/ai/chat', requireAuth, async (req, res) => {
+  const data = db.read();
+  const ai = data.settings.integrations.ai || {};
+  const { dealId, message, history } = req.body;
+  if (!message || !message.trim()) return res.status(400).json({ error: 'Mensagem vazia' });
+
+  const deal = data.deals.find((d) => d.id === dealId);
+  const contact = deal ? data.contacts.find((c) => c.id === deal.personId) : null;
+  const activities = deal ? data.activities.filter((a) => a.dealId === deal.id) : [];
+  const stageNames = data.stages.map((s) => `${s.id}=${s.name}`).join(', ');
+
+  let context = 'Nenhum negócio selecionado.';
+  if (deal) {
+    const stage = data.stages.find((s) => s.id === deal.stage);
+    context = `Negócio: "${deal.title}", valor ${deal.currency} ${deal.value}, estágio atual: ${stage ? stage.name : '-'}, status: ${deal.status}, data de fechamento esperada: ${deal.closeDate || 'não definida'}.
+Contato: ${contact ? contact.name : 'não vinculado'}.
+Atividades recentes: ${activities.slice(-5).map((a) => `[${a.type}] ${a.text}`).join(' | ') || 'nenhuma'}.
+Etapas disponíveis no funil (id=nome): ${stageNames}.`;
+  }
+
+  const systemPrompt = `Você é o assistente de vendas do CRM Velocita Global. Ajude o vendedor com dicas objetivas e práticas sobre o negócio abaixo. Responda em português, em até 4 frases. Não invente dados que não foram informados.
+${context}
+Se fizer sentido sugerir UMA ação concreta, adicione ao final da resposta, em uma linha própria, exatamente um destes formatos:
+[ACAO:MOVER_ETAPA:<id_da_etapa>]
+[ACAO:MARCAR_GANHO]
+[ACAO:MARCAR_PERDIDO]
+[ACAO:ADICIONAR_TAREFA:<texto da tarefa>]
+Só inclua essa linha se realmente fizer sentido. Caso contrário, não inclua nenhuma tag.`;
+
+  try {
+    const reply = await callAiProvider(ai, systemPrompt, message, history);
+    res.json({ reply });
   } catch (err) {
-    res.status(500).json({ error: 'Falha ao conectar com a API do WhatsApp: ' + err.message });
+    res.status(400).json({ error: err.message });
   }
 });
 
-app.post('/api/leads/:id/send-email', requireAuth, async (req, res) => {
+// ---------- Dicas automáticas (regras locais, sem IA e sem custo) ----------
+app.get('/api/ai/tips', requireAuth, (req, res) => {
+  const data = db.read();
+  const now = new Date();
+  const tips = [];
+
+  data.deals.filter((d) => d.status === 'open').forEach((deal) => {
+    const open = (deal.stageHistory || []).find((h) => !h.exitedAt);
+    if (open) {
+      const days = Math.floor((now - new Date(open.enteredAt)) / 86400000);
+      if (days >= 7) {
+        const stage = data.stages.find((s) => s.id === deal.stage);
+        tips.push({ icon: '⏳', text: `"${deal.title}" está há ${days} dias em ${stage ? stage.name : 'uma etapa'} sem avançar. Vale um follow-up.`, dealId: deal.id });
+      }
+    }
+  });
+
+  const overdueTasks = data.activities.filter((a) => a.type === 'task' && !a.done && new Date(a.date) < now);
+  if (overdueTasks.length > 0) {
+    tips.push({ icon: '⚠️', text: `Você tem ${overdueTasks.length} tarefa(s) atrasada(s). Confira os lembretes no Dashboard.`, dealId: null });
+  }
+
+  const goal = Number(data.settings.monthlyGoal) || 0;
+  const wonValue = data.deals.filter((d) => d.status === 'won').reduce((s, d) => s + Number(d.value), 0);
+  if (goal > 0) {
+    const pct = Math.round((wonValue / goal) * 100);
+    if (pct < 50) {
+      tips.push({ icon: '🎯', text: `A meta do mês está em ${pct}%. Faltam R$ ${(goal - wonValue).toLocaleString('pt-BR')} para bater a meta.`, dealId: null });
+    }
+  }
+
+  data.deals
+    .filter((d) => d.status === 'open' && !data.activities.some((a) => a.dealId === d.id))
+    .forEach((deal) => {
+      tips.push({ icon: '📭', text: `"${deal.title}" ainda não tem nenhuma atividade registrada.`, dealId: deal.id });
+    });
+
+  if (tips.length === 0) {
+    tips.push({ icon: '✅', text: 'Tudo em dia! Nenhum alerta no momento.', dealId: null });
+  }
+
+  res.json(tips.slice(0, 10));
+});
+
+// ---------- Vivo PABX: originar ligação (click-to-call) ----------
+// A Vivo PABX Virtual não tem uma API pública padronizada como a da Meta ou do
+// Google — o endpoint e o formato exato do corpo da requisição dependem do seu
+// contrato e ficam disponíveis no painel administrativo da sua conta Vivo. Ajuste
+// a "apiUrl" em Configurações > Integrações com a URL fornecida pela Vivo; se o
+// formato do corpo da requisição for diferente do usado abaixo, me envie a
+// documentação da sua conta para eu ajustar este endpoint com precisão.
+app.post('/api/leads/:id/call', requireAuth, async (req, res) => {
   const data = db.read();
   const contact = data.contacts.find((c) => c.id === req.params.id);
   if (!contact) return res.status(404).json({ error: 'Lead não encontrado' });
 
-  const email = data.settings.integrations.email || {};
-  if (!email.smtpHost || !email.smtpUser || !email.smtpPass) {
-    return res.status(400).json({
-      error: 'Integração de e-mail não configurada. Adicione um servidor SMTP em Configurações > Integrações.'
-    });
-  }
-  if (!contact.email) return res.status(400).json({ error: 'Este lead não possui e-mail cadastrado.' });
+  const pabx = data.settings.integrations.vivoPabx || {};
+  const attendant = data.users.find((u) => u.id === req.body.attendantId);
+  const phone = (contact.channels && contact.channels.whatsapp) || (contact.phone || '').replace(/\D/g, '');
 
-  // Envio real de e-mail requer um cliente SMTP (ex: nodemailer) configurado com as
-  // credenciais acima. Deixe pronto para plugar assim que a integração for configurada.
-  res.status(501).json({
-    error: 'Credenciais de SMTP salvas, mas o envio real ainda depende de instalar um cliente SMTP (ex: nodemailer) no servidor.'
-  });
+  if (!pabx.apiUrl || !pabx.apiToken) {
+    return res.status(400).json({ error: 'Integração da Vivo PABX não configurada em Configurações > Integrações.' });
+  }
+  if (!attendant || !attendant.ramal) {
+    return res.status(400).json({ error: 'Cadastre o ramal do atendente em Configurações > Usuários.' });
+  }
+  if (!phone) {
+    return res.status(400).json({ error: 'Este lead não possui telefone cadastrado.' });
+  }
+
+  try {
+    const response = await fetch(pabx.apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${pabx.apiToken}` },
+      body: JSON.stringify({ ramal: attendant.ramal, numero: phone })
+    });
+    const text = await response.text();
+    if (!response.ok) return res.status(response.status).json({ error: `Vivo PABX respondeu ${response.status}: ${text}` });
+    res.json({ ok: true, result: text });
+  } catch (err) {
+    res.status(500).json({ error: 'Falha ao conectar com a Vivo PABX: ' + err.message });
+  }
 });
 
 app.listen(PORT, () => {

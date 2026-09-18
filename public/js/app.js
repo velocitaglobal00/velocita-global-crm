@@ -12,9 +12,14 @@ const state = {
   currentDealId: null,
   currentLeadId: null,
   currentActivityFilter: 'all',
-  showClosedDeals: false
+  showClosedDeals: false,
+  attendantId: null,
+  leadChatChannel: 'whatsapp',
+  aiChatDealId: null,
+  aiChatHistory: []
 };
 
+const ATTENDANT_KEY = 'vg_attendant_id';
 const CURRENCY_SYMBOL = { BRL: 'R$', USD: '$', EUR: '€' };
 const ACTIVITY_ICON = { note: '📝', email: '✉️', call: '📞', meeting: '📅', task: '✅' };
 const ACTIVITY_LABEL = { note: 'Nota', email: 'E-mail', call: 'Chamada', meeting: 'Reunião', task: 'Tarefa' };
@@ -26,6 +31,7 @@ const SOURCE_LABEL = {
   indicacao: 'Indicação',
   organico: 'Orgânico / Site'
 };
+const CHANNEL_LABEL = { whatsapp: 'WhatsApp', facebook: 'Facebook', instagram: 'Instagram', email: 'E-mail' };
 
 function fmtMoney(value, currency = 'BRL') {
   const symbol = CURRENCY_SYMBOL[currency] || 'R$';
@@ -106,7 +112,8 @@ const Api = {
   updateOrg: (id, payload) => api(`/api/organizations/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
   deleteOrg: (id) => api(`/api/organizations/${id}`, { method: 'DELETE' }),
   users: () => api('/api/users'),
-  addUser: (name) => api('/api/users', { method: 'POST', body: JSON.stringify({ name }) }),
+  addUser: (name, ramal) => api('/api/users', { method: 'POST', body: JSON.stringify({ name, ramal }) }),
+  updateUser: (id, payload) => api(`/api/users/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
   deleteUser: (id) => api(`/api/users/${id}`, { method: 'DELETE' }),
   tags: () => api('/api/tags'),
   addTag: (name, color) => api('/api/tags', { method: 'POST', body: JSON.stringify({ name, color }) }),
@@ -118,7 +125,13 @@ const Api = {
   deleteField: (id) => api(`/api/settings/custom-fields/${id}`, { method: 'DELETE' }),
   activities: (dealId) => api(`/api/deals/${dealId}/activities`),
   addActivity: (dealId, payload) => api(`/api/deals/${dealId}/activities`, { method: 'POST', body: JSON.stringify(payload) }),
-  updateActivity: (id, payload) => api(`/api/activities/${id}`, { method: 'PUT', body: JSON.stringify(payload) })
+  updateActivity: (id, payload) => api(`/api/activities/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
+  leadMessages: (leadId, channel) => api(`/api/leads/${leadId}/messages?channel=${channel}`),
+  sendLeadMessage: (leadId, channel, text, attendantId) =>
+    api(`/api/leads/${leadId}/messages`, { method: 'POST', body: JSON.stringify({ channel, text, attendantId }) }),
+  callLead: (leadId, attendantId) => api(`/api/leads/${leadId}/call`, { method: 'POST', body: JSON.stringify({ attendantId }) }),
+  aiTips: () => api('/api/ai/tips'),
+  aiChat: (dealId, message, history) => api('/api/ai/chat', { method: 'POST', body: JSON.stringify({ dealId, message, history }) })
 };
 
 // ============ Init ============
@@ -134,7 +147,6 @@ async function init() {
   }
 
   await loadAllData();
-  document.getElementById('user-name').textContent = (state.users[0] && state.users[0].name) || 'Admin1';
 
   renderDashboard();
   renderKanban();
@@ -154,6 +166,11 @@ async function init() {
   bindOrgsPage();
   bindLogout();
   bindModalCloseButtons();
+  bindAttendant();
+  bindLeadChat();
+  bindAiAssistant();
+
+  ensureAttendant();
 }
 
 async function loadAllData() {
@@ -217,9 +234,49 @@ function bindModalCloseButtons() {
     btn.addEventListener('click', () => closeModal(btn.dataset.close));
   });
   document.querySelectorAll('.modal-overlay').forEach((overlay) => {
+    if (overlay.id === 'modal-attendant') return; // seleção de atendente é obrigatória
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) closeModal(overlay.id);
     });
+  });
+}
+
+// ============ Atendente (identidade de quem está usando o CRM) ============
+function currentAttendant() {
+  return state.users.find((u) => u.id === state.attendantId);
+}
+
+function updateAttendantTopbar() {
+  const attendant = currentAttendant();
+  document.getElementById('attendant-name').textContent = attendant ? attendant.name : '-';
+}
+
+function ensureAttendant() {
+  const stored = localStorage.getItem(ATTENDANT_KEY);
+  if (stored && state.users.some((u) => u.id === stored)) {
+    state.attendantId = stored;
+    updateAttendantTopbar();
+    return;
+  }
+  openAttendantPicker();
+}
+
+function openAttendantPicker() {
+  const select = document.getElementById('attendant-select');
+  select.innerHTML = state.users.map((u) => `<option value="${u.id}">${escapeHtml(u.name)}</option>`).join('');
+  if (state.attendantId) select.value = state.attendantId;
+  openModal('modal-attendant');
+}
+
+function bindAttendant() {
+  document.getElementById('btn-switch-attendant').addEventListener('click', openAttendantPicker);
+  document.getElementById('btn-confirm-attendant').addEventListener('click', () => {
+    const id = document.getElementById('attendant-select').value;
+    if (!id) return;
+    state.attendantId = id;
+    localStorage.setItem(ATTENDANT_KEY, id);
+    updateAttendantTopbar();
+    closeModal('modal-attendant');
   });
 }
 
@@ -808,12 +865,42 @@ function bindLeadDetailModal() {
     closeModal('modal-lead-detail');
     openContactModal(lead);
   });
+  document.getElementById('btn-call-lead').addEventListener('click', async () => {
+    const leadId = state.currentLeadId;
+    try {
+      await Api.callLead(leadId, state.attendantId);
+      showToast('Ligação originada pela Vivo PABX 📞');
+    } catch (err) {
+      showToast(err.message || 'Erro ao originar ligação');
+    }
+  });
+
+  document.querySelectorAll('#lead-tabs [data-ldtab]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#lead-tabs [data-ldtab]').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      const tab = btn.dataset.ldtab;
+      if (tab === 'deals') {
+        document.getElementById('ld-tab-deals').style.display = '';
+        document.getElementById('ld-tab-chat').style.display = 'none';
+      } else {
+        document.getElementById('ld-tab-deals').style.display = 'none';
+        document.getElementById('ld-tab-chat').style.display = '';
+        state.leadChatChannel = tab;
+        loadLeadChat();
+      }
+    });
+  });
 }
 
 function openLeadDetail(leadId) {
   const lead = state.contacts.find((c) => c.id === leadId);
   if (!lead) return;
   state.currentLeadId = leadId;
+
+  document.querySelectorAll('#lead-tabs [data-ldtab]').forEach((b) => b.classList.toggle('active', b.dataset.ldtab === 'deals'));
+  document.getElementById('ld-tab-deals').style.display = '';
+  document.getElementById('ld-tab-chat').style.display = 'none';
 
   document.getElementById('ld-name').textContent = lead.name;
   document.getElementById('ld-email').textContent = lead.email || '-';
@@ -880,6 +967,75 @@ function openLeadDetail(leadId) {
   }
 
   openModal('modal-lead-detail');
+}
+
+// ---- Conversas por canal (WhatsApp / Facebook / Instagram / E-mail) ----
+function bindLeadChat() {
+  document.getElementById('ld-chat-send').addEventListener('click', sendLeadChatMessage);
+  document.getElementById('ld-chat-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendLeadChatMessage();
+    }
+  });
+}
+
+function renderChatBubble(msg, leadName) {
+  const isOut = msg.direction === 'out';
+  const sender = isOut ? msg.attendantName || 'Atendente' : leadName;
+  let noteHtml = '';
+  if (isOut && msg.deliveryStatus === 'simulated') {
+    noteHtml = `<div class="chat-delivery-note">⚠️ Simulado — ${escapeHtml(msg.deliveryNote || 'integração não configurada')}</div>`;
+  } else if (isOut && msg.deliveryStatus === 'failed') {
+    noteHtml = `<div class="chat-delivery-note">❌ Falha no envio — ${escapeHtml(msg.deliveryNote || '')}</div>`;
+  }
+  return `
+    <div class="chat-bubble-row ${isOut ? 'out' : 'in'}">
+      <div class="chat-bubble">${escapeHtml(msg.text)}</div>
+      <div class="chat-meta">${escapeHtml(sender)} · ${fmtDateTime(msg.timestamp)}</div>
+      ${noteHtml}
+    </div>
+  `;
+}
+
+async function loadLeadChat() {
+  const leadId = state.currentLeadId;
+  const lead = state.contacts.find((c) => c.id === leadId);
+  const channel = state.leadChatChannel;
+  const thread = document.getElementById('ld-chat-thread');
+  thread.innerHTML = '<div class="empty-state">Carregando...</div>';
+  try {
+    const messages = await Api.leadMessages(leadId, channel);
+    if (messages.length === 0) {
+      thread.innerHTML = `<div class="empty-state">Nenhuma mensagem em ${CHANNEL_LABEL[channel]} ainda.</div>`;
+    } else {
+      thread.innerHTML = messages.map((m) => renderChatBubble(m, lead.name)).join('');
+      thread.scrollTop = thread.scrollHeight;
+    }
+  } catch (err) {
+    thread.innerHTML = '<div class="empty-state">Erro ao carregar conversa.</div>';
+  }
+}
+
+async function sendLeadChatMessage() {
+  const leadId = state.currentLeadId;
+  const channel = state.leadChatChannel;
+  const input = document.getElementById('ld-chat-input');
+  const text = input.value.trim();
+  if (!text) return;
+  if (!state.attendantId) {
+    showToast('Selecione seu nome de atendente primeiro');
+    openAttendantPicker();
+    return;
+  }
+  try {
+    const msg = await Api.sendLeadMessage(leadId, channel, text, state.attendantId);
+    input.value = '';
+    await loadLeadChat();
+    showToast(msg.deliveryStatus === 'sent' ? 'Mensagem enviada!' : 'Mensagem registrada no CRM (integração não configurada)');
+  } catch (err) {
+    showToast(err.message || 'Erro ao enviar mensagem');
+  }
 }
 
 // ============ Organizations page ============
@@ -1092,6 +1248,7 @@ function bindSettingsPanel() {
       document.querySelectorAll('.settings-panel').forEach((p) => (p.style.display = 'none'));
       document.getElementById(`stab-${tab.dataset.stab}`).style.display = '';
       if (tab.dataset.stab === 'integrations') loadIntegrationsForm();
+      if (tab.dataset.stab === 'ai') loadAiSettingsForm();
     });
   });
 
@@ -1113,12 +1270,14 @@ function bindSettingsPanel() {
 
   document.getElementById('btn-add-user').addEventListener('click', async () => {
     const input = document.getElementById('new-user-name');
+    const ramalInput = document.getElementById('new-user-ramal');
     const name = input.value.trim();
     if (!name) return;
     try {
-      const user = await Api.addUser(name);
+      const user = await Api.addUser(name, ramalInput.value.trim());
       state.users.push(user);
       input.value = '';
+      ramalInput.value = '';
       renderSettings();
       showToast('Usuário adicionado');
     } catch (err) {
@@ -1158,6 +1317,15 @@ function bindSettingsPanel() {
   });
 
   document.getElementById('btn-save-integrations').addEventListener('click', saveIntegrations);
+
+  document.getElementById('ai-provider').addEventListener('change', updateAiProviderFieldVisibility);
+  document.getElementById('btn-save-ai').addEventListener('click', saveAiSettings);
+}
+
+function updateAiProviderFieldVisibility() {
+  const provider = document.getElementById('ai-provider').value;
+  document.getElementById('ai-baseurl-group').style.display = provider === 'ollama' ? '' : 'none';
+  document.getElementById('ai-apikey-group').style.display = provider === 'ollama' ? 'none' : '';
 }
 
 function renderSettings() {
@@ -1204,14 +1372,28 @@ function renderSettings() {
     .map(
       (u) => `
     <div class="list-row">
-      <span class="name">${escapeHtml(u.name)}</span>
+      <span class="name">${escapeHtml(u.name)}${u.ramal ? ` <span style="color:#8a94a6; font-weight:400;">· ramal ${escapeHtml(u.ramal)}</span>` : ''}</span>
       <div class="row-actions">
+        <input type="text" class="filter-input" style="max-width:110px; padding:5px 8px;" placeholder="ramal" value="${escapeHtml(u.ramal || '')}" data-ramal-for="${u.id}" />
         <button class="icon-btn danger" data-del-user="${u.id}" title="Excluir">🗑️</button>
       </div>
     </div>
   `
     )
     .join('');
+  usersList.querySelectorAll('[data-ramal-for]').forEach((input) => {
+    input.addEventListener('change', async () => {
+      try {
+        const updated = await Api.updateUser(input.dataset.ramalFor, { ramal: input.value.trim() });
+        const u = state.users.find((u) => u.id === input.dataset.ramalFor);
+        if (u) u.ramal = updated.ramal;
+        renderSettings();
+        showToast('Ramal atualizado');
+      } catch (err) {
+        showToast('Erro ao atualizar ramal');
+      }
+    });
+  });
   usersList.querySelectorAll('[data-del-user]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       if (!confirm('Excluir este usuário?')) return;
@@ -1334,11 +1516,16 @@ function loadIntegrationsForm() {
   document.getElementById('int-esig-provider').value = esig.provider || '';
   document.getElementById('int-esig-key').value = esig.apiKey || '';
 
+  const pabx = i.vivoPabx || {};
+  document.getElementById('int-pabx-url').value = pabx.apiUrl || '';
+  document.getElementById('int-pabx-token').value = pabx.apiToken || '';
+
   document.getElementById('wa-webhook-url').textContent = window.location.origin + '/api/webhooks/whatsapp';
 }
 
 async function saveIntegrations() {
   const integrations = {
+    ...state.settings.integrations,
     whatsapp: {
       phoneNumberId: document.getElementById('int-wa-phone').value.trim(),
       verifyToken: document.getElementById('int-wa-verify').value.trim(),
@@ -1368,6 +1555,10 @@ async function saveIntegrations() {
     eSignature: {
       provider: document.getElementById('int-esig-provider').value,
       apiKey: document.getElementById('int-esig-key').value.trim()
+    },
+    vivoPabx: {
+      apiUrl: document.getElementById('int-pabx-url').value.trim(),
+      apiToken: document.getElementById('int-pabx-token').value.trim()
     }
   };
 
@@ -1377,6 +1568,207 @@ async function saveIntegrations() {
     showToast('Integrações salvas');
   } catch (err) {
     showToast('Erro ao salvar integrações');
+  }
+}
+
+// ---- Assistente de IA (configurações) ----
+function loadAiSettingsForm() {
+  const ai = (state.settings.integrations && state.settings.integrations.ai) || {};
+  document.getElementById('ai-provider').value = ai.provider || 'ollama';
+  document.getElementById('ai-baseurl').value = ai.baseUrl || 'http://localhost:11434';
+  document.getElementById('ai-model').value = ai.model || 'llama3.1';
+  document.getElementById('ai-apikey').value = ai.apiKey || '';
+  updateAiProviderFieldVisibility();
+}
+
+async function saveAiSettings() {
+  const integrations = {
+    ...state.settings.integrations,
+    ai: {
+      provider: document.getElementById('ai-provider').value,
+      baseUrl: document.getElementById('ai-baseurl').value.trim(),
+      model: document.getElementById('ai-model').value.trim(),
+      apiKey: document.getElementById('ai-apikey').value.trim()
+    }
+  };
+  try {
+    const updated = await Api.updateSettings({ integrations });
+    state.settings = updated;
+    showToast('Assistente de IA salvo');
+  } catch (err) {
+    showToast('Erro ao salvar assistente de IA');
+  }
+}
+
+// ============ Assistente de IA (widget flutuante) ============
+function bindAiAssistant() {
+  document.getElementById('ai-fab').addEventListener('click', () => {
+    const panel = document.getElementById('ai-panel');
+    const opening = !panel.classList.contains('show');
+    panel.classList.toggle('show');
+    if (opening) loadAiTips();
+  });
+  document.getElementById('ai-panel-close').addEventListener('click', () => {
+    document.getElementById('ai-panel').classList.remove('show');
+  });
+
+  document.querySelectorAll('#ai-panel .tab-pill').forEach((pill) => {
+    pill.addEventListener('click', () => {
+      document.querySelectorAll('#ai-panel .tab-pill').forEach((p) => p.classList.remove('active'));
+      pill.classList.add('active');
+      const tab = pill.dataset.aitab;
+      document.getElementById('ai-tab-tips').style.display = tab === 'tips' ? '' : 'none';
+      document.getElementById('ai-tab-chat').style.display = tab === 'chat' ? '' : 'none';
+      if (tab === 'chat') populateAiDealSelect();
+    });
+  });
+
+  document.getElementById('ai-chat-deal-select').addEventListener('change', (e) => {
+    state.aiChatDealId = e.target.value || null;
+    state.aiChatHistory = [];
+    document.getElementById('ai-chat-thread').innerHTML = '';
+  });
+
+  document.getElementById('ai-chat-send').addEventListener('click', sendAiChatMessage);
+  document.getElementById('ai-chat-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendAiChatMessage();
+    }
+  });
+}
+
+async function loadAiTips() {
+  const container = document.getElementById('ai-tips-list');
+  container.innerHTML = '<div class="empty-state">Analisando seu funil...</div>';
+  try {
+    const tips = await Api.aiTips();
+    container.innerHTML = tips
+      .map(
+        (t) => `
+      <div class="ai-tip-item ${t.dealId ? 'clickable' : ''}" ${t.dealId ? `data-tip-deal="${t.dealId}"` : ''}>
+        <span class="ai-tip-icon">${t.icon}</span>
+        <span>${escapeHtml(t.text)}</span>
+      </div>
+    `
+      )
+      .join('');
+    container.querySelectorAll('[data-tip-deal]').forEach((el) => {
+      el.addEventListener('click', () => {
+        document.getElementById('ai-panel').classList.remove('show');
+        switchView('pipeline');
+        openDealDetail(el.dataset.tipDeal);
+      });
+    });
+  } catch (err) {
+    container.innerHTML = '<div class="empty-state">Erro ao carregar dicas.</div>';
+  }
+}
+
+function populateAiDealSelect() {
+  const select = document.getElementById('ai-chat-deal-select');
+  const current = select.value;
+  select.innerHTML =
+    '<option value="">Conversa geral (sem negócio específico)</option>' +
+    state.deals.map((d) => `<option value="${d.id}">${escapeHtml(d.title)}</option>`).join('');
+  select.value = current || '';
+}
+
+function renderAiBubble(role, text) {
+  const isUser = role === 'user';
+  const actionMatch = text.match(/\[ACAO:([A-Z_]+)(?::(.+))?\]/);
+  const cleanText = text.replace(/\[ACAO:[A-Z_]+(?::.+)?\]/, '').trim();
+  let actionHtml = '';
+  if (!isUser && actionMatch) {
+    actionHtml = buildAiActionSuggestion(actionMatch[1], actionMatch[2]);
+  }
+  return `
+    <div class="chat-bubble-row ${isUser ? 'out' : 'in'}">
+      <div class="chat-bubble">${escapeHtml(cleanText)}</div>
+      <div class="chat-meta">${isUser ? 'Você' : 'Assistente IA'}</div>
+      ${actionHtml}
+    </div>
+  `;
+}
+
+function buildAiActionSuggestion(type, value) {
+  const dealId = state.aiChatDealId;
+  if (!dealId) return '';
+  let label = '';
+  if (type === 'MOVER_ETAPA') label = `Mover para "${stageName(value)}"`;
+  else if (type === 'MARCAR_GANHO') label = 'Marcar como Ganho';
+  else if (type === 'MARCAR_PERDIDO') label = 'Marcar como Perdido';
+  else if (type === 'ADICIONAR_TAREFA') label = `Criar tarefa: "${value}"`;
+  else return '';
+
+  return `
+    <div class="ai-suggested-action">
+      💡 Sugestão: ${escapeHtml(label)}<br/>
+      <button class="btn-secondary" data-ai-action="${type}" data-ai-value="${escapeHtml(value || '')}">Aplicar sugestão</button>
+    </div>
+  `;
+}
+
+async function applyAiAction(type, value) {
+  const dealId = state.aiChatDealId;
+  const deal = state.deals.find((d) => d.id === dealId);
+  if (!deal) return;
+  try {
+    if (type === 'MOVER_ETAPA') {
+      const updated = await Api.updateDeal(dealId, { stage: value });
+      Object.assign(deal, updated);
+    } else if (type === 'MARCAR_GANHO') {
+      const updated = await Api.updateDeal(dealId, { status: 'won' });
+      Object.assign(deal, updated);
+    } else if (type === 'MARCAR_PERDIDO') {
+      const updated = await Api.updateDeal(dealId, { status: 'lost' });
+      Object.assign(deal, updated);
+    } else if (type === 'ADICIONAR_TAREFA') {
+      const activity = await Api.addActivity(dealId, { type: 'task', text: value, date: new Date().toISOString(), done: false });
+      if (!state.activitiesCache[dealId]) state.activitiesCache[dealId] = [];
+      state.activitiesCache[dealId].push(activity);
+      state.reminders = await Api.reminders();
+    }
+    renderKanban();
+    renderDashboard();
+    showToast('Sugestão aplicada!');
+  } catch (err) {
+    showToast(err.message || 'Erro ao aplicar sugestão');
+  }
+}
+
+async function sendAiChatMessage() {
+  const input = document.getElementById('ai-chat-input');
+  const text = input.value.trim();
+  if (!text) return;
+  const thread = document.getElementById('ai-chat-thread');
+  thread.insertAdjacentHTML('beforeend', renderAiBubble('user', text));
+  input.value = '';
+  thread.scrollTop = thread.scrollHeight;
+
+  const typingId = 'ai-typing-' + Date.now();
+  thread.insertAdjacentHTML(
+    'beforeend',
+    `<div class="chat-bubble-row in" id="${typingId}"><div class="chat-bubble">Pensando...</div></div>`
+  );
+  thread.scrollTop = thread.scrollHeight;
+
+  try {
+    const res = await Api.aiChat(state.aiChatDealId, text, state.aiChatHistory);
+    document.getElementById(typingId).remove();
+    state.aiChatHistory.push({ role: 'user', content: text });
+    state.aiChatHistory.push({ role: 'assistant', content: res.reply });
+    thread.insertAdjacentHTML('beforeend', renderAiBubble('assistant', res.reply));
+    thread.querySelectorAll('[data-ai-action]').forEach((btn) => {
+      btn.addEventListener('click', () => applyAiAction(btn.dataset.aiAction, btn.dataset.aiValue));
+    });
+    thread.scrollTop = thread.scrollHeight;
+  } catch (err) {
+    document.getElementById(typingId).remove();
+    thread.insertAdjacentHTML(
+      'beforeend',
+      `<div class="chat-bubble-row in"><div class="chat-bubble">⚠️ ${escapeHtml(err.message || 'Erro ao consultar a IA')}</div></div>`
+    );
   }
 }
 

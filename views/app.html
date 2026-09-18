@@ -16,7 +16,8 @@
         <span id="brand-title">Velocita Global</span>
       </div>
       <div class="topbar-user">
-        <span>Olá, <strong id="user-name">Admin1</strong></span>
+        <span>Atendendo como <strong id="attendant-name">-</strong></span>
+        <button class="logout-link" id="btn-switch-attendant">Trocar</button>
         <button class="logout-link" id="logout-btn">Sair</button>
       </div>
     </header>
@@ -160,6 +161,7 @@
             <button class="settings-tab" data-stab="fields">Campos Personalizados</button>
             <button class="settings-tab" data-stab="tags">Etiquetas</button>
             <button class="settings-tab" data-stab="integrations">Integrações</button>
+            <button class="settings-tab" data-stab="ai">Assistente IA</button>
           </div>
 
           <div id="stab-stages" class="settings-panel">
@@ -179,6 +181,7 @@
               <div id="users-list"></div>
               <div class="inline-add">
                 <input type="text" id="new-user-name" placeholder="Nome do novo usuário" />
+                <input type="text" id="new-user-ramal" placeholder="Ramal (Vivo PABX)" style="max-width:160px;" />
                 <button class="btn-primary" id="btn-add-user">Adicionar</button>
               </div>
             </div>
@@ -283,7 +286,54 @@
               </div>
             </div>
 
+            <div class="panel">
+              <h3>📞 Vivo PABX (originar ligações)</h3>
+              <p class="empty-state" style="text-align:left; padding:0 0 12px;">
+                A API da Vivo PABX não é padronizada publicamente — pegue a URL e o token no painel da sua conta Vivo
+                (ou com seu gerente de contas) e cadastre o ramal de cada atendente em Configurações > Usuários.
+              </p>
+              <div class="form-row">
+                <div class="form-group"><label>URL da API</label><input type="text" id="int-pabx-url" placeholder="https://..." /></div>
+                <div class="form-group"><label>Token / API Key</label><input type="password" id="int-pabx-token" /></div>
+              </div>
+            </div>
+
             <button class="btn-primary" id="btn-save-integrations">Salvar Integrações</button>
+          </div>
+
+          <div id="stab-ai" class="settings-panel" style="display:none;">
+            <div class="panel">
+              <h3>🤖 Assistente de IA</h3>
+              <p class="empty-state" style="text-align:left; padding:0 0 12px;">
+                Escolha um provedor <strong>gratuito</strong>: <strong>Ollama</strong> roda um modelo aberto direto no seu computador
+                (sem chave, sem custo, precisa instalar o Ollama). <strong>Groq</strong> e <strong>Google Gemini</strong> têm planos
+                grátis na nuvem (só uma chave de API gratuita, sem cartão). O provedor <strong>Anthropic (Claude)</strong> é pago por uso.
+              </p>
+              <div class="form-group">
+                <label>Provedor</label>
+                <select id="ai-provider">
+                  <option value="ollama">Ollama (local, 100% grátis)</option>
+                  <option value="groq">Groq (nuvem, plano gratuito)</option>
+                  <option value="gemini">Google Gemini (nuvem, plano gratuito)</option>
+                  <option value="anthropic">Anthropic Claude (pago)</option>
+                </select>
+              </div>
+              <div class="form-row">
+                <div class="form-group" id="ai-baseurl-group">
+                  <label>Endereço do servidor (Ollama)</label>
+                  <input type="text" id="ai-baseurl" placeholder="http://localhost:11434" />
+                </div>
+                <div class="form-group">
+                  <label>Modelo</label>
+                  <input type="text" id="ai-model" placeholder="llama3.1" />
+                </div>
+              </div>
+              <div class="form-group" id="ai-apikey-group">
+                <label>API Key (Groq / Gemini / Anthropic)</label>
+                <input type="password" id="ai-apikey" />
+              </div>
+              <button class="btn-primary" id="btn-save-ai">Salvar Assistente de IA</button>
+            </div>
           </div>
         </section>
 
@@ -525,12 +575,75 @@
             <div class="v" id="ld-source">-</div>
           </div>
           <button class="btn-primary" id="btn-gerar-negocio" style="width:100%; margin-top:8px;">+ Gerar Negócio</button>
+          <button class="btn-secondary" id="btn-call-lead" style="width:100%; margin-top:8px;">📞 Ligar (Vivo PABX)</button>
           <button class="btn-secondary" id="btn-edit-lead-from-detail" style="width:100%; margin-top:8px;">Editar Lead</button>
         </div>
         <div class="dd-col center">
-          <h3 style="margin-top:0;">Negócios vinculados</h3>
-          <div id="ld-deals-list"></div>
+          <div class="activity-tabs" id="lead-tabs">
+            <button class="activity-tab active" data-ldtab="deals">Negócios</button>
+            <button class="activity-tab" data-ldtab="whatsapp">📞 WhatsApp</button>
+            <button class="activity-tab" data-ldtab="facebook">📘 Facebook</button>
+            <button class="activity-tab" data-ldtab="instagram">📷 Instagram</button>
+            <button class="activity-tab" data-ldtab="email">✉️ E-mail</button>
+          </div>
+
+          <div id="ld-tab-deals">
+            <div id="ld-deals-list"></div>
+          </div>
+
+          <div id="ld-tab-chat" style="display:none;">
+            <div class="chat-thread" id="ld-chat-thread"></div>
+            <div class="chat-input-row">
+              <textarea id="ld-chat-input" placeholder="Digite uma mensagem..."></textarea>
+              <button class="btn-primary" id="ld-chat-send">Enviar</button>
+            </div>
+          </div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== MODAL: Attendant picker ===== -->
+  <div class="modal-overlay" id="modal-attendant">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Quem está atendendo?</h3>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Selecione seu nome</label>
+          <select id="attendant-select"></select>
+        </div>
+        <p class="empty-state" style="text-align:left; padding:0;">Isso identifica quem enviou cada mensagem nas conversas dos leads.</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-primary" id="btn-confirm-attendant">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== AI Assistant floating widget ===== -->
+  <button id="ai-fab" title="Assistente IA">🤖</button>
+  <div id="ai-panel">
+    <div class="ai-panel-header">
+      <strong>🤖 Assistente IA</strong>
+      <button class="modal-close" id="ai-panel-close">&times;</button>
+    </div>
+    <div class="tab-pills" style="margin:12px 16px 0;">
+      <button class="tab-pill active" data-aitab="tips">Dicas</button>
+      <button class="tab-pill" data-aitab="chat">Chat</button>
+    </div>
+    <div id="ai-tab-tips" class="ai-panel-body">
+      <div id="ai-tips-list"></div>
+    </div>
+    <div id="ai-tab-chat" class="ai-panel-body" style="display:none;">
+      <div class="form-group" style="margin-bottom:8px;">
+        <select id="ai-chat-deal-select"></select>
+      </div>
+      <div class="chat-thread" id="ai-chat-thread"></div>
+      <div class="chat-input-row">
+        <textarea id="ai-chat-input" placeholder="Pergunte algo ou peça uma sugestão..."></textarea>
+        <button class="btn-primary" id="ai-chat-send">Enviar</button>
       </div>
     </div>
   </div>

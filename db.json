@@ -29,7 +29,8 @@
   "users": [
     {
       "id": "u-1",
-      "name": "Admin1"
+      "name": "Admin1",
+      "ramal": "1001"
     }
   ],
   "tags": [
@@ -458,6 +459,44 @@
     }
   ],
   "webhookEvents": [],
+  "messages": [
+    {
+      "id": "msg-1",
+      "leadId": "c-1",
+      "channel": "whatsapp",
+      "direction": "in",
+      "text": "Oi, gostaria de saber mais sobre o contrato de frete.",
+      "attendantId": null,
+      "attendantName": null,
+      "timestamp": "2026-09-10T13:50:00.000Z",
+      "deliveryStatus": "received",
+      "deliveryNote": ""
+    },
+    {
+      "id": "msg-2",
+      "leadId": "c-1",
+      "channel": "whatsapp",
+      "direction": "out",
+      "text": "Olá Marcos! Claro, vou te enviar a proposta atualizada ainda hoje.",
+      "attendantId": "u-1",
+      "attendantName": "Admin1",
+      "timestamp": "2026-09-10T14:05:00.000Z",
+      "deliveryStatus": "simulated",
+      "deliveryNote": "Integração do WhatsApp não configurada em Configurações > Integrações."
+    },
+    {
+      "id": "msg-3",
+      "leadId": "c-3",
+      "channel": "email",
+      "direction": "out",
+      "text": "Olá Ricardo, segue a proposta de renovação para sua análise.",
+      "attendantId": "u-1",
+      "attendantName": "Admin1",
+      "timestamp": "2026-09-11T09:00:00.000Z",
+      "deliveryStatus": "simulated",
+      "deliveryNote": "Integração de e-mail (SMTP) não configurada em Configurações > Integrações."
+    }
+  ],
   "settings": {
     "customFields": [
       {
@@ -508,6 +547,16 @@
       "eSignature": {
         "provider": "",
         "apiKey": ""
+      },
+      "ai": {
+        "provider": "ollama",
+        "apiKey": "",
+        "baseUrl": "http://localhost:11434",
+        "model": "llama3.1"
+      },
+      "vivoPabx": {
+        "apiUrl": "",
+        "apiToken": ""
       }
     }
   }
