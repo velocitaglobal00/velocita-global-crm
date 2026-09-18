@@ -55,71 +55,6 @@ app.get('/', (req, res) => {
   return res.redirect('/login.html');
 });
 
-// Roteiro do dia: página pública, sem exigir a senha do CRM — pensada para quem
-// está em campo (visitas/ligações do dia) e não precisa ver o resto do sistema.
-app.get('/roteiro', (req, res) => {
-  res.sendFile(path.join(__dirname, 'views', 'roteiro.html'));
-});
-
-app.get('/api/public/roteiro', (req, res) => {
-  const data = db.read();
-  const now = new Date();
-  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
-
-  let items = data.activities.filter((a) => {
-    if (a.type !== 'meeting' && a.type !== 'task' && a.type !== 'call') return false;
-    const d = new Date(a.date);
-    return d >= startOfDay && d < endOfDay;
-  });
-
-  if (req.query.attendantId) {
-    items = items.filter((a) => a.attendantId === req.query.attendantId || (a.dealId && data.deals.find((d) => d.id === a.dealId)?.ownerId === req.query.attendantId));
-  }
-
-  const enriched = items.map((a) => {
-    let leadName = null;
-    let orgName = null;
-    let dealTitle = null;
-    if (a.dealId) {
-      const deal = data.deals.find((d) => d.id === a.dealId);
-      if (deal) {
-        dealTitle = deal.title;
-        const lead = data.contacts.find((c) => c.id === deal.personId);
-        if (lead) leadName = lead.name;
-        const org = data.organizations.find((o) => o.id === deal.orgId);
-        if (org) orgName = org.name;
-      }
-    } else if (a.leadId) {
-      const lead = data.contacts.find((c) => c.id === a.leadId);
-      if (lead) {
-        leadName = lead.name;
-        const org = data.organizations.find((o) => o.id === lead.orgId);
-        if (org) orgName = org.name;
-      }
-    }
-    return {
-      id: a.id,
-      type: a.type,
-      text: a.text,
-      date: a.date,
-      done: a.done,
-      leadName,
-      orgName,
-      dealTitle,
-      attendantName: a.attendantName || null
-    };
-  });
-
-  enriched.sort((x, y) => new Date(x.date) - new Date(y.date));
-  res.json(enriched);
-});
-
-app.get('/api/public/users', (req, res) => {
-  const data = db.read();
-  res.json(data.users.map((u) => ({ id: u.id, name: u.name })));
-});
-
 app.get('/app', requirePageAuth, (req, res) => {
   res.sendFile(path.join(__dirname, 'views', 'app.html'));
 });
@@ -368,6 +303,11 @@ app.delete('/api/deals/:id', requireAuth, (req, res) => {
 });
 
 // ---------- Activities ----------
+// Todas as atividades (negócios + leads) — usado pelo Roteiro do Dia.
+app.get('/api/activities', requireAuth, (req, res) => {
+  res.json(db.read().activities);
+});
+
 app.get('/api/deals/:id/activities', requireAuth, (req, res) => {
   const data = db.read();
   res.json(data.activities.filter((a) => a.dealId === req.params.id));

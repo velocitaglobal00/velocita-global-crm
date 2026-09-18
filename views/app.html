@@ -53,6 +53,10 @@
           <svg class="si" viewBox="0 0 24 24"><rect x="3" y="12" width="4" height="9" rx="1"></rect><rect x="10" y="7" width="4" height="14" rx="1"></rect><rect x="17" y="3" width="4" height="18" rx="1"></rect></svg>
           Dashboard
         </div>
+        <div class="sidebar-link" data-view="roteiro">
+          <svg class="si" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"></rect><path d="M3 10h18"></path><path d="M8 2v4M16 2v4"></path><path d="M9 16l2 2 4-4"></path></svg>
+          Roteiro do Dia
+        </div>
         <div class="sidebar-link" data-view="pipeline">
           <svg class="si" viewBox="0 0 24 24"><rect x="3" y="4" width="5" height="16" rx="1.5"></rect><rect x="9.5" y="4" width="5" height="10" rx="1.5"></rect><rect x="16" y="4" width="5" height="13" rx="1.5"></rect></svg>
           Pipeline
@@ -124,6 +128,19 @@
             <h3>Funil de conversão por estágio</h3>
             <div id="funnel-container"></div>
           </div>
+        </section>
+
+        <!-- ===== ROTEIRO DO DIA ===== -->
+        <section class="view" id="view-roteiro">
+          <div class="pipeline-header">
+            <h2>Roteiro do Dia</h2>
+          </div>
+          <div class="table-toolbar">
+            <select id="roteiro-attendant-filter" class="filter-input" style="max-width:260px;">
+              <option value="">Todos os atendentes</option>
+            </select>
+          </div>
+          <div id="roteiro-list"></div>
         </section>
 
         <!-- ===== PIPELINE ===== -->

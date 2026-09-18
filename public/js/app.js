@@ -150,6 +150,7 @@ const Api = {
   unreadCount: () => api('/api/notifications/unread-count'),
   markNotifRead: (id) => api(`/api/notifications/${id}/read`, { method: 'POST' }),
   markAllNotifRead: () => api('/api/notifications/read-all', { method: 'POST' }),
+  allActivities: () => api('/api/activities'),
   leadActivities: (leadId) => api(`/api/leads/${leadId}/activities`),
   addLeadActivity: (leadId, payload) => api(`/api/leads/${leadId}/activities`, { method: 'POST', body: JSON.stringify(payload) }),
   syncCalendar: (activityId) => api(`/api/activities/${activityId}/sync-calendar`, { method: 'POST' })
@@ -196,6 +197,7 @@ async function init() {
   bindComms();
   bindEmailCompose();
   bindUserSignatureModal();
+  bindRoteiro();
 
   ensureAttendant();
   pollNotifications();
@@ -236,6 +238,7 @@ function switchView(viewName) {
   if (viewName === 'comunicacoes') renderComms();
   if (viewName === 'mensagens') renderMensagens();
   if (viewName === 'bi') renderBI();
+  if (viewName === 'roteiro') renderRoteiro();
 }
 
 function bindNav() {
@@ -2674,6 +2677,122 @@ async function sendComposedEmail() {
   } catch (err) {
     showToast(err.message || 'Erro ao enviar e-mail');
   }
+}
+
+// ============ Roteiro do Dia ============
+const ROTEIRO_TYPE_ICON = { meeting: '📅', task: '✅', call: '📞' };
+const ROTEIRO_TYPE_LABEL = { meeting: 'Reunião', task: 'Tarefa', call: 'Chamada' };
+
+function bindRoteiro() {
+  document.getElementById('roteiro-attendant-filter').addEventListener('change', renderRoteiro);
+}
+
+function fmtTimeOnly(dateStr) {
+  const d = new Date(dateStr);
+  return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
+async function renderRoteiro() {
+  const filterSelect = document.getElementById('roteiro-attendant-filter');
+  if (filterSelect.options.length <= 1) {
+    state.users.forEach((u) => {
+      const opt = document.createElement('option');
+      opt.value = u.id;
+      opt.textContent = u.name;
+      filterSelect.appendChild(opt);
+    });
+  }
+  const attendantId = filterSelect.value;
+
+  const container = document.getElementById('roteiro-list');
+  container.innerHTML = '<div class="empty-state">Carregando...</div>';
+
+  let allActivities;
+  try {
+    allActivities = await Api.allActivities();
+  } catch (err) {
+    container.innerHTML = '<div class="empty-state">Erro ao carregar o roteiro.</div>';
+    return;
+  }
+
+  const now = new Date();
+  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
+
+  let items = allActivities.filter((a) => {
+    if (a.type !== 'meeting' && a.type !== 'task' && a.type !== 'call') return false;
+    const d = new Date(a.date);
+    return d >= startOfDay && d < endOfDay;
+  });
+
+  if (attendantId) {
+    items = items.filter((a) => {
+      if (a.attendantId) return a.attendantId === attendantId;
+      if (a.dealId) {
+        const deal = state.deals.find((d) => d.id === a.dealId);
+        return deal && deal.ownerId === attendantId;
+      }
+      return false;
+    });
+  }
+
+  items = items
+    .map((a) => {
+      let leadId = a.leadId || null;
+      let leadName = null;
+      let dealTitle = null;
+      const dealId = a.dealId || null;
+      if (a.dealId) {
+        const deal = state.deals.find((d) => d.id === a.dealId);
+        if (deal) {
+          dealTitle = deal.title;
+          leadId = deal.personId;
+          const lead = state.contacts.find((c) => c.id === deal.personId);
+          if (lead) leadName = lead.name;
+        }
+      } else if (a.leadId) {
+        const lead = state.contacts.find((c) => c.id === a.leadId);
+        if (lead) leadName = lead.name;
+      }
+      return { ...a, leadId, dealId, leadName, dealTitle };
+    })
+    .sort((x, y) => new Date(x.date) - new Date(y.date));
+
+  if (items.length === 0) {
+    container.innerHTML = '<div class="empty-state">Nenhum compromisso para hoje. 🎉</div>';
+    return;
+  }
+
+  container.innerHTML = items
+    .map((it) => {
+      const who = it.leadName || it.dealTitle || 'Sem contato vinculado';
+      const sub = it.dealTitle && it.dealTitle !== who ? it.dealTitle : '';
+      return `
+      <div class="roteiro-item ${it.done ? 'done' : ''}" data-roteiro-lead="${it.leadId || ''}" data-roteiro-deal="${it.dealId || ''}">
+        <div class="ri-time">${fmtTimeOnly(it.date)}</div>
+        <div class="ri-icon">${ROTEIRO_TYPE_ICON[it.type] || '📝'}</div>
+        <div>
+          <div class="ri-title">${escapeHtml(who)}</div>
+          ${sub ? `<div class="ri-sub">${escapeHtml(sub)}</div>` : ''}
+          <div class="ri-sub">${escapeHtml(it.text)}</div>
+          <div class="ri-meta">${ROTEIRO_TYPE_LABEL[it.type] || it.type}${it.attendantName ? ' · ' + escapeHtml(it.attendantName) : ''}</div>
+        </div>
+      </div>
+    `;
+    })
+    .join('');
+
+  container.querySelectorAll('[data-roteiro-lead], [data-roteiro-deal]').forEach((el) => {
+    el.addEventListener('click', () => {
+      if (el.dataset.roteiroDeal) {
+        switchView('pipeline');
+        openDealDetail(el.dataset.roteiroDeal);
+      } else if (el.dataset.roteiroLead) {
+        switchView('leads');
+        openLeadDetail(el.dataset.roteiroLead);
+      }
+    });
+  });
 }
 
 // ============ BI — faturamento por categoria ============
