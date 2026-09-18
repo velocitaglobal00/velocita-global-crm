@@ -386,7 +386,7 @@ function clearFeedSearch(){
 async function loadFeed(){
   const q = document.getElementById('feedSearch').value.trim();
   try{
-    const url = '/api/admin/logs?limit=30' + (q ? `&q=${encodeURIComponent(q)}` : '');
+    const url = 'api/admin/logs?limit=30' + (q ? `&q=${encodeURIComponent(q)}` : '');
     const r = await fetch(url, { headers: authHeaders });
     const data = await r.json();
     document.getElementById('feed').innerHTML = (data.logs||[]).map(l=>

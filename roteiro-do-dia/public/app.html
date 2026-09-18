@@ -460,7 +460,7 @@ async function loadHistory(q){
   const list = document.getElementById('histList');
   const count = document.getElementById('histCount');
   try{
-    const url = '/api/history' + (q ? `?q=${encodeURIComponent(q)}` : '');
+    const url = 'api/history' + (q ? `?q=${encodeURIComponent(q)}` : '');
     const r = await fetch(url, { headers: authHeaders });
     if(r.status === 401){ localStorage.clear(); window.location.href='./'; return; }
     const data = await r.json();

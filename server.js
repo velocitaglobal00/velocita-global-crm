@@ -266,6 +266,7 @@ app.post('/api/deals', requireAuth, (req, res) => {
     ownerId: req.body.ownerId || (data.users[0] && data.users[0].id) || null,
     closeDate: req.body.closeDate || null,
     platform: req.body.platform || null,
+    tags: Array.isArray(req.body.tags) ? req.body.tags : [],
     extraInfo: [],
     status: 'open',
     createdAt: now,

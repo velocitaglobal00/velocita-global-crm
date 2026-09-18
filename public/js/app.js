@@ -664,6 +664,41 @@ function renderStageDurations(deal) {
     .join('');
 }
 
+function renderDealTagChecks(deal) {
+  const container = document.getElementById('dd-tags-checks');
+  const selected = Array.isArray(deal.tags) ? deal.tags : [];
+  if (state.tags.length === 0) {
+    container.innerHTML = '<div class="empty-state" style="padding:4px 0;">Nenhuma etiqueta cadastrada. Crie em Configurações > Etiquetas.</div>';
+    return;
+  }
+  container.innerHTML = state.tags
+    .map(
+      (t) => `
+    <label class="tag-check-row">
+      <input type="checkbox" value="${t.id}" data-deal-tag-check ${selected.includes(t.id) ? 'checked' : ''} />
+      <span class="tag-pill" style="background:${t.color}">${escapeHtml(t.name)}</span>
+    </label>
+  `
+    )
+    .join('');
+
+  container.querySelectorAll('[data-deal-tag-check]').forEach((checkbox) => {
+    checkbox.addEventListener('change', () => saveDealTags(deal.id));
+  });
+}
+
+async function saveDealTags(dealId) {
+  const container = document.getElementById('dd-tags-checks');
+  const checkedIds = Array.from(container.querySelectorAll('[data-deal-tag-check]:checked')).map((c) => c.value);
+  try {
+    const updated = await Api.updateDeal(dealId, { tags: checkedIds });
+    const deal = state.deals.find((d) => d.id === dealId);
+    if (deal) deal.tags = updated.tags || checkedIds;
+  } catch (err) {
+    showToast('Erro ao salvar etiquetas do negócio');
+  }
+}
+
 async function openDealDetail(dealId) {
   state.currentDealId = dealId;
   const deal = state.deals.find((d) => d.id === dealId);
@@ -676,6 +711,7 @@ async function openDealDetail(dealId) {
   document.getElementById('dd-owner').textContent = userName(deal.ownerId);
   renderStageDurations(deal);
   renderExtraInfoList('dd-extra-info', deal.extraInfo, (itemId) => deleteExtraInfo('deal', dealId, itemId));
+  renderDealTagChecks(deal);
 
   const statusLabel = deal.status === 'won' ? 'Ganho' : deal.status === 'lost' ? 'Perdido' : 'Em aberto';
   document.getElementById('dd-status-badge').innerHTML = `<span class="status-badge ${deal.status}">${statusLabel}</span>`;
