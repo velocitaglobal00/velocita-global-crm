@@ -1085,6 +1085,132 @@ table.data-table tr.clickable:hover {
   transform: translateY(0);
 }
 
+/* ---------- Reminders (dashboard) ---------- */
+.reminder-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--vg-border);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  background: #fff;
+}
+
+.reminder-item.overdue {
+  border-color: #f3c6c6;
+  background: #fdf4f4;
+}
+
+.reminder-item .rt-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--vg-text);
+}
+
+.reminder-item .rt-deal {
+  font-size: 11.5px;
+  color: #8a94a6;
+  margin-top: 2px;
+}
+
+.reminder-item .rt-date {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--vg-navy);
+  white-space: nowrap;
+}
+
+.reminder-item.overdue .rt-date {
+  color: var(--vg-red);
+}
+
+/* ---------- Tags / category badges ---------- */
+.tag-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  margin-right: 4px;
+  margin-bottom: 4px;
+}
+
+.category-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.tag-check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 13px;
+}
+
+.channel-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  margin-bottom: 4px;
+}
+
+/* ---------- Days in stage ---------- */
+.stage-duration-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  padding: 5px 0;
+  border-bottom: 1px solid #eef0f3;
+}
+
+.stage-duration-row:last-child {
+  border-bottom: none;
+}
+
+.stage-duration-row .sd-name {
+  color: #5b6472;
+}
+
+.stage-duration-row .sd-days {
+  font-weight: 700;
+  color: var(--vg-navy);
+}
+
+.stage-duration-row.current .sd-days {
+  color: var(--vg-orange-dark);
+}
+
+.days-badge {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #8a94a6;
+  background: var(--vg-bg);
+  padding: 2px 7px;
+  border-radius: 20px;
+}
+
+.days-badge.warn {
+  color: #b45309;
+  background: #fef3c7;
+}
+
+.toggle-closed-btn {
+  margin-bottom: 12px;
+}
+
 @media (max-width: 900px) {
   .deal-detail-grid {
     grid-template-columns: 1fr;

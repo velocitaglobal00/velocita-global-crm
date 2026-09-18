@@ -33,7 +33,8 @@
       <div class="nav-tabs">
         <button class="nav-tab active" data-view="dashboard">📊 Dashboard</button>
         <button class="nav-tab" data-view="pipeline">📋 Pipeline</button>
-        <button class="nav-tab" data-view="contacts">📇 Contatos</button>
+        <button class="nav-tab" data-view="leads">🧲 Leads</button>
+        <button class="nav-tab" data-view="orgs">🏢 Organizações</button>
         <button class="nav-tab" data-view="settings">⚙️ Configurações</button>
       </div>
     </div>
@@ -43,7 +44,8 @@
       <aside class="sidebar" id="sidebar">
         <div class="sidebar-link active" data-view="dashboard">📊 Dashboard</div>
         <div class="sidebar-link" data-view="pipeline">📋 Pipeline</div>
-        <div class="sidebar-link" data-view="contacts">📇 Contatos</div>
+        <div class="sidebar-link" data-view="leads">🧲 Leads</div>
+        <div class="sidebar-link" data-view="orgs">🏢 Organizações</div>
         <div class="sidebar-link" data-view="settings">⚙️ Configurações</div>
       </aside>
 
@@ -80,6 +82,11 @@
           </div>
 
           <div class="panel">
+            <h3>⏰ Lembretes a vencer</h3>
+            <div id="reminders-container"></div>
+          </div>
+
+          <div class="panel">
             <h3>Funil de conversão por estágio</h3>
             <div id="funnel-container"></div>
           </div>
@@ -94,48 +101,54 @@
           <div class="kanban-board" id="kanban-board"></div>
         </section>
 
-        <!-- ===== CONTACTS ===== -->
-        <section class="view" id="view-contacts">
+        <!-- ===== LEADS ===== -->
+        <section class="view" id="view-leads">
           <div class="pipeline-header">
-            <h2>Contatos</h2>
-            <button class="btn-primary" id="btn-add-contact">+ Adicionar</button>
+            <h2>Leads</h2>
+            <button class="btn-primary" id="btn-add-contact">+ Adicionar Lead</button>
           </div>
           <div class="table-toolbar">
-            <input type="text" class="filter-input" id="contacts-filter" placeholder="Buscar por nome, e-mail ou empresa..." />
-            <div class="tab-pills">
-              <button class="tab-pill active" data-subview="people">Pessoas</button>
-              <button class="tab-pill" data-subview="orgs">Empresas</button>
-            </div>
+            <input type="text" class="filter-input" id="leads-filter" placeholder="Buscar por nome, e-mail ou empresa..." />
+            <select id="leads-category-filter" class="filter-input" style="max-width:220px;">
+              <option value="">Todas as categorias</option>
+            </select>
           </div>
 
-          <div id="people-table-wrap">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>Nome</th>
-                  <th>E-mail</th>
-                  <th>Telefone</th>
-                  <th>Empresa</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody id="people-tbody"></tbody>
-            </table>
-          </div>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Nome</th>
+                <th>Empresa</th>
+                <th>Categoria</th>
+                <th>Origem</th>
+                <th>Etiquetas</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="leads-tbody"></tbody>
+          </table>
+        </section>
 
-          <div id="orgs-table-wrap" style="display:none;">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>Empresa</th>
-                  <th>Endereço</th>
-                  <th>Contatos vinculados</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody id="orgs-tbody"></tbody>
-            </table>
+        <!-- ===== ORGANIZATIONS ===== -->
+        <section class="view" id="view-orgs">
+          <div class="pipeline-header">
+            <h2>Organizações</h2>
+            <button class="btn-primary" id="btn-add-org">+ Adicionar Empresa</button>
           </div>
+          <div class="table-toolbar">
+            <input type="text" class="filter-input" id="orgs-filter" placeholder="Buscar por nome da empresa..." />
+          </div>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Empresa</th>
+                <th>Endereço</th>
+                <th>Leads vinculados</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="orgs-tbody"></tbody>
+          </table>
         </section>
 
         <!-- ===== SETTINGS ===== -->
@@ -145,6 +158,8 @@
             <button class="settings-tab active" data-stab="stages">Etapas do Funil</button>
             <button class="settings-tab" data-stab="users">Usuários</button>
             <button class="settings-tab" data-stab="fields">Campos Personalizados</button>
+            <button class="settings-tab" data-stab="tags">Etiquetas</button>
+            <button class="settings-tab" data-stab="integrations">Integrações</button>
           </div>
 
           <div id="stab-stages" class="settings-panel">
@@ -178,6 +193,97 @@
                 <button class="btn-primary" id="btn-add-field">Adicionar</button>
               </div>
             </div>
+          </div>
+
+          <div id="stab-tags" class="settings-panel" style="display:none;">
+            <div class="panel">
+              <h3>Etiquetas de Leads</h3>
+              <div id="tags-list"></div>
+              <div class="inline-add">
+                <input type="text" id="new-tag-name" placeholder="Nome da etiqueta" />
+                <select id="new-tag-color" style="width:120px; padding:9px 8px; border-radius:7px; border:1.5px solid var(--vg-border);">
+                  <option value="#f4821f">Laranja</option>
+                  <option value="#d64545">Vermelho</option>
+                  <option value="#1f9d55">Verde</option>
+                  <option value="#7c3aed">Roxo</option>
+                  <option value="#0891b2">Azul</option>
+                  <option value="#1b2a4e">Navy</option>
+                </select>
+                <button class="btn-primary" id="btn-add-tag">Adicionar</button>
+              </div>
+            </div>
+          </div>
+
+          <div id="stab-integrations" class="settings-panel" style="display:none;">
+            <div class="panel">
+              <h3>📞 WhatsApp Business (Meta Cloud API)</h3>
+              <p class="empty-state" style="text-align:left; padding:0 0 12px;">Necessário ter uma conta Meta Business com WhatsApp Business API configurada.</p>
+              <div class="form-row">
+                <div class="form-group"><label>Phone Number ID</label><input type="text" id="int-wa-phone" /></div>
+                <div class="form-group"><label>Verify Token</label><input type="text" id="int-wa-verify" /></div>
+              </div>
+              <div class="form-group"><label>Access Token</label><input type="password" id="int-wa-token" /></div>
+              <p class="empty-state" style="text-align:left; padding:0;">Webhook de recebimento: <code id="wa-webhook-url">/api/webhooks/whatsapp</code></p>
+            </div>
+
+            <div class="panel">
+              <h3>📘 Facebook</h3>
+              <div class="form-row">
+                <div class="form-group"><label>App ID</label><input type="text" id="int-fb-appid" /></div>
+                <div class="form-group"><label>App Secret</label><input type="password" id="int-fb-secret" /></div>
+              </div>
+              <div class="form-group"><label>Page Access Token</label><input type="password" id="int-fb-token" /></div>
+              <p class="empty-state" style="text-align:left; padding:0;">Webhook de recebimento: <code>/api/webhooks/facebook</code></p>
+            </div>
+
+            <div class="panel">
+              <h3>📷 Instagram</h3>
+              <div class="form-group"><label>Access Token</label><input type="password" id="int-ig-token" /></div>
+              <p class="empty-state" style="text-align:left; padding:0;">Webhook de recebimento: <code>/api/webhooks/instagram</code></p>
+            </div>
+
+            <div class="panel">
+              <h3>🎯 Google Ads</h3>
+              <div class="form-row">
+                <div class="form-group"><label>Developer Token</label><input type="password" id="int-ga-devtoken" /></div>
+                <div class="form-group"><label>Client ID</label><input type="text" id="int-ga-clientid" /></div>
+              </div>
+              <div class="form-row">
+                <div class="form-group"><label>Client Secret</label><input type="password" id="int-ga-secret" /></div>
+                <div class="form-group"><label>Refresh Token</label><input type="password" id="int-ga-refresh" /></div>
+              </div>
+              <p class="empty-state" style="text-align:left; padding:0;">Webhook de leads: <code>/api/webhooks/google-ads-leads</code></p>
+            </div>
+
+            <div class="panel">
+              <h3>✉️ E-mail (SMTP)</h3>
+              <div class="form-row">
+                <div class="form-group"><label>Servidor SMTP</label><input type="text" id="int-smtp-host" placeholder="smtp.seudominio.com" /></div>
+                <div class="form-group"><label>Porta</label><input type="text" id="int-smtp-port" placeholder="587" /></div>
+              </div>
+              <div class="form-row">
+                <div class="form-group"><label>Usuário</label><input type="text" id="int-smtp-user" /></div>
+                <div class="form-group"><label>Senha</label><input type="password" id="int-smtp-pass" /></div>
+              </div>
+            </div>
+
+            <div class="panel">
+              <h3>✍️ Assinatura Digital</h3>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Provedor</label>
+                  <select id="int-esig-provider">
+                    <option value="">Selecionar...</option>
+                    <option value="clicksign">Clicksign</option>
+                    <option value="autentique">Autentique</option>
+                    <option value="docusign">DocuSign</option>
+                  </select>
+                </div>
+                <div class="form-group"><label>API Key</label><input type="password" id="int-esig-key" /></div>
+              </div>
+            </div>
+
+            <button class="btn-primary" id="btn-save-integrations">Salvar Integrações</button>
           </div>
         </section>
 
@@ -263,6 +369,10 @@
             <div class="k">Dono do Negócio</div>
             <div class="v" id="dd-owner">-</div>
           </div>
+          <div class="dd-meta-item">
+            <div class="k">Tempo em cada etapa</div>
+            <div id="dd-stage-durations"></div>
+          </div>
           <button class="btn-secondary" id="btn-delete-deal" style="width:100%; margin-top:10px;">Excluir negócio</button>
         </div>
 
@@ -340,6 +450,31 @@
           <label>Empresa</label>
           <select id="contact-org"></select>
         </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Categoria de Cliente</label>
+            <select id="contact-category"></select>
+          </div>
+          <div class="form-group">
+            <label>Canal de Origem</label>
+            <select id="contact-source-channel">
+              <option value="facebook_ads">Facebook Ads</option>
+              <option value="instagram_ads">Instagram Ads</option>
+              <option value="google_ads">Google Ads</option>
+              <option value="whatsapp">WhatsApp</option>
+              <option value="indicacao">Indicação</option>
+              <option value="organico">Orgânico / Site</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Campanha de Origem (opcional)</label>
+          <input type="text" id="contact-source-campaign" placeholder="Ex: Leads - Setembro" />
+        </div>
+        <div class="form-group">
+          <label>Etiquetas</label>
+          <div id="contact-tags-checks"></div>
+        </div>
         <div class="form-group">
           <label>Notas</label>
           <textarea id="contact-notes" rows="3"></textarea>
@@ -347,7 +482,55 @@
       </div>
       <div class="modal-footer">
         <button class="btn-secondary" data-close="modal-contact">Cancelar</button>
-        <button class="btn-primary" id="btn-save-contact">Salvar Contato</button>
+        <button class="btn-primary" id="btn-save-contact">Salvar Lead</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== MODAL: Lead Detail ===== -->
+  <div class="modal-overlay" id="modal-lead-detail">
+    <div class="modal wide">
+      <div class="modal-header">
+        <h3 id="ld-name">Lead</h3>
+        <button class="modal-close" data-close="modal-lead-detail">&times;</button>
+      </div>
+      <div class="deal-detail-grid" style="grid-template-columns: 260px 1fr;">
+        <div class="dd-col left">
+          <div class="dd-meta-item">
+            <div class="k">E-mail</div>
+            <div class="v" id="ld-email">-</div>
+          </div>
+          <div class="dd-meta-item">
+            <div class="k">Telefone</div>
+            <div class="v" id="ld-phone">-</div>
+          </div>
+          <div class="dd-meta-item">
+            <div class="k">Empresa</div>
+            <div class="v" id="ld-org">-</div>
+          </div>
+          <div class="dd-meta-item">
+            <div class="k">Categoria</div>
+            <div class="v" id="ld-category">-</div>
+          </div>
+          <div class="dd-meta-item">
+            <div class="k">Etiquetas</div>
+            <div class="v" id="ld-tags">-</div>
+          </div>
+          <div class="dd-meta-item">
+            <div class="k">Canais de Comunicação</div>
+            <div class="v" id="ld-channels">-</div>
+          </div>
+          <div class="dd-meta-item">
+            <div class="k">Origem</div>
+            <div class="v" id="ld-source">-</div>
+          </div>
+          <button class="btn-primary" id="btn-gerar-negocio" style="width:100%; margin-top:8px;">+ Gerar Negócio</button>
+          <button class="btn-secondary" id="btn-edit-lead-from-detail" style="width:100%; margin-top:8px;">Editar Lead</button>
+        </div>
+        <div class="dd-col center">
+          <h3 style="margin-top:0;">Negócios vinculados</h3>
+          <div id="ld-deals-list"></div>
+        </div>
       </div>
     </div>
   </div>

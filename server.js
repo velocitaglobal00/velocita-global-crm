@@ -151,7 +151,11 @@ app.post('/api/contacts', requireAuth, (req, res) => {
     email: req.body.email || '',
     phone: req.body.phone || '',
     orgId: req.body.orgId || null,
-    notes: req.body.notes || ''
+    notes: req.body.notes || '',
+    category: req.body.category || null,
+    tags: Array.isArray(req.body.tags) ? req.body.tags : [],
+    source: req.body.source || { channel: 'organico', campaign: '' },
+    channels: req.body.channels || { whatsapp: '', facebookPsid: '', instagramId: '' }
   };
   data.contacts.push(contact);
   db.write(data);
@@ -181,6 +185,8 @@ app.get('/api/deals', requireAuth, (req, res) => {
 
 app.post('/api/deals', requireAuth, (req, res) => {
   const data = db.read();
+  const stageId = req.body.stage || data.stages[0].id;
+  const now = new Date().toISOString();
   const deal = {
     id: newId('d'),
     title: req.body.title || 'Novo negócio',
@@ -188,11 +194,12 @@ app.post('/api/deals', requireAuth, (req, res) => {
     currency: req.body.currency || 'BRL',
     personId: req.body.personId || null,
     orgId: req.body.orgId || null,
-    stage: req.body.stage || data.stages[0].id,
+    stage: stageId,
     ownerId: req.body.ownerId || (data.users[0] && data.users[0].id) || null,
     closeDate: req.body.closeDate || null,
     status: 'open',
-    createdAt: new Date().toISOString()
+    createdAt: now,
+    stageHistory: [{ stageId, enteredAt: now, exitedAt: null }]
   };
   data.deals.push(deal);
   db.write(data);
@@ -203,6 +210,15 @@ app.put('/api/deals/:id', requireAuth, (req, res) => {
   const data = db.read();
   const deal = data.deals.find((d) => d.id === req.params.id);
   if (!deal) return res.status(404).json({ error: 'Negócio não encontrado' });
+
+  if (req.body.stage && req.body.stage !== deal.stage) {
+    const now = new Date().toISOString();
+    if (!Array.isArray(deal.stageHistory)) deal.stageHistory = [];
+    const openEntry = deal.stageHistory.find((h) => !h.exitedAt);
+    if (openEntry) openEntry.exitedAt = now;
+    deal.stageHistory.push({ stageId: req.body.stage, enteredAt: now, exitedAt: null });
+  }
+
   Object.assign(deal, req.body);
   db.write(data);
   res.json(deal);
@@ -253,6 +269,51 @@ app.delete('/api/activities/:id', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
+// ---------- Tags (etiquetas) ----------
+app.get('/api/tags', requireAuth, (req, res) => {
+  res.json(db.read().tags || []);
+});
+
+app.post('/api/tags', requireAuth, (req, res) => {
+  const data = db.read();
+  if (!data.tags) data.tags = [];
+  const tag = { id: newId('tag'), name: req.body.name || '', color: req.body.color || '#1b2a4e' };
+  data.tags.push(tag);
+  db.write(data);
+  res.status(201).json(tag);
+});
+
+app.delete('/api/tags/:id', requireAuth, (req, res) => {
+  const data = db.read();
+  data.tags = (data.tags || []).filter((t) => t.id !== req.params.id);
+  data.contacts.forEach((c) => {
+    if (Array.isArray(c.tags)) c.tags = c.tags.filter((id) => id !== req.params.id);
+  });
+  db.write(data);
+  res.json({ ok: true });
+});
+
+// ---------- Reminders (lembretes / tarefas a vencer) ----------
+app.get('/api/reminders', requireAuth, (req, res) => {
+  const data = db.read();
+  const now = new Date();
+  const reminders = data.activities
+    .filter((a) => a.type === 'task' && !a.done)
+    .map((a) => {
+      const deal = data.deals.find((d) => d.id === a.dealId);
+      return {
+        id: a.id,
+        dealId: a.dealId,
+        dealTitle: deal ? deal.title : 'Negócio removido',
+        text: a.text,
+        date: a.date,
+        overdue: new Date(a.date) < now
+      };
+    })
+    .sort((x, y) => new Date(x.date) - new Date(y.date));
+  res.json(reminders);
+});
+
 // ---------- Users ----------
 app.get('/api/users', requireAuth, (req, res) => {
   res.json(db.read().users);
@@ -299,6 +360,115 @@ app.delete('/api/settings/custom-fields/:id', requireAuth, (req, res) => {
   data.settings.customFields = data.settings.customFields.filter((f) => f.id !== req.params.id);
   db.write(data);
   res.json({ ok: true });
+});
+
+// ---------- Integrações: webhooks de recebimento ----------
+// Estes endpoints ficam prontos para receber eventos reais da Meta (WhatsApp/Facebook/
+// Instagram) e do Google Ads assim que você configurar suas próprias credenciais em
+// Configurações > Integrações e apontar os webhooks dessas plataformas para estas URLs.
+// Sem credenciais configuradas, eles apenas registram o payload recebido.
+
+function findContactByChannel(data, channel, value) {
+  if (!value) return null;
+  return data.contacts.find((c) => {
+    if (channel === 'whatsapp') return c.channels && c.channels.whatsapp === value;
+    if (channel === 'facebook') return c.channels && c.channels.facebookPsid === value;
+    if (channel === 'instagram') return c.channels && c.channels.instagramId === value;
+    if (channel === 'email') return c.email === value;
+    return false;
+  });
+}
+
+function logWebhookEvent(channel, req, res) {
+  // Verificação de webhook do Meta (hub.challenge) para WhatsApp/Facebook/Instagram
+  if (req.method === 'GET') {
+    const verifyToken = (db.read().settings.integrations.whatsapp || {}).verifyToken;
+    if (req.query['hub.mode'] === 'subscribe' && req.query['hub.verify_token'] === verifyToken && verifyToken) {
+      return res.status(200).send(req.query['hub.challenge']);
+    }
+    return res.status(403).json({ error: 'Verify token inválido' });
+  }
+
+  const data = db.read();
+  if (!data.webhookEvents) data.webhookEvents = [];
+  data.webhookEvents.unshift({
+    id: newId('evt'),
+    channel,
+    receivedAt: new Date().toISOString(),
+    payload: req.body
+  });
+  data.webhookEvents = data.webhookEvents.slice(0, 200);
+  db.write(data);
+  res.status(200).json({ ok: true });
+}
+
+app.get('/api/webhooks/whatsapp', (req, res) => logWebhookEvent('whatsapp', req, res));
+app.post('/api/webhooks/whatsapp', (req, res) => logWebhookEvent('whatsapp', req, res));
+app.get('/api/webhooks/facebook', (req, res) => logWebhookEvent('facebook', req, res));
+app.post('/api/webhooks/facebook', (req, res) => logWebhookEvent('facebook', req, res));
+app.get('/api/webhooks/instagram', (req, res) => logWebhookEvent('instagram', req, res));
+app.post('/api/webhooks/instagram', (req, res) => logWebhookEvent('instagram', req, res));
+app.post('/api/webhooks/google-ads-leads', (req, res) => logWebhookEvent('google_ads', req, res));
+
+app.get('/api/webhook-events', requireAuth, (req, res) => {
+  res.json((db.read().webhookEvents || []).slice(0, 50));
+});
+
+// ---------- Envio de mensagens (WhatsApp / E-mail) ----------
+// Usa as credenciais salvas em Configurações > Integrações. Retorna erro claro se
+// ainda não houver credenciais configuradas — a chamada real só funciona com uma
+// conta válida da Meta (WhatsApp Cloud API) ou de um provedor de e-mail (SMTP).
+app.post('/api/leads/:id/send-whatsapp', requireAuth, async (req, res) => {
+  const data = db.read();
+  const contact = data.contacts.find((c) => c.id === req.params.id);
+  if (!contact) return res.status(404).json({ error: 'Lead não encontrado' });
+
+  const wa = data.settings.integrations.whatsapp || {};
+  if (!wa.phoneNumberId || !wa.accessToken) {
+    return res.status(400).json({
+      error: 'Integração do WhatsApp não configurada. Adicione o Phone Number ID e o Access Token em Configurações > Integrações.'
+    });
+  }
+  const to = contact.channels && contact.channels.whatsapp;
+  if (!to) return res.status(400).json({ error: 'Este lead não possui número de WhatsApp cadastrado.' });
+
+  try {
+    const response = await fetch(`https://graph.facebook.com/v19.0/${wa.phoneNumberId}/messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${wa.accessToken}` },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to,
+        type: 'text',
+        text: { body: req.body.message || '' }
+      })
+    });
+    const result = await response.json();
+    if (!response.ok) return res.status(response.status).json({ error: result.error?.message || 'Erro na API do WhatsApp' });
+    res.json({ ok: true, result });
+  } catch (err) {
+    res.status(500).json({ error: 'Falha ao conectar com a API do WhatsApp: ' + err.message });
+  }
+});
+
+app.post('/api/leads/:id/send-email', requireAuth, async (req, res) => {
+  const data = db.read();
+  const contact = data.contacts.find((c) => c.id === req.params.id);
+  if (!contact) return res.status(404).json({ error: 'Lead não encontrado' });
+
+  const email = data.settings.integrations.email || {};
+  if (!email.smtpHost || !email.smtpUser || !email.smtpPass) {
+    return res.status(400).json({
+      error: 'Integração de e-mail não configurada. Adicione um servidor SMTP em Configurações > Integrações.'
+    });
+  }
+  if (!contact.email) return res.status(400).json({ error: 'Este lead não possui e-mail cadastrado.' });
+
+  // Envio real de e-mail requer um cliente SMTP (ex: nodemailer) configurado com as
+  // credenciais acima. Deixe pronto para plugar assim que a integração for configurada.
+  res.status(501).json({
+    error: 'Credenciais de SMTP salvas, mas o envio real ainda depende de instalar um cliente SMTP (ex: nodemailer) no servidor.'
+  });
 });
 
 app.listen(PORT, () => {
