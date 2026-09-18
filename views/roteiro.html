@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Roteiro do Dia | Velocita Global</title>
+<link rel="icon" href="/img/logo.webp" />
+<link rel="stylesheet" href="/css/style.css" />
+<style>
+  body { background: var(--vg-bg); }
+  .rt-shell { max-width: 640px; margin: 0 auto; padding: 20px 16px 60px; }
+  .rt-header { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+  .rt-header img { width: 34px; height: 34px; }
+  .rt-header span { font-weight: 800; color: var(--vg-navy); font-size: 18px; }
+  .rt-date { color: #5b6472; font-size: 13px; margin-bottom: 16px; text-transform: capitalize; }
+  .rt-filter { margin-bottom: 18px; }
+  .rt-filter select { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1.5px solid var(--vg-border); font-size: 13.5px; }
+  .rt-item { background: #fff; border: 1px solid var(--vg-border); border-radius: 10px; padding: 14px; margin-bottom: 10px; display: flex; gap: 12px; }
+  .rt-time { font-weight: 800; color: var(--vg-orange-dark); font-size: 14px; min-width: 52px; }
+  .rt-icon { font-size: 18px; }
+  .rt-title { font-weight: 700; color: var(--vg-navy); font-size: 13.5px; margin-bottom: 2px; }
+  .rt-sub { font-size: 12px; color: #5b6472; margin-bottom: 2px; }
+  .rt-meta { font-size: 11px; color: #8a94a6; }
+  .rt-done { text-decoration: line-through; opacity: 0.55; }
+</style>
+</head>
+<body>
+  <div class="rt-shell">
+    <div class="rt-header">
+      <img src="/img/logo.webp" alt="Velocita Global" />
+      <span>Roteiro do Dia</span>
+    </div>
+    <div class="rt-date" id="rt-date"></div>
+    <div class="rt-filter">
+      <select id="rt-attendant-filter">
+        <option value="">Todos os atendentes</option>
+      </select>
+    </div>
+    <div id="rt-list"></div>
+  </div>
+
+  <script src="/js/roteiro.js"></script>
+</body>
+</html>

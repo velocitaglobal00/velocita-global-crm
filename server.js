@@ -55,6 +55,71 @@ app.get('/', (req, res) => {
   return res.redirect('/login.html');
 });
 
+// Roteiro do dia: página pública, sem exigir a senha do CRM — pensada para quem
+// está em campo (visitas/ligações do dia) e não precisa ver o resto do sistema.
+app.get('/roteiro', (req, res) => {
+  res.sendFile(path.join(__dirname, 'views', 'roteiro.html'));
+});
+
+app.get('/api/public/roteiro', (req, res) => {
+  const data = db.read();
+  const now = new Date();
+  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
+
+  let items = data.activities.filter((a) => {
+    if (a.type !== 'meeting' && a.type !== 'task' && a.type !== 'call') return false;
+    const d = new Date(a.date);
+    return d >= startOfDay && d < endOfDay;
+  });
+
+  if (req.query.attendantId) {
+    items = items.filter((a) => a.attendantId === req.query.attendantId || (a.dealId && data.deals.find((d) => d.id === a.dealId)?.ownerId === req.query.attendantId));
+  }
+
+  const enriched = items.map((a) => {
+    let leadName = null;
+    let orgName = null;
+    let dealTitle = null;
+    if (a.dealId) {
+      const deal = data.deals.find((d) => d.id === a.dealId);
+      if (deal) {
+        dealTitle = deal.title;
+        const lead = data.contacts.find((c) => c.id === deal.personId);
+        if (lead) leadName = lead.name;
+        const org = data.organizations.find((o) => o.id === deal.orgId);
+        if (org) orgName = org.name;
+      }
+    } else if (a.leadId) {
+      const lead = data.contacts.find((c) => c.id === a.leadId);
+      if (lead) {
+        leadName = lead.name;
+        const org = data.organizations.find((o) => o.id === lead.orgId);
+        if (org) orgName = org.name;
+      }
+    }
+    return {
+      id: a.id,
+      type: a.type,
+      text: a.text,
+      date: a.date,
+      done: a.done,
+      leadName,
+      orgName,
+      dealTitle,
+      attendantName: a.attendantName || null
+    };
+  });
+
+  enriched.sort((x, y) => new Date(x.date) - new Date(y.date));
+  res.json(enriched);
+});
+
+app.get('/api/public/users', (req, res) => {
+  const data = db.read();
+  res.json(data.users.map((u) => ({ id: u.id, name: u.name })));
+});
+
 app.get('/app', requirePageAuth, (req, res) => {
   res.sendFile(path.join(__dirname, 'views', 'app.html'));
 });
@@ -265,6 +330,8 @@ app.post('/api/deals', requireAuth, (req, res) => {
     stage: stageId,
     ownerId: req.body.ownerId || (data.users[0] && data.users[0].id) || null,
     closeDate: req.body.closeDate || null,
+    platform: req.body.platform || null,
+    extraInfo: [],
     status: 'open',
     createdAt: now,
     stageHistory: [{ stageId, enteredAt: now, exitedAt: null }]
@@ -314,7 +381,32 @@ app.post('/api/deals/:id/activities', requireAuth, (req, res) => {
     type: req.body.type || 'note',
     text: req.body.text || '',
     date: req.body.date || new Date().toISOString(),
-    done: !!req.body.done
+    done: !!req.body.done,
+    attendantId: req.body.attendantId || null,
+    attendantName: (data.users.find((u) => u.id === req.body.attendantId) || {}).name || null
+  };
+  data.activities.push(activity);
+  db.write(data);
+  res.status(201).json(activity);
+});
+
+// Atividades gerais do lead (não vinculadas a um negócio específico)
+app.get('/api/leads/:id/activities', requireAuth, (req, res) => {
+  const data = db.read();
+  res.json(data.activities.filter((a) => a.leadId === req.params.id));
+});
+
+app.post('/api/leads/:id/activities', requireAuth, (req, res) => {
+  const data = db.read();
+  const activity = {
+    id: newId('a'),
+    leadId: req.params.id,
+    type: req.body.type || 'note',
+    text: req.body.text || '',
+    date: req.body.date || new Date().toISOString(),
+    done: !!req.body.done,
+    attendantId: req.body.attendantId || null,
+    attendantName: (data.users.find((u) => u.id === req.body.attendantId) || {}).name || null
   };
   data.activities.push(activity);
   db.write(data);
@@ -368,10 +460,23 @@ app.get('/api/reminders', requireAuth, (req, res) => {
   const reminders = data.activities
     .filter((a) => a.type === 'task' && !a.done)
     .map((a) => {
+      if (a.leadId) {
+        const lead = data.contacts.find((c) => c.id === a.leadId);
+        return {
+          id: a.id,
+          dealId: null,
+          leadId: a.leadId,
+          dealTitle: lead ? `Lead: ${lead.name}` : 'Lead removido',
+          text: a.text,
+          date: a.date,
+          overdue: new Date(a.date) < now
+        };
+      }
       const deal = data.deals.find((d) => d.id === a.dealId);
       return {
         id: a.id,
         dealId: a.dealId,
+        leadId: null,
         dealTitle: deal ? deal.title : 'Negócio removido',
         text: a.text,
         date: a.date,
@@ -641,7 +746,7 @@ app.post('/api/leads/:id/messages', requireAuth, async (req, res) => {
   const contact = data.contacts.find((c) => c.id === req.params.id);
   if (!contact) return res.status(404).json({ error: 'Lead não encontrado' });
 
-  const { channel, text, attendantId } = req.body;
+  const { channel, text, attendantId, subject, attachments } = req.body;
   if (!text || !text.trim()) return res.status(400).json({ error: 'Mensagem vazia' });
   const attendant = data.users.find((u) => u.id === attendantId);
 
@@ -657,6 +762,12 @@ app.post('/api/leads/:id/messages', requireAuth, async (req, res) => {
     deliveryStatus: 'simulated',
     deliveryNote: ''
   };
+  if (channel === 'email') {
+    message.subject = subject || '(sem assunto)';
+    message.attachments = Array.isArray(attachments) ? attachments.map((a) => ({ filename: a.filename, size: a.size })) : [];
+    message.opens = [];
+    message.openCount = 0;
+  }
 
   try {
     if (channel === 'whatsapp') {
@@ -706,11 +817,17 @@ app.post('/api/leads/:id/messages', requireAuth, async (req, res) => {
             secure: Number(email.smtpPort) === 465,
             auth: { user: email.smtpUser, pass: email.smtpPass }
           });
+          const trackingPixel = `<img src="${req.protocol}://${req.get('host')}/api/track/open/${message.id}.png" width="1" height="1" alt="" style="display:none;" />`;
+          const htmlBody = message.text.replace(/\n/g, '<br>') + trackingPixel;
+          const mailAttachments = (Array.isArray(attachments) ? attachments : [])
+            .filter((a) => a.dataBase64)
+            .map((a) => ({ filename: a.filename, content: a.dataBase64, encoding: 'base64' }));
           await transporter.sendMail({
             from: email.smtpUser,
             to: contact.email,
-            subject: `Mensagem de ${attendant ? attendant.name : 'Velocita Global'}`,
-            text: message.text
+            subject: message.subject,
+            html: htmlBody,
+            attachments: mailAttachments
           });
           message.deliveryStatus = 'sent';
         } catch (mailErr) {
@@ -730,6 +847,35 @@ app.post('/api/leads/:id/messages', requireAuth, async (req, res) => {
   data.messages.push(message);
   db.write(data);
   res.status(201).json(message);
+});
+
+// Pixel de rastreamento de abertura de e-mail (1x1 transparente). É carregado
+// automaticamente pelo cliente de e-mail do destinatário quando ele abre a
+// mensagem e exibe imagens — por isso fica sem autenticação, como um webhook.
+const TRACKING_PIXEL = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+  'base64'
+);
+
+app.get('/api/track/open/:messageId.png', (req, res) => {
+  const data = db.read();
+  const message = (data.messages || []).find((m) => m.id === req.params.messageId);
+  if (message) {
+    if (!Array.isArray(message.opens)) message.opens = [];
+    message.opens.push({ timestamp: new Date().toISOString() });
+    message.openCount = message.opens.length;
+    db.write(data);
+  }
+  res.set('Content-Type', 'image/png');
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.send(TRACKING_PIXEL);
+});
+
+app.get('/api/leads/:id/messages/:messageId/opens', requireAuth, (req, res) => {
+  const data = db.read();
+  const message = (data.messages || []).find((m) => m.id === req.params.messageId && m.leadId === req.params.id);
+  if (!message) return res.status(404).json({ error: 'Mensagem não encontrada' });
+  res.json({ openCount: message.openCount || 0, opens: message.opens || [] });
 });
 
 // ---------- Assistente de IA ----------
@@ -929,6 +1075,66 @@ app.post('/api/leads/:id/call', requireAuth, async (req, res) => {
     res.json({ ok: true, result: text });
   } catch (err) {
     res.status(500).json({ error: 'Falha ao conectar com a Vivo PABX: ' + err.message });
+  }
+});
+
+// ---------- Google Calendar: sincronizar reunião/tarefa como evento ----------
+// Requer um Client ID/Secret de um projeto no Google Cloud Console e um Refresh
+// Token obtido via OAuth (veja INTEGRACOES.md). Sem isso, retorna erro claro.
+async function getGoogleAccessToken(gcal) {
+  const response = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: gcal.clientId,
+      client_secret: gcal.clientSecret,
+      refresh_token: gcal.refreshToken,
+      grant_type: 'refresh_token'
+    })
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error_description || result.error || 'Falha ao renovar token do Google');
+  return result.access_token;
+}
+
+app.post('/api/activities/:id/sync-calendar', requireAuth, async (req, res) => {
+  const data = db.read();
+  const activity = data.activities.find((a) => a.id === req.params.id);
+  if (!activity) return res.status(404).json({ error: 'Atividade não encontrada' });
+
+  const gcal = data.settings.integrations.googleCalendar || {};
+  if (!gcal.clientId || !gcal.clientSecret || !gcal.refreshToken) {
+    return res.status(400).json({ error: 'Integração do Google Calendar não configurada em Configurações > Integrações.' });
+  }
+
+  try {
+    const accessToken = await getGoogleAccessToken(gcal);
+    const start = new Date(activity.date);
+    const end = new Date(start.getTime() + 60 * 60 * 1000);
+    const calendarId = gcal.calendarId || 'primary';
+
+    const response = await fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({
+          summary: activity.text,
+          description: 'Criado automaticamente pelo Velocita Global CRM',
+          start: { dateTime: start.toISOString() },
+          end: { dateTime: end.toISOString() }
+        })
+      }
+    );
+    const result = await response.json();
+    if (!response.ok) return res.status(response.status).json({ error: result.error?.message || 'Erro na API do Google Calendar' });
+
+    activity.googleEventId = result.id;
+    activity.googleEventLink = result.htmlLink;
+    db.write(data);
+    res.json({ ok: true, eventLink: result.htmlLink });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

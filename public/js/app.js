@@ -21,7 +21,12 @@ const state = {
   notifications: [],
   shownNotificationIds: new Set(),
   commsLeadId: null,
-  commsChannel: 'whatsapp'
+  commsChannel: 'whatsapp',
+  leadActivitiesCache: {},
+  leadActivityFilter: 'all',
+  emailComposeLeadId: null,
+  emailAttachments: [],
+  emailSignatureInserted: false
 };
 
 const ATTENDANT_KEY = 'vg_attendant_id';
@@ -134,6 +139,7 @@ const Api = {
   leadMessages: (leadId, channel) => api(`/api/leads/${leadId}/messages?channel=${channel}`),
   sendLeadMessage: (leadId, channel, text, attendantId) =>
     api(`/api/leads/${leadId}/messages`, { method: 'POST', body: JSON.stringify({ channel, text, attendantId }) }),
+  sendEmail: (leadId, payload) => api(`/api/leads/${leadId}/messages`, { method: 'POST', body: JSON.stringify({ channel: 'email', ...payload }) }),
   callLead: (leadId, attendantId) => api(`/api/leads/${leadId}/call`, { method: 'POST', body: JSON.stringify({ attendantId }) }),
   aiTips: () => api('/api/ai/tips'),
   aiChat: (dealId, message, history) => api('/api/ai/chat', { method: 'POST', body: JSON.stringify({ dealId, message, history }) }),
@@ -143,7 +149,10 @@ const Api = {
   notifications: () => api('/api/notifications'),
   unreadCount: () => api('/api/notifications/unread-count'),
   markNotifRead: (id) => api(`/api/notifications/${id}/read`, { method: 'POST' }),
-  markAllNotifRead: () => api('/api/notifications/read-all', { method: 'POST' })
+  markAllNotifRead: () => api('/api/notifications/read-all', { method: 'POST' }),
+  leadActivities: (leadId) => api(`/api/leads/${leadId}/activities`),
+  addLeadActivity: (leadId, payload) => api(`/api/leads/${leadId}/activities`, { method: 'POST', body: JSON.stringify(payload) }),
+  syncCalendar: (activityId) => api(`/api/activities/${activityId}/sync-calendar`, { method: 'POST' })
 };
 
 // ============ Init ============
@@ -185,6 +194,8 @@ async function init() {
   bindExtraInfo();
   bindNotifications();
   bindComms();
+  bindEmailCompose();
+  bindUserSignatureModal();
 
   ensureAttendant();
   pollNotifications();
@@ -224,6 +235,7 @@ function switchView(viewName) {
   if (viewName === 'orgs') renderOrgs();
   if (viewName === 'comunicacoes') renderComms();
   if (viewName === 'mensagens') renderMensagens();
+  if (viewName === 'bi') renderBI();
 }
 
 function bindNav() {
@@ -357,7 +369,7 @@ function renderReminders() {
     .slice(0, 8)
     .map(
       (r) => `
-    <div class="reminder-item ${r.overdue ? 'overdue' : ''}" data-open-deal="${r.dealId}">
+    <div class="reminder-item ${r.overdue ? 'overdue' : ''}" data-open-deal="${r.dealId || ''}" data-open-lead="${r.leadId || ''}">
       <div>
         <div class="rt-text">${r.overdue ? '⚠️ ' : ''}${escapeHtml(r.text)}</div>
         <div class="rt-deal">${escapeHtml(r.dealTitle)}</div>
@@ -368,10 +380,15 @@ function renderReminders() {
     )
     .join('');
 
-  container.querySelectorAll('[data-open-deal]').forEach((el) => {
+  container.querySelectorAll('.reminder-item').forEach((el) => {
     el.addEventListener('click', () => {
-      switchView('pipeline');
-      openDealDetail(el.dataset.openDeal);
+      if (el.dataset.openDeal) {
+        switchView('pipeline');
+        openDealDetail(el.dataset.openDeal);
+      } else if (el.dataset.openLead) {
+        switchView('leads');
+        openLeadDetail(el.dataset.openLead);
+      }
     });
   });
 }
@@ -563,6 +580,7 @@ function openDealModal(deal, presetPersonId) {
   populateDealPersonSelect(deal ? deal.personId : presetPersonId || null);
   populateDealStageSelect(deal ? deal.stage : (state.stages[0] && state.stages[0].id));
   document.getElementById('deal-close-date').value = deal && deal.closeDate ? deal.closeDate.slice(0, 10) : '';
+  document.getElementById('deal-platform').value = deal && deal.platform ? deal.platform : '';
   openModal('modal-deal');
 }
 
@@ -582,7 +600,8 @@ async function saveDeal() {
     personId,
     orgId: contact ? contact.orgId : null,
     stage: document.getElementById('deal-stage').value,
-    closeDate: document.getElementById('deal-close-date').value || null
+    closeDate: document.getElementById('deal-close-date').value || null,
+    platform: document.getElementById('deal-platform').value || null
   };
 
   try {
@@ -692,19 +711,49 @@ function renderActivityFeed() {
   }
 
   feed.innerHTML = activities
-    .map(
-      (a) => `
+    .map((a) => {
+      const canSync = a.type === 'meeting' || a.type === 'task';
+      const syncBtn = canSync
+        ? a.googleEventLink
+          ? `<a href="${a.googleEventLink}" target="_blank" class="gcal-sync-btn">📅 Ver no Calendar</a>`
+          : `<button class="gcal-sync-btn" data-sync-deal-activity="${a.id}">📅 Sincronizar</button>`
+        : '';
+      return `
     <div class="activity-item">
+      <button class="activity-check ${a.done ? 'done' : ''}" data-toggle-activity="${a.id}" title="${a.done ? 'Marcar como pendente' : 'Marcar como feito'}">${a.done ? '✓' : ''}</button>
       <div class="activity-icon">${ACTIVITY_ICON[a.type] || '📝'}</div>
       <div class="activity-content">
-        <div class="type">${ACTIVITY_LABEL[a.type] || a.type}${a.type === 'task' ? (a.done ? ' · concluída' : ' · pendente') : ''}</div>
+        <div class="type">${ACTIVITY_LABEL[a.type] || a.type}${a.done ? ' · concluída' : ' · pendente'}</div>
         <div class="text">${escapeHtml(a.text)}</div>
-        <div class="date">${fmtDateTime(a.date)}</div>
+        <div class="date">${a.attendantName ? escapeHtml(a.attendantName) + ' · ' : ''}${fmtDateTime(a.date)} ${syncBtn}</div>
       </div>
     </div>
-  `
-    )
+  `;
+    })
     .join('');
+
+  feed.querySelectorAll('[data-sync-deal-activity]').forEach((btn) => {
+    btn.addEventListener('click', () => syncActivityToCalendar(btn.dataset.syncDealActivity, renderActivityFeed));
+  });
+  feed.querySelectorAll('[data-toggle-activity]').forEach((btn) => {
+    btn.addEventListener('click', () => toggleActivityDone(btn.dataset.toggleActivity, renderActivityFeed));
+  });
+}
+
+async function toggleActivityDone(activityId, refreshFn) {
+  const activity = findCachedActivity(activityId);
+  if (!activity) return;
+  const newDone = !activity.done;
+  try {
+    const updated = await Api.updateActivity(activityId, { done: newDone });
+    Object.assign(activity, updated);
+    if (refreshFn) refreshFn();
+    renderKanban();
+    state.reminders = await Api.reminders();
+    if (document.getElementById('view-dashboard').classList.contains('active')) renderReminders();
+  } catch (err) {
+    showToast('Erro ao atualizar atividade');
+  }
 }
 
 async function addActivityToCurrentDeal() {
@@ -717,7 +766,13 @@ async function addActivityToCurrentDeal() {
     return;
   }
   try {
-    const activity = await Api.addActivity(dealId, { type, text, date: new Date().toISOString(), done: type !== 'task' });
+    const activity = await Api.addActivity(dealId, {
+      type,
+      text,
+      date: new Date().toISOString(),
+      done: type !== 'task',
+      attendantId: state.attendantId
+    });
     if (!state.activitiesCache[dealId]) state.activitiesCache[dealId] = [];
     state.activitiesCache[dealId].push(activity);
     textEl.value = '';
@@ -897,17 +952,138 @@ function bindLeadDetailModal() {
       document.querySelectorAll('#lead-tabs [data-ldtab]').forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
       const tab = btn.dataset.ldtab;
+      const isChatChannel = ['whatsapp', 'facebook', 'instagram', 'email'].includes(tab);
       document.getElementById('ld-tab-deals').style.display = tab === 'deals' ? '' : 'none';
-      document.getElementById('ld-tab-chat').style.display = tab !== 'deals' && tab !== 'historico' ? '' : 'none';
+      document.getElementById('ld-tab-atividades').style.display = tab === 'atividades' ? '' : 'none';
+      document.getElementById('ld-tab-chat').style.display = isChatChannel ? '' : 'none';
       document.getElementById('ld-tab-historico').style.display = tab === 'historico' ? '' : 'none';
-      if (tab !== 'deals' && tab !== 'historico') {
+      if (isChatChannel) {
         state.leadChatChannel = tab;
         loadLeadChat();
       } else if (tab === 'historico') {
         loadLeadHistory();
+      } else if (tab === 'atividades') {
+        loadLeadActivities();
       }
     });
   });
+
+  document.querySelectorAll('#ld-activity-subtabs [data-latype]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#ld-activity-subtabs [data-latype]').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.leadActivityFilter = btn.dataset.latype;
+      renderLeadActivityFeed();
+    });
+  });
+  document.getElementById('ld-btn-add-activity').addEventListener('click', addLeadActivity);
+}
+
+// ---- Atividades gerais do lead (não vinculadas a um negócio) ----
+async function loadLeadActivities() {
+  const leadId = state.currentLeadId;
+  state.leadActivityFilter = 'all';
+  document.querySelectorAll('#ld-activity-subtabs [data-latype]').forEach((b) => b.classList.toggle('active', b.dataset.latype === 'all'));
+  if (!state.leadActivitiesCache) state.leadActivitiesCache = {};
+  state.leadActivitiesCache[leadId] = await Api.leadActivities(leadId);
+  renderLeadActivityFeed();
+}
+
+function renderLeadActivityFeed() {
+  const leadId = state.currentLeadId;
+  const feed = document.getElementById('ld-activity-feed');
+  let activities = ((state.leadActivitiesCache && state.leadActivitiesCache[leadId]) || []).slice();
+  if (state.leadActivityFilter !== 'all') activities = activities.filter((a) => a.type === state.leadActivityFilter);
+  activities.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  if (activities.length === 0) {
+    feed.innerHTML = '<div class="empty-state">Nenhuma atividade registrada ainda.</div>';
+    return;
+  }
+
+  feed.innerHTML = activities
+    .map((a) => {
+      const canSync = a.type === 'meeting' || a.type === 'task';
+      const syncBtn = canSync
+        ? a.googleEventLink
+          ? `<a href="${a.googleEventLink}" target="_blank" class="gcal-sync-btn">📅 Ver no Calendar</a>`
+          : `<button class="gcal-sync-btn" data-sync-activity="${a.id}">📅 Sincronizar</button>`
+        : '';
+      return `
+      <div class="activity-item">
+        <button class="activity-check ${a.done ? 'done' : ''}" data-toggle-lead-activity="${a.id}" title="${a.done ? 'Marcar como pendente' : 'Marcar como feito'}">${a.done ? '✓' : ''}</button>
+        <div class="activity-icon">${ACTIVITY_ICON[a.type] || '📝'}</div>
+        <div class="activity-content">
+          <div class="type">${ACTIVITY_LABEL[a.type] || a.type}${a.done ? ' · concluída' : ' · pendente'}</div>
+          <div class="text">${escapeHtml(a.text)}</div>
+          <div class="date">${a.attendantName ? escapeHtml(a.attendantName) + ' · ' : ''}${fmtDateTime(a.date)} ${syncBtn}</div>
+        </div>
+      </div>
+    `;
+    })
+    .join('');
+
+  feed.querySelectorAll('[data-sync-activity]').forEach((btn) => {
+    btn.addEventListener('click', () => syncActivityToCalendar(btn.dataset.syncActivity, loadLeadActivities));
+  });
+  feed.querySelectorAll('[data-toggle-lead-activity]').forEach((btn) => {
+    btn.addEventListener('click', () => toggleActivityDone(btn.dataset.toggleLeadActivity, renderLeadActivityFeed));
+  });
+}
+
+async function addLeadActivity() {
+  const leadId = state.currentLeadId;
+  const type = document.getElementById('ld-new-activity-type').value;
+  const textEl = document.getElementById('ld-new-activity-text');
+  const text = textEl.value.trim();
+  if (!text) {
+    showToast('Escreva algo antes de adicionar');
+    return;
+  }
+  try {
+    const activity = await Api.addLeadActivity(leadId, {
+      type,
+      text,
+      date: new Date().toISOString(),
+      done: type !== 'task',
+      attendantId: state.attendantId
+    });
+    if (!state.leadActivitiesCache) state.leadActivitiesCache = {};
+    if (!state.leadActivitiesCache[leadId]) state.leadActivitiesCache[leadId] = [];
+    state.leadActivitiesCache[leadId].push(activity);
+    textEl.value = '';
+    renderLeadActivityFeed();
+    if (type === 'task') state.reminders = await Api.reminders();
+    showToast('Atividade adicionada');
+  } catch (err) {
+    showToast('Erro ao adicionar atividade');
+  }
+}
+
+function findCachedActivity(activityId) {
+  for (const list of Object.values(state.activitiesCache)) {
+    const found = list.find((a) => a.id === activityId);
+    if (found) return found;
+  }
+  if (state.leadActivitiesCache) {
+    for (const list of Object.values(state.leadActivitiesCache)) {
+      const found = list.find((a) => a.id === activityId);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+async function syncActivityToCalendar(activityId, refreshFn) {
+  try {
+    const result = await Api.syncCalendar(activityId);
+    const cached = findCachedActivity(activityId);
+    if (cached) cached.googleEventLink = result.eventLink;
+    showToast('Evento criado no Google Calendar!');
+    if (refreshFn) refreshFn();
+  } catch (err) {
+    showToast(err.message || 'Erro ao sincronizar com o Google Calendar');
+  }
 }
 
 async function loadLeadHistory() {
@@ -963,7 +1139,9 @@ function openLeadDetail(leadId) {
 
   document.querySelectorAll('#lead-tabs [data-ldtab]').forEach((b) => b.classList.toggle('active', b.dataset.ldtab === 'deals'));
   document.getElementById('ld-tab-deals').style.display = '';
+  document.getElementById('ld-tab-atividades').style.display = 'none';
   document.getElementById('ld-tab-chat').style.display = 'none';
+  document.getElementById('ld-tab-historico').style.display = 'none';
 
   document.getElementById('ld-name').textContent = lead.name;
   document.getElementById('ld-email').textContent = lead.email || '-';
@@ -1044,6 +1222,41 @@ function bindLeadChat() {
       sendLeadChatMessage();
     }
   });
+  document.getElementById('ld-btn-new-email').addEventListener('click', () => openEmailCompose(state.currentLeadId));
+}
+
+function renderEmailList(messages, leadName) {
+  if (messages.length === 0) {
+    return `<div class="empty-state">Nenhum e-mail em ${leadName} ainda.</div>`;
+  }
+  return messages
+    .slice()
+    .reverse()
+    .map((m) => {
+      const isOut = m.direction === 'out';
+      const sender = isOut ? m.attendantName || 'Atendente' : leadName;
+      let statusBadge = '';
+      if (isOut) {
+        if (m.deliveryStatus === 'simulated') statusBadge = '<span class="badge-simulated">Simulado</span>';
+        else if (m.deliveryStatus === 'failed') statusBadge = '<span class="badge-simulated">Falhou</span>';
+        else if ((m.openCount || 0) > 0) statusBadge = `<span class="badge-opened">👁 Aberto ${m.openCount}x</span>`;
+        else statusBadge = '<span class="badge-unopened">Não aberto</span>';
+      }
+      return `
+      <div class="email-list-item">
+        <div class="eli-top">
+          <strong>${escapeHtml(m.subject || '(sem assunto)')}</strong>
+          <span class="eli-date">${fmtDateTime(m.timestamp)}</span>
+        </div>
+        <div class="eli-snippet">${escapeHtml(m.text)}</div>
+        <div class="eli-meta">
+          <span class="eli-sender">De: ${escapeHtml(sender)}</span>
+          ${statusBadge}
+        </div>
+      </div>
+    `;
+    })
+    .join('');
 }
 
 function renderChatBubble(msg, leadName) {
@@ -1069,10 +1282,15 @@ async function loadLeadChat() {
   const lead = state.contacts.find((c) => c.id === leadId);
   const channel = state.leadChatChannel;
   const thread = document.getElementById('ld-chat-thread');
+  const isEmail = channel === 'email';
+  document.getElementById('ld-btn-new-email').style.display = isEmail ? '' : 'none';
+  document.getElementById('ld-chat-input-row').style.display = isEmail ? 'none' : '';
   thread.innerHTML = '<div class="empty-state">Carregando...</div>';
   try {
     const messages = await Api.leadMessages(leadId, channel);
-    if (messages.length === 0) {
+    if (isEmail) {
+      thread.innerHTML = renderEmailList(messages, lead.name);
+    } else if (messages.length === 0) {
       thread.innerHTML = `<div class="empty-state">Nenhuma mensagem em ${CHANNEL_LABEL[channel]} ainda.</div>`;
     } else {
       thread.innerHTML = messages.map((m) => renderChatBubble(m, lead.name)).join('');
@@ -1468,12 +1686,16 @@ function renderSettings() {
       <span class="name">${escapeHtml(u.name)}${u.ramal ? ` <span style="color:#8a94a6; font-weight:400;">· ramal ${escapeHtml(u.ramal)}</span>` : ''}</span>
       <div class="row-actions">
         <input type="text" class="filter-input" style="max-width:110px; padding:5px 8px;" placeholder="ramal" value="${escapeHtml(u.ramal || '')}" data-ramal-for="${u.id}" />
+        <button class="icon-btn" data-edit-signature="${u.id}" title="Assinatura de e-mail">✍️</button>
         <button class="icon-btn danger" data-del-user="${u.id}" title="Excluir">🗑️</button>
       </div>
     </div>
   `
     )
     .join('');
+  usersList.querySelectorAll('[data-edit-signature]').forEach((btn) => {
+    btn.addEventListener('click', () => openUserSignatureModal(btn.dataset.editSignature));
+  });
   usersList.querySelectorAll('[data-ramal-for]').forEach((input) => {
     input.addEventListener('change', async () => {
       try {
@@ -2056,6 +2278,7 @@ function bindComms() {
       sendCommsMessage();
     }
   });
+  document.getElementById('comms-btn-new-email').addEventListener('click', () => openEmailCompose(state.commsLeadId));
 }
 
 async function renderComms() {
@@ -2120,10 +2343,15 @@ async function loadCommsChat() {
   if (!state.commsLeadId) return;
   const lead = state.contacts.find((c) => c.id === state.commsLeadId);
   const thread = document.getElementById('comms-chat-thread');
+  const isEmail = state.commsChannel === 'email';
+  document.getElementById('comms-btn-new-email').style.display = isEmail ? '' : 'none';
+  document.getElementById('comms-chat-input-row').style.display = isEmail ? 'none' : '';
   thread.innerHTML = '<div class="empty-state">Carregando...</div>';
   try {
     const messages = await Api.leadMessages(state.commsLeadId, state.commsChannel);
-    if (messages.length === 0) {
+    if (isEmail) {
+      thread.innerHTML = renderEmailList(messages, lead.name);
+    } else if (messages.length === 0) {
       thread.innerHTML = `<div class="empty-state">Nenhuma mensagem em ${CHANNEL_LABEL[state.commsChannel]} ainda.</div>`;
     } else {
       thread.innerHTML = messages.map((m) => renderChatBubble(m, lead.name)).join('');
@@ -2298,6 +2526,289 @@ function showBrowserNotification(n) {
     switchView('comunicacoes');
     openCommsThread(n.leadId, n.channel);
   };
+}
+
+// ============ Gmail-style e-mail compose ============
+const EMOJI_SET = ['😀', '😂', '😍', '👍', '🙏', '🎉', '🔥', '✅', '❌', '📌', '📎', '💡', '📅', '⏰', '💰', '📈', '🤝', '👋', '❤️', '⭐', '😉', '🙌', '📞', '✍️'];
+
+function bindEmailCompose() {
+  document.getElementById('gc-header').addEventListener('click', (e) => {
+    if (e.target.closest('.gc-header-actions')) return;
+    document.getElementById('email-compose').classList.toggle('minimized');
+  });
+  document.getElementById('gc-minimize').addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.getElementById('email-compose').classList.toggle('minimized');
+  });
+  document.getElementById('gc-expand').addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.getElementById('email-compose').classList.toggle('wide');
+  });
+  document.getElementById('gc-close').addEventListener('click', (e) => {
+    e.stopPropagation();
+    closeEmailCompose();
+  });
+  document.getElementById('gc-btn-discard').addEventListener('click', closeEmailCompose);
+  document.getElementById('gc-btn-send').addEventListener('click', sendComposedEmail);
+
+  document.getElementById('gc-btn-signature').addEventListener('click', toggleSignatureInBody);
+
+  document.getElementById('gc-attach-input').addEventListener('change', (e) => handleFileSelection(e.target.files));
+  document.getElementById('gc-image-input').addEventListener('change', (e) => handleFileSelection(e.target.files));
+
+  document.getElementById('gc-btn-emoji').addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.getElementById('gc-emoji-picker').classList.toggle('show');
+  });
+  document.addEventListener('click', (e) => {
+    const wrap = document.querySelector('.gc-emoji-wrap');
+    if (wrap && !wrap.contains(e.target)) document.getElementById('gc-emoji-picker').classList.remove('show');
+  });
+  const picker = document.getElementById('gc-emoji-picker');
+  picker.innerHTML = EMOJI_SET.map((e) => `<span data-emoji="${e}">${e}</span>`).join('');
+  picker.querySelectorAll('[data-emoji]').forEach((span) => {
+    span.addEventListener('click', () => {
+      const textarea = document.getElementById('gc-textarea');
+      const pos = textarea.selectionStart || textarea.value.length;
+      textarea.value = textarea.value.slice(0, pos) + span.dataset.emoji + textarea.value.slice(pos);
+      textarea.focus();
+    });
+  });
+}
+
+function openEmailCompose(leadId) {
+  const lead = state.contacts.find((c) => c.id === leadId);
+  if (!lead) return;
+  if (!state.attendantId) {
+    showToast('Selecione seu nome de atendente primeiro');
+    openAttendantPicker();
+    return;
+  }
+  state.emailComposeLeadId = leadId;
+  state.emailAttachments = [];
+  state.emailSignatureInserted = false;
+
+  document.getElementById('gc-to').value = lead.email || '(sem e-mail cadastrado)';
+  document.getElementById('gc-subject').value = '';
+  document.getElementById('gc-textarea').value = '';
+  renderAttachmentChips();
+
+  const panel = document.getElementById('email-compose');
+  panel.classList.remove('minimized');
+  panel.style.display = 'flex';
+  panel.style.flexDirection = 'column';
+}
+
+function closeEmailCompose() {
+  document.getElementById('email-compose').style.display = 'none';
+  state.emailComposeLeadId = null;
+  state.emailAttachments = [];
+}
+
+function toggleSignatureInBody() {
+  const attendant = currentAttendant();
+  if (!attendant || !attendant.signature) {
+    showToast('Você ainda não tem uma assinatura cadastrada (Configurações > Usuários)');
+    return;
+  }
+  const textarea = document.getElementById('gc-textarea');
+  const plainSignature = attendant.signature.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '');
+  if (state.emailSignatureInserted) {
+    textarea.value = textarea.value.replace(plainSignature, '').replace(/\n{3,}$/, '\n');
+    state.emailSignatureInserted = false;
+  } else {
+    textarea.value = textarea.value.replace(/\n+$/, '') + '\n' + plainSignature;
+    state.emailSignatureInserted = true;
+  }
+}
+
+function handleFileSelection(files) {
+  Array.from(files).forEach((file) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result.split(',')[1];
+      state.emailAttachments.push({ filename: file.name, size: file.size, dataBase64: base64 });
+      renderAttachmentChips();
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderAttachmentChips() {
+  const container = document.getElementById('gc-attachments-list');
+  container.innerHTML = state.emailAttachments
+    .map(
+      (a, idx) => `
+    <span class="gc-attachment-chip">📎 ${escapeHtml(a.filename)} <button data-remove-attachment="${idx}">&times;</button></span>
+  `
+    )
+    .join('');
+  container.querySelectorAll('[data-remove-attachment]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      state.emailAttachments.splice(Number(btn.dataset.removeAttachment), 1);
+      renderAttachmentChips();
+    });
+  });
+}
+
+async function sendComposedEmail() {
+  const leadId = state.emailComposeLeadId;
+  const subject = document.getElementById('gc-subject').value.trim();
+  const text = document.getElementById('gc-textarea').value.trim();
+  if (!text) {
+    showToast('Escreva uma mensagem antes de enviar');
+    return;
+  }
+  try {
+    const msg = await Api.sendEmail(leadId, {
+      subject: subject || '(sem assunto)',
+      text,
+      attendantId: state.attendantId,
+      attachments: state.emailAttachments.map((a) => ({ filename: a.filename, size: a.size, dataBase64: a.dataBase64 }))
+    });
+    closeEmailCompose();
+    showToast(msg.deliveryStatus === 'sent' ? 'E-mail enviado!' : 'E-mail registrado no CRM (integração não configurada)');
+    if (state.currentLeadId === leadId && state.leadChatChannel === 'email') loadLeadChat();
+    if (state.commsLeadId === leadId && state.commsChannel === 'email') loadCommsChat();
+    renderComms();
+  } catch (err) {
+    showToast(err.message || 'Erro ao enviar e-mail');
+  }
+}
+
+// ============ BI — faturamento por categoria ============
+function renderBI() {
+  const container = document.getElementById('bi-container');
+  const categories = state.settings.categories || [];
+  if (categories.length === 0) {
+    container.innerHTML = '<div class="empty-state">Nenhuma categoria cadastrada em Configurações.</div>';
+    return;
+  }
+
+  container.innerHTML = categories
+    .map((cat) => {
+      const leadIds = state.contacts.filter((c) => c.category === cat.id).map((c) => c.id);
+      const deals = state.deals.filter((d) => leadIds.includes(d.personId));
+      const openDeals = deals.filter((d) => d.status === 'open');
+      const wonDeals = deals.filter((d) => d.status === 'won');
+      const lostDeals = deals.filter((d) => d.status === 'lost');
+      const openValue = openDeals.reduce((s, d) => s + Number(d.value), 0);
+      const wonValue = wonDeals.reduce((s, d) => s + Number(d.value), 0);
+      const closedCount = wonDeals.length + lostDeals.length;
+      const conversion = closedCount === 0 ? 0 : Math.round((wonDeals.length / closedCount) * 100);
+
+      const maxCount = Math.max(1, ...state.stages.map((s) => deals.filter((d) => d.stage === s.id).length));
+      const funnelRows = state.stages
+        .slice()
+        .sort((a, b) => a.order - b.order)
+        .map((stage) => {
+          const count = deals.filter((d) => d.stage === stage.id).length;
+          const pct = Math.round((count / maxCount) * 100);
+          return `
+          <div class="funnel-row">
+            <div class="funnel-label">${escapeHtml(stage.name)}</div>
+            <div class="funnel-bar-track"><div class="funnel-bar-fill" style="width:${pct}%; background:linear-gradient(90deg, ${cat.color}, ${cat.color})"></div></div>
+            <div class="funnel-count">${count} negócio${count === 1 ? '' : 's'}</div>
+          </div>
+        `;
+        })
+        .join('');
+
+      const platformRows = revenueBreakdownRows(deals, (d) => d.platform, cat.color);
+      const orgRows = revenueBreakdownRows(
+        deals,
+        (d) => (d.orgId ? orgName(d.orgId) : null),
+        cat.color
+      );
+
+      return `
+      <div class="panel">
+        <h3 style="display:flex; align-items:center; gap:8px;">
+          <span style="width:10px; height:10px; border-radius:50%; background:${cat.color}; display:inline-block;"></span>
+          ${escapeHtml(cat.name)}
+        </h3>
+        <div class="stat-grid" style="margin-bottom:16px;">
+          <div class="stat-card">
+            <div class="label">Negócios em aberto</div>
+            <div class="value">${openDeals.length}</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">Valor em aberto</div>
+            <div class="value orange">${fmtMoney(openValue)}</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">Faturamento (Ganho)</div>
+            <div class="value green">${fmtMoney(wonValue)}</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">Taxa de conversão</div>
+            <div class="value">${conversion}%</div>
+          </div>
+        </div>
+        <div class="k" style="font-size:11px; color:#8a94a6; text-transform:uppercase; margin-bottom:8px;">Negócios por etapa</div>
+        ${funnelRows}
+        ${platformRows ? `<div class="k" style="font-size:11px; color:#8a94a6; text-transform:uppercase; margin:16px 0 8px;">Faturamento por Plataforma de Vendas</div>${platformRows}` : ''}
+        ${orgRows ? `<div class="k" style="font-size:11px; color:#8a94a6; text-transform:uppercase; margin:16px 0 8px;">Faturamento por Fornecedor</div>${orgRows}` : ''}
+      </div>
+    `;
+    })
+    .join('');
+}
+
+// Agrupa negócios por uma chave (plataforma, fornecedor, etc.) e mostra valor
+// em aberto e faturamento (ganho) de cada grupo.
+function revenueBreakdownRows(deals, keyFn, color) {
+  const groups = new Map();
+  deals.forEach((d) => {
+    const key = keyFn(d);
+    if (!key) return;
+    if (!groups.has(key)) groups.set(key, { open: 0, won: 0 });
+    const g = groups.get(key);
+    if (d.status === 'open') g.open += Number(d.value);
+    if (d.status === 'won') g.won += Number(d.value);
+  });
+  if (groups.size === 0) return '';
+
+  const maxWon = Math.max(1, ...Array.from(groups.values()).map((g) => g.won || g.open));
+  return Array.from(groups.entries())
+    .sort((a, b) => b[1].won - a[1].won || b[1].open - a[1].open)
+    .map(([name, g]) => {
+      const pct = Math.round(((g.won || g.open) / maxWon) * 100);
+      return `
+      <div class="funnel-row">
+        <div class="funnel-label">${escapeHtml(name)}</div>
+        <div class="funnel-bar-track"><div class="funnel-bar-fill" style="width:${pct}%; background:${color}"></div></div>
+        <div class="funnel-count wide">${fmtMoney(g.won)}${g.open ? ` <span style="font-weight:400; color:#8a94a6;">(+${fmtMoney(g.open)} aberto)</span>` : ''}</div>
+      </div>
+    `;
+    })
+    .join('');
+}
+
+// ============ Assinatura de e-mail (usuários) ============
+function bindUserSignatureModal() {
+  document.getElementById('btn-save-signature').addEventListener('click', async () => {
+    const id = document.getElementById('sig-user-id').value;
+    const signature = document.getElementById('sig-user-text').value;
+    try {
+      const updated = await Api.updateUser(id, { signature });
+      const user = state.users.find((u) => u.id === id);
+      if (user) user.signature = updated.signature;
+      closeModal('modal-user-signature');
+      showToast('Assinatura salva');
+    } catch (err) {
+      showToast('Erro ao salvar assinatura');
+    }
+  });
+}
+
+function openUserSignatureModal(userId) {
+  const user = state.users.find((u) => u.id === userId);
+  if (!user) return;
+  document.getElementById('sig-user-id').value = user.id;
+  document.getElementById('sig-user-name').textContent = user.name;
+  document.getElementById('sig-user-text').value = (user.signature || '').replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '');
+  openModal('modal-user-signature');
 }
 
 // ============ Boot ============

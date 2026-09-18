@@ -18,7 +18,7 @@
       <div class="topbar-user">
         <div class="notif-bell-wrap">
           <button id="notif-bell-btn" title="Notificações">
-            🔔
+            <svg class="ti" viewBox="0 0 24 24"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 01-3.46 0"></path></svg>
             <span id="notif-badge" class="notif-badge" style="display:none;">0</span>
           </button>
           <div id="notif-dropdown" class="notif-dropdown">
@@ -49,13 +49,38 @@
     <div class="body-wrap">
       <!-- Sidebar -->
       <aside class="sidebar" id="sidebar">
-        <div class="sidebar-link active" data-view="dashboard">📊 Dashboard</div>
-        <div class="sidebar-link" data-view="pipeline">📋 Pipeline</div>
-        <div class="sidebar-link" data-view="leads">🧲 Leads</div>
-        <div class="sidebar-link" data-view="orgs">🏢 Organizações</div>
-        <div class="sidebar-link" data-view="comunicacoes">💬 Comunicações</div>
-        <div class="sidebar-link" data-view="mensagens">✉️ Mensagens <span id="sidebar-msg-badge" class="notif-badge" style="display:none;">0</span></div>
-        <div class="sidebar-link" data-view="settings">⚙️ Configurações</div>
+        <div class="sidebar-link active" data-view="dashboard">
+          <svg class="si" viewBox="0 0 24 24"><rect x="3" y="12" width="4" height="9" rx="1"></rect><rect x="10" y="7" width="4" height="14" rx="1"></rect><rect x="17" y="3" width="4" height="18" rx="1"></rect></svg>
+          Dashboard
+        </div>
+        <div class="sidebar-link" data-view="pipeline">
+          <svg class="si" viewBox="0 0 24 24"><rect x="3" y="4" width="5" height="16" rx="1.5"></rect><rect x="9.5" y="4" width="5" height="10" rx="1.5"></rect><rect x="16" y="4" width="5" height="13" rx="1.5"></rect></svg>
+          Pipeline
+        </div>
+        <div class="sidebar-link" data-view="leads">
+          <svg class="si" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"></circle><path d="M2.5 20c0-3.6 2.9-6.5 6.5-6.5s6.5 2.9 6.5 6.5"></path><path d="M17 8h4M19 6v4"></path></svg>
+          Leads
+        </div>
+        <div class="sidebar-link" data-view="orgs">
+          <svg class="si" viewBox="0 0 24 24"><rect x="4" y="3" width="12" height="18" rx="1"></rect><path d="M8 7h1M8 11h1M8 15h1M13 7h1M13 11h1M13 15h1"></path><path d="M16 10h4v11h-4"></path></svg>
+          Organizações
+        </div>
+        <div class="sidebar-link" data-view="comunicacoes">
+          <svg class="si" viewBox="0 0 24 24"><path d="M4 4h16v12H8l-4 4V4z"></path></svg>
+          Comunicações
+        </div>
+        <div class="sidebar-link" data-view="mensagens">
+          <svg class="si" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 6.5l9 6.5 9-6.5"></path></svg>
+          Mensagens <span id="sidebar-msg-badge" class="notif-badge" style="display:none;">0</span>
+        </div>
+        <div class="sidebar-link" data-view="bi">
+          <svg class="si" viewBox="0 0 24 24"><path d="M3 3v18h18"></path><path d="M7 15l4-5 3 3 5-7"></path></svg>
+          BI
+        </div>
+        <div class="sidebar-link" data-view="settings">
+          <svg class="si" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"></path></svg>
+          Configurações
+        </div>
       </aside>
 
       <!-- Main content -->
@@ -180,8 +205,9 @@
                     <button class="activity-tab" data-commschannel="email">✉️ E-mail</button>
                   </div>
                 </div>
+                <button class="btn-primary" id="comms-btn-new-email" style="display:none; margin-bottom:12px;">✏️ Novo E-mail</button>
                 <div class="chat-thread" id="comms-chat-thread"></div>
-                <div class="chat-input-row">
+                <div class="chat-input-row" id="comms-chat-input-row">
                   <textarea id="comms-chat-input" placeholder="Digite uma mensagem..."></textarea>
                   <button class="btn-primary" id="comms-chat-send">Enviar</button>
                 </div>
@@ -198,6 +224,12 @@
             <button class="btn-secondary" id="btn-mark-all-messages">Marcar todas como lidas</button>
           </div>
           <div id="mensagens-list"></div>
+        </section>
+
+        <!-- ===== BI (faturamento por categoria) ===== -->
+        <section class="view" id="view-bi">
+          <h2 style="color:var(--vg-navy); margin-top:0;">BI — Faturamento por Categoria</h2>
+          <div id="bi-container"></div>
         </section>
 
         <!-- ===== SETTINGS ===== -->
@@ -346,6 +378,19 @@
               </div>
             </div>
 
+            <div class="panel">
+              <h3>📅 Google Calendar</h3>
+              <p class="empty-state" style="text-align:left; padding:0 0 12px;">
+                Sincroniza reuniões e tarefas com data como eventos no Google Calendar do atendente.
+              </p>
+              <div class="form-row">
+                <div class="form-group"><label>Client ID</label><input type="text" id="int-gcal-clientid" /></div>
+                <div class="form-group"><label>Client Secret</label><input type="password" id="int-gcal-secret" /></div>
+              </div>
+              <div class="form-group"><label>Refresh Token</label><input type="password" id="int-gcal-refresh" /></div>
+              <div class="form-group"><label>ID do Calendário (opcional)</label><input type="text" id="int-gcal-calendarid" placeholder="primary" /></div>
+            </div>
+
             <button class="btn-primary" id="btn-save-integrations">Salvar Integrações</button>
           </div>
 
@@ -429,6 +474,18 @@
             <label>Data de fechamento esperada</label>
             <input type="date" id="deal-close-date" />
           </div>
+        </div>
+        <div class="form-group">
+          <label>Plataforma de Vendas (opcional)</label>
+          <select id="deal-platform">
+            <option value="">Nenhuma / não se aplica</option>
+            <option value="Mercado Livre">Mercado Livre</option>
+            <option value="Shopify">Shopify</option>
+            <option value="Amazon">Amazon</option>
+            <option value="Magazine Luiza">Magazine Luiza</option>
+            <option value="Site Próprio">Site Próprio</option>
+            <option value="Outro">Outro</option>
+          </select>
         </div>
       </div>
       <div class="modal-footer">
@@ -648,6 +705,7 @@
         <div class="dd-col center">
           <div class="activity-tabs" id="lead-tabs">
             <button class="activity-tab active" data-ldtab="deals">Negócios</button>
+            <button class="activity-tab" data-ldtab="atividades">📋 Atividades</button>
             <button class="activity-tab" data-ldtab="whatsapp">📞 WhatsApp</button>
             <button class="activity-tab" data-ldtab="facebook">📘 Facebook</button>
             <button class="activity-tab" data-ldtab="instagram">📷 Instagram</button>
@@ -659,9 +717,33 @@
             <div id="ld-deals-list"></div>
           </div>
 
+          <div id="ld-tab-atividades" style="display:none;">
+            <div class="activity-tabs" id="ld-activity-subtabs">
+              <button class="activity-tab active" data-latype="all">Tudo</button>
+              <button class="activity-tab" data-latype="note">Notas</button>
+              <button class="activity-tab" data-latype="email">E-mails</button>
+              <button class="activity-tab" data-latype="call">Chamadas</button>
+              <button class="activity-tab" data-latype="meeting">Reuniões</button>
+              <button class="activity-tab" data-latype="task">Tarefas</button>
+            </div>
+            <div class="activity-add">
+              <select id="ld-new-activity-type" style="width:110px; padding:9px 8px; border-radius:7px; border:1.5px solid var(--vg-border);">
+                <option value="note">Nota</option>
+                <option value="email">E-mail</option>
+                <option value="call">Chamada</option>
+                <option value="meeting">Reunião</option>
+                <option value="task">Tarefa</option>
+              </select>
+              <textarea id="ld-new-activity-text" placeholder="Adicionar uma atividade..."></textarea>
+              <button class="btn-primary" id="ld-btn-add-activity">Adicionar</button>
+            </div>
+            <div id="ld-activity-feed"></div>
+          </div>
+
           <div id="ld-tab-chat" style="display:none;">
+            <button class="btn-primary" id="ld-btn-new-email" style="display:none; margin-bottom:12px;">✏️ Novo E-mail</button>
             <div class="chat-thread" id="ld-chat-thread"></div>
-            <div class="chat-input-row">
+            <div class="chat-input-row" id="ld-chat-input-row">
               <textarea id="ld-chat-input" placeholder="Digite uma mensagem..."></textarea>
               <button class="btn-primary" id="ld-chat-send">Enviar</button>
             </div>
@@ -760,10 +842,12 @@
   </div>
 
   <!-- ===== AI Assistant floating widget ===== -->
-  <button id="ai-fab" title="Assistente IA">🤖</button>
+  <button id="ai-fab" title="Assistente IA">
+    <svg class="ti" viewBox="0 0 24 24" width="26" height="26"><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z"></path><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15z"></path></svg>
+  </button>
   <div id="ai-panel">
     <div class="ai-panel-header">
-      <strong>🤖 Assistente IA</strong>
+      <strong><svg class="ti" viewBox="0 0 24 24" width="16" height="16" style="vertical-align:-3px; margin-right:4px;"><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z"></path></svg>Assistente IA</strong>
       <button class="modal-close" id="ai-panel-close">&times;</button>
     </div>
     <div class="tab-pills" style="margin:12px 16px 0;">
@@ -815,6 +899,62 @@
   </div>
 
   <div class="toast" id="toast"></div>
+
+  <!-- ===== MODAL: Edit user's email signature ===== -->
+  <div class="modal-overlay" id="modal-user-signature">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Assinatura de e-mail</h3>
+        <button class="modal-close" data-close="modal-user-signature">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="sig-user-id" />
+        <div class="form-group">
+          <label>Assinatura de <span id="sig-user-name"></span></label>
+          <textarea id="sig-user-text" rows="5" placeholder="Ex: Nome, cargo, telefone..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" data-close="modal-user-signature">Cancelar</button>
+        <button class="btn-primary" id="btn-save-signature">Salvar Assinatura</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Gmail-style Email Compose ===== -->
+  <div id="email-compose" class="gmail-compose" style="display:none;">
+    <div class="gc-header" id="gc-header">
+      <span id="gc-title">Nova Mensagem</span>
+      <div class="gc-header-actions">
+        <button id="gc-minimize" title="Minimizar">&#8212;</button>
+        <button id="gc-expand" title="Expandir">&#10530;</button>
+        <button id="gc-close" title="Fechar">&times;</button>
+      </div>
+    </div>
+    <div class="gc-body" id="gc-body">
+      <div class="gc-field">
+        <input type="text" id="gc-to" readonly />
+      </div>
+      <div class="gc-field">
+        <input type="text" id="gc-subject" placeholder="Assunto" />
+      </div>
+      <textarea id="gc-textarea" placeholder="Escreva sua mensagem..."></textarea>
+      <div id="gc-attachments-list" class="gc-attachments-list"></div>
+    </div>
+    <div class="gc-footer" id="gc-footer">
+      <div class="gc-footer-left">
+        <button id="gc-btn-send" class="gc-send-btn">Enviar</button>
+        <button id="gc-btn-signature" class="gc-icon-btn" title="Inserir assinatura">✍️</button>
+        <label class="gc-icon-btn" title="Anexar arquivo">📎<input type="file" id="gc-attach-input" multiple style="display:none;" /></label>
+        <label class="gc-icon-btn" title="Inserir imagem">🖼️<input type="file" id="gc-image-input" accept="image/*" multiple style="display:none;" /></label>
+        <div class="gc-emoji-wrap">
+          <button id="gc-btn-emoji" class="gc-icon-btn" title="Emoji">😀</button>
+          <div id="gc-emoji-picker" class="gc-emoji-picker"></div>
+        </div>
+      </div>
+      <button id="gc-btn-discard" class="gc-icon-btn" title="Descartar">🗑️</button>
+    </div>
+  </div>
 
   <script src="/js/app.js"></script>
 </body>

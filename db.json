@@ -30,34 +30,52 @@
     {
       "id": "u-1",
       "name": "Luis Dias",
-      "ramal": "1001"
+      "ramal": "1001",
+      "signature": "<br><br>--<br><b>Luis Dias</b><br>Velocita Global<br>(11) 98765-4321"
     },
     {
       "id": "u-2",
       "name": "Pedro Romanello",
-      "ramal": "1002"
+      "ramal": "1002",
+      "signature": "<br><br>--<br><b>Pedro Romanello</b><br>Velocita Global<br>(11) 98765-4322"
     },
     {
       "id": "u-3",
       "name": "Diego Gianini",
-      "ramal": "1003"
+      "ramal": "1003",
+      "signature": "<br><br>--<br><b>Diego Gianini</b><br>Velocita Global<br>(11) 98765-4323"
     }
   ],
   "tags": [
     {
-      "id": "tag-1",
-      "name": "Cliente VIP",
-      "color": "#f4821f"
-    },
-    {
-      "id": "tag-2",
-      "name": "Urgente",
-      "color": "#d64545"
-    },
-    {
       "id": "tag-3",
       "name": "Recorrente",
       "color": "#1f9d55"
+    },
+    {
+      "id": "tag-458763d1faf9",
+      "name": "Lead Quente",
+      "color": "#d64545"
+    },
+    {
+      "id": "tag-fc736977ae8e",
+      "name": "Lead Morno",
+      "color": "#f4821f"
+    },
+    {
+      "id": "tag-44509be3a57f",
+      "name": "Lead Frio",
+      "color": "#0891b2"
+    },
+    {
+      "id": "tag-fb3d6f7012a9",
+      "name": "Ecommerce",
+      "color": "#7c3aed"
+    },
+    {
+      "id": "tag-9bf6b2539ffb",
+      "name": "Marketing Digital",
+      "color": "#1b2a4e"
     }
   ],
   "organizations": [
@@ -99,9 +117,7 @@
       "orgId": "org-1",
       "notes": "Diretor comercial, prefere contato por e-mail.",
       "category": "ecommerce",
-      "tags": [
-        "tag-1"
-      ],
+      "tags": [],
       "ownerId": "u-1",
       "extraInfo": [
         {
@@ -177,10 +193,7 @@
       "orgId": "org-4",
       "notes": "",
       "category": "marketing_digital",
-      "tags": [
-        "tag-1",
-        "tag-2"
-      ],
+      "tags": [],
       "ownerId": "u-3",
       "extraInfo": [],
       "source": {
@@ -225,6 +238,7 @@
       "orgId": "org-1",
       "stage": "st-1",
       "ownerId": "u-1",
+      "platform": "Mercado Livre",
       "extraInfo": [],
       "closeDate": "2026-10-15",
       "status": "open",
@@ -293,6 +307,7 @@
       "orgId": "org-2",
       "stage": "st-4",
       "ownerId": "u-2",
+      "platform": "Shopify",
       "extraInfo": [],
       "closeDate": "2026-11-01",
       "status": "open",
@@ -329,6 +344,7 @@
       "orgId": "org-1",
       "stage": "st-3",
       "ownerId": "u-2",
+      "platform": "Amazon",
       "extraInfo": [],
       "closeDate": "2026-10-25",
       "status": "open",
@@ -437,6 +453,7 @@
       "orgId": "org-1",
       "stage": "st-2",
       "ownerId": "u-1",
+      "platform": "Mercado Livre",
       "extraInfo": [],
       "closeDate": "2026-09-01",
       "status": "lost",
@@ -503,6 +520,36 @@
       "text": "Ligar para agendar reunião de fechamento",
       "date": "2026-09-20T09:00:00.000Z",
       "done": false
+    },
+    {
+      "id": "a-7",
+      "dealId": "d-6",
+      "type": "call",
+      "text": "Ligação de acompanhamento sobre a renovação",
+      "date": "2026-09-18T15:00:00.000Z",
+      "done": false,
+      "attendantId": "u-1",
+      "attendantName": "Luis Dias"
+    },
+    {
+      "id": "a-8",
+      "dealId": "d-4",
+      "type": "meeting",
+      "text": "Visita técnica na fábrica para apresentação da proposta",
+      "date": "2026-09-18T11:00:00.000Z",
+      "done": false,
+      "attendantId": "u-2",
+      "attendantName": "Pedro Romanello"
+    },
+    {
+      "id": "a-6483c0b60a0f",
+      "leadId": "c-1",
+      "type": "note",
+      "text": "Ligar para confirmar reunião",
+      "date": "2026-09-18T18:34:58.734Z",
+      "done": false,
+      "attendantId": "u-1",
+      "attendantName": "Luis Dias"
     }
   ],
   "webhookEvents": [],
@@ -535,6 +582,16 @@
       "id": "msg-3",
       "leadId": "c-3",
       "channel": "email",
+      "subject": "Proposta de renovação — Vetta Alimentos",
+      "opens": [
+        {
+          "timestamp": "2026-09-11T10:30:00.000Z"
+        },
+        {
+          "timestamp": "2026-09-12T08:05:00.000Z"
+        }
+      ],
+      "openCount": 2,
       "direction": "out",
       "text": "Olá Ricardo, segue a proposta de renovação para sua análise.",
       "attendantId": "u-1",
@@ -554,6 +611,34 @@
       "timestamp": "2026-09-18T09:15:00.000Z",
       "deliveryStatus": "received",
       "deliveryNote": ""
+    },
+    {
+      "id": "msg-f07cb2be7c70",
+      "leadId": "c-4",
+      "channel": "instagram",
+      "direction": "out",
+      "text": "Ola boa tarde, os",
+      "attendantId": "u-1",
+      "attendantName": "Luis Dias",
+      "timestamp": "2026-09-18T18:23:28.679Z",
+      "deliveryStatus": "simulated",
+      "deliveryNote": "Integração do Instagram não configurada em Configurações > Integrações."
+    },
+    {
+      "id": "msg-bb452373564a",
+      "leadId": "c-1",
+      "channel": "email",
+      "direction": "out",
+      "text": "Olá Marcos, segue a proposta atualizada conforme conversamos.\n\n\n--\nLuis Dias\nVelocita Global\n(11) 98765-4321",
+      "attendantId": "u-1",
+      "attendantName": "Luis Dias",
+      "timestamp": "2026-09-18T18:34:45.684Z",
+      "deliveryStatus": "simulated",
+      "deliveryNote": "Integração de e-mail (SMTP) não configurada em Configurações > Integrações.",
+      "subject": "Proposta comercial atualizada",
+      "attachments": [],
+      "opens": [],
+      "openCount": 0
     }
   ],
   "notifications": [
@@ -659,6 +744,12 @@
       "vivoPabx": {
         "apiUrl": "",
         "apiToken": ""
+      },
+      "googleCalendar": {
+        "clientId": "",
+        "clientSecret": "",
+        "refreshToken": "",
+        "calendarId": "primary"
       }
     }
   }
