@@ -23,7 +23,7 @@ const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '';
 const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'openrouter/free';
 
 const CEREBRAS_API_KEY = process.env.CEREBRAS_API_KEY || '';
-const CEREBRAS_MODEL = process.env.CEREBRAS_MODEL || 'llama-3.3-70b';
+const CEREBRAS_MODEL = process.env.CEREBRAS_MODEL || 'llama3.1-8b';
 
 const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY || '';
 const MISTRAL_MODEL = process.env.MISTRAL_MODEL || 'mistral-small-latest';
@@ -178,6 +178,23 @@ function sleep(ms) {
 // Tenta, em ordem, cada provedor cuja chave esteja configurada: Gemini -> OpenRouter -> Groq -> Anthropic.
 // Se um provedor falhar (fora do ar, sobrecarregado, limite atingido), passa pro próximo
 // automaticamente antes de mostrar erro ao afiliado.
+// Tempo máximo que cada provedor tem para responder antes de desistir dele e passar
+// para o próximo da fila — sem isso, um provedor lento (mesmo sem dar erro) travaria
+// a geração inteira esperando por ele indefinidamente.
+const PROVIDER_TIMEOUT_MS = 25000;
+
+function withTimeout(promise, ms, label) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      const err = new Error('provider_timeout');
+      err.friendly = `${label} demorou demais para responder (mais de ${Math.round(ms / 1000)}s).`;
+      reject(err);
+    }, ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 async function callAI(userPrompt, image) {
   const providers = [];
   if (GEMINI_API_KEY) providers.push({ name: 'Gemini', fn: () => callGemini(userPrompt, image) });
@@ -196,7 +213,7 @@ async function callAI(userPrompt, image) {
   let lastErr = null;
   for (const provider of providers) {
     try {
-      return await provider.fn();
+      return await withTimeout(provider.fn(), PROVIDER_TIMEOUT_MS, provider.name);
     } catch (e) {
       console.log(`${provider.name} falhou (${e.message}), tentando próximo provedor configurado...`);
       lastErr = e;
@@ -403,7 +420,7 @@ async function testGemini() {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
   const body = JSON.stringify({
     contents: [{ role: 'user', parts: [{ text: 'Responda apenas com a palavra: ok' }] }],
-    generationConfig: { maxOutputTokens: 10, temperature: 0 }
+    generationConfig: { maxOutputTokens: 30, temperature: 0 }
   });
   const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
   if (!response.ok) { const t = await response.text(); throw new Error(`HTTP ${response.status}: ${t.slice(0, 200)}`); }
@@ -417,7 +434,7 @@ async function testOpenRouter() {
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENROUTER_API_KEY}` },
-    body: JSON.stringify({ model: OPENROUTER_MODEL, max_tokens: 10, messages: [{ role: 'user', content: 'Responda apenas com a palavra: ok' }] })
+    body: JSON.stringify({ model: OPENROUTER_MODEL, max_tokens: 30, messages: [{ role: 'user', content: 'Responda apenas com a palavra: ok' }] })
   });
   if (!response.ok) { const t = await response.text(); throw new Error(`HTTP ${response.status}: ${t.slice(0, 200)}`); }
   const data = await response.json();
@@ -429,7 +446,7 @@ async function testGroq() {
   const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${GROQ_API_KEY}` },
-    body: JSON.stringify({ model: GROQ_MODEL, max_tokens: 10, messages: [{ role: 'user', content: 'Responda apenas com a palavra: ok' }] })
+    body: JSON.stringify({ model: GROQ_MODEL, max_tokens: 30, messages: [{ role: 'user', content: 'Responda apenas com a palavra: ok' }] })
   });
   if (!response.ok) { const t = await response.text(); throw new Error(`HTTP ${response.status}: ${t.slice(0, 200)}`); }
   const data = await response.json();
@@ -441,7 +458,7 @@ async function testCerebras() {
   const response = await fetch('https://api.cerebras.ai/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${CEREBRAS_API_KEY}` },
-    body: JSON.stringify({ model: CEREBRAS_MODEL, max_tokens: 10, messages: [{ role: 'user', content: 'Responda apenas com a palavra: ok' }] })
+    body: JSON.stringify({ model: CEREBRAS_MODEL, max_tokens: 30, messages: [{ role: 'user', content: 'Responda apenas com a palavra: ok' }] })
   });
   if (!response.ok) { const t = await response.text(); throw new Error(`HTTP ${response.status}: ${t.slice(0, 200)}`); }
   const data = await response.json();
@@ -453,7 +470,7 @@ async function testMistral() {
   const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${MISTRAL_API_KEY}` },
-    body: JSON.stringify({ model: MISTRAL_MODEL, max_tokens: 10, messages: [{ role: 'user', content: 'Responda apenas com a palavra: ok' }] })
+    body: JSON.stringify({ model: MISTRAL_MODEL, max_tokens: 30, messages: [{ role: 'user', content: 'Responda apenas com a palavra: ok' }] })
   });
   if (!response.ok) { const t = await response.text(); throw new Error(`HTTP ${response.status}: ${t.slice(0, 200)}`); }
   const data = await response.json();
@@ -465,7 +482,7 @@ async function testAnthropic() {
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model: ANTHROPIC_MODEL, max_tokens: 10, messages: [{ role: 'user', content: 'Responda apenas com a palavra: ok' }] })
+    body: JSON.stringify({ model: ANTHROPIC_MODEL, max_tokens: 30, messages: [{ role: 'user', content: 'Responda apenas com a palavra: ok' }] })
   });
   if (!response.ok) { const t = await response.text(); throw new Error(`HTTP ${response.status}: ${t.slice(0, 200)}`); }
   const data = await response.json();
