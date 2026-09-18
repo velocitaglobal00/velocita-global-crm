@@ -26,7 +26,13 @@ const state = {
   leadActivityFilter: 'all',
   emailComposeLeadId: null,
   emailAttachments: [],
-  emailSignatureInserted: false
+  emailSignatureInserted: false,
+  teamChatMessages: [],
+  teamChatSeenCount: 0,
+  teamChatPollHandle: null,
+  teamChatPendingAttachment: null,
+  teamChatRecorder: null,
+  teamChatRecordedChunks: []
 };
 
 const ATTENDANT_KEY = 'vg_attendant_id';
@@ -41,7 +47,7 @@ const SOURCE_LABEL = {
   indicacao: 'Indicação',
   organico: 'Orgânico / Site'
 };
-const CHANNEL_LABEL = { whatsapp: 'WhatsApp', facebook: 'Facebook', instagram: 'Instagram', email: 'E-mail' };
+const CHANNEL_LABEL = { whatsapp: 'WhatsApp', facebook: 'Facebook', instagram: 'Instagram', email: 'E-mail', site: 'Site' };
 
 function fmtMoney(value, currency = 'BRL') {
   const symbol = CURRENCY_SYMBOL[currency] || 'R$';
@@ -153,7 +159,9 @@ const Api = {
   allActivities: () => api('/api/activities'),
   leadActivities: (leadId) => api(`/api/leads/${leadId}/activities`),
   addLeadActivity: (leadId, payload) => api(`/api/leads/${leadId}/activities`, { method: 'POST', body: JSON.stringify(payload) }),
-  syncCalendar: (activityId) => api(`/api/activities/${activityId}/sync-calendar`, { method: 'POST' })
+  syncCalendar: (activityId) => api(`/api/activities/${activityId}/sync-calendar`, { method: 'POST' }),
+  teamChat: () => api('/api/team-chat'),
+  sendTeamChat: (payload) => api('/api/team-chat', { method: 'POST', body: JSON.stringify(payload) })
 };
 
 // ============ Init ============
@@ -198,10 +206,13 @@ async function init() {
   bindEmailCompose();
   bindUserSignatureModal();
   bindRoteiro();
+  bindTeamChat();
 
   ensureAttendant();
   pollNotifications();
   setInterval(pollNotifications, 25000);
+  pollTeamChatBadge();
+  setInterval(pollTeamChatBadge, 25000);
 }
 
 async function loadAllData() {
@@ -239,6 +250,12 @@ function switchView(viewName) {
   if (viewName === 'mensagens') renderMensagens();
   if (viewName === 'bi') renderBI();
   if (viewName === 'roteiro') renderRoteiro();
+  if (viewName === 'chatequipe') {
+    renderTeamChat();
+    startTeamChatPolling();
+  } else {
+    stopTeamChatPolling();
+  }
 }
 
 function bindNav() {
@@ -2829,6 +2846,197 @@ async function renderRoteiro() {
       }
     });
   });
+}
+
+// ============ Chat da Equipe (interno, somente entre admins/atendentes) ============
+function bindTeamChat() {
+  document.getElementById('team-chat-send').addEventListener('click', sendTeamChatMessage);
+  document.getElementById('team-chat-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendTeamChatMessage();
+    }
+  });
+
+  const fileInput = document.getElementById('tc-file-input');
+  document.getElementById('tc-btn-attach').addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files[0]) handleTeamChatFile(fileInput.files[0]);
+    fileInput.value = '';
+  });
+
+  document.getElementById('tc-btn-record').addEventListener('click', toggleTeamChatRecording);
+}
+
+function handleTeamChatFile(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    const base64 = reader.result.split(',')[1];
+    state.teamChatPendingAttachment = {
+      kind: file.type.startsWith('image/') ? 'image' : 'file',
+      filename: file.name,
+      mime: file.type || 'application/octet-stream',
+      dataBase64: base64
+    };
+    renderTeamChatAttachmentPreview();
+  };
+  reader.readAsDataURL(file);
+}
+
+function renderTeamChatAttachmentPreview() {
+  const box = document.getElementById('team-chat-attachment-preview');
+  const att = state.teamChatPendingAttachment;
+  if (!att) {
+    box.style.display = 'none';
+    box.innerHTML = '';
+    return;
+  }
+  const icon = att.kind === 'image' ? '🖼️' : att.kind === 'audio' ? '🎤' : '📎';
+  box.style.display = 'flex';
+  box.innerHTML = `<span>${icon} ${escapeHtml(att.filename)}</span> <button id="tc-remove-attachment" type="button">&times;</button>`;
+  document.getElementById('tc-remove-attachment').addEventListener('click', () => {
+    state.teamChatPendingAttachment = null;
+    renderTeamChatAttachmentPreview();
+  });
+}
+
+async function toggleTeamChatRecording() {
+  const btn = document.getElementById('tc-btn-record');
+  if (state.teamChatRecorder && state.teamChatRecorder.state === 'recording') {
+    state.teamChatRecorder.stop();
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const recorder = new MediaRecorder(stream);
+    state.teamChatRecordedChunks = [];
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) state.teamChatRecordedChunks.push(e.data);
+    };
+    recorder.onstop = () => {
+      stream.getTracks().forEach((t) => t.stop());
+      btn.classList.remove('recording');
+      const blob = new Blob(state.teamChatRecordedChunks, { type: 'audio/webm' });
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64 = reader.result.split(',')[1];
+        state.teamChatPendingAttachment = {
+          kind: 'audio',
+          filename: `audio-${Date.now()}.webm`,
+          mime: 'audio/webm',
+          dataBase64: base64
+        };
+        renderTeamChatAttachmentPreview();
+      };
+      reader.readAsDataURL(blob);
+    };
+    recorder.start();
+    state.teamChatRecorder = recorder;
+    btn.classList.add('recording');
+  } catch (err) {
+    showToast('Não foi possível acessar o microfone.');
+  }
+}
+
+async function sendTeamChatMessage() {
+  const input = document.getElementById('team-chat-input');
+  const text = input.value.trim();
+  const attachment = state.teamChatPendingAttachment;
+  if (!text && !attachment) return;
+  if (!state.attendantId) {
+    showToast('Selecione seu nome de atendente primeiro');
+    openAttendantPicker();
+    return;
+  }
+  try {
+    await Api.sendTeamChat({ text, attendantId: state.attendantId, attachment });
+    input.value = '';
+    state.teamChatPendingAttachment = null;
+    renderTeamChatAttachmentPreview();
+    await renderTeamChat();
+  } catch (err) {
+    showToast(err.message || 'Erro ao enviar mensagem');
+  }
+}
+
+function startTeamChatPolling() {
+  stopTeamChatPolling();
+  state.teamChatPollHandle = setInterval(renderTeamChat, 4000);
+}
+
+function stopTeamChatPolling() {
+  if (state.teamChatPollHandle) {
+    clearInterval(state.teamChatPollHandle);
+    state.teamChatPollHandle = null;
+  }
+}
+
+async function pollTeamChatBadge() {
+  try {
+    const messages = await Api.teamChat();
+    state.teamChatMessages = messages;
+    const isViewing = document.getElementById('view-chatequipe').classList.contains('active');
+    const badge = document.getElementById('sidebar-teamchat-badge');
+    if (isViewing) {
+      state.teamChatSeenCount = messages.length;
+      badge.style.display = 'none';
+      return;
+    }
+    const unseen = messages.length - state.teamChatSeenCount;
+    if (unseen > 0) {
+      badge.textContent = String(unseen);
+      badge.style.display = '';
+    } else {
+      badge.style.display = 'none';
+    }
+  } catch (err) {
+    // silencioso — próxima verificação tenta de novo
+  }
+}
+
+function renderTeamChatBubble(m) {
+  const isOut = m.senderId === state.attendantId;
+  let attachmentHtml = '';
+  if (m.attachment) {
+    const src = `data:${m.attachment.mime};base64,${m.attachment.dataBase64}`;
+    if (m.attachment.kind === 'image') {
+      attachmentHtml = `<div class="tc-image-bubble"><img src="${src}" alt="${escapeHtml(m.attachment.filename)}" /></div>`;
+    } else if (m.attachment.kind === 'audio') {
+      attachmentHtml = `<div class="tc-audio-bubble"><audio controls src="${src}"></audio></div>`;
+    } else {
+      attachmentHtml = `<div class="tc-file-bubble"><a href="${src}" download="${escapeHtml(m.attachment.filename)}">📎 ${escapeHtml(m.attachment.filename)}</a></div>`;
+    }
+  }
+  return `
+    <div class="chat-bubble-row ${isOut ? 'out' : 'in'}">
+      <div class="tc-sender">${escapeHtml(m.senderName)}</div>
+      ${m.text ? `<div class="chat-bubble">${escapeHtml(m.text)}</div>` : ''}
+      ${attachmentHtml}
+      <div class="chat-meta">${fmtDateTime(m.timestamp)}</div>
+    </div>
+  `;
+}
+
+async function renderTeamChat() {
+  const thread = document.getElementById('team-chat-thread');
+  try {
+    const messages = await Api.teamChat();
+    state.teamChatMessages = messages;
+    state.teamChatSeenCount = messages.length;
+    document.getElementById('sidebar-teamchat-badge').style.display = 'none';
+    if (messages.length === 0) {
+      thread.innerHTML = '<div class="empty-state">Nenhuma mensagem ainda. Comece a conversa com a equipe!</div>';
+      return;
+    }
+    const wasAtBottom = thread.scrollTop + thread.clientHeight >= thread.scrollHeight - 40;
+    thread.innerHTML = messages.map(renderTeamChatBubble).join('');
+    if (wasAtBottom || !thread.dataset.rendered) {
+      thread.scrollTop = thread.scrollHeight;
+    }
+    thread.dataset.rendered = '1';
+  } catch (err) {
+    thread.innerHTML = '<div class="empty-state">Erro ao carregar o chat da equipe.</div>';
+  }
 }
 
 // ============ BI — faturamento por categoria ============

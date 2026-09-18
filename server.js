@@ -603,6 +603,74 @@ app.get('/api/webhooks/instagram', (req, res) => logWebhookEvent('instagram', re
 app.post('/api/webhooks/instagram', (req, res) => logWebhookEvent('instagram', req, res));
 app.post('/api/webhooks/google-ads-leads', (req, res) => logWebhookEvent('google_ads', req, res));
 
+// Webhook do formulário do site institucional (velocita-digital-hub, hospedado no
+// Replit). Sem autenticação de sessão pois é chamado pelo navegador do visitante,
+// diretamente da página pública — por isso libera CORS só nesta rota.
+app.options('/api/webhooks/site-form', (req, res) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type');
+  res.sendStatus(204);
+});
+
+app.post('/api/webhooks/site-form', (req, res) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  const data = db.read();
+  const name = (req.body.name || req.body.nome || '').trim();
+  const email = (req.body.email || '').trim();
+  const whatsapp = (req.body.whatsapp || req.body.phone || '').trim();
+  const company = (req.body.company || req.body.empresa || '').trim();
+  const plan = (req.body.plan || req.body.plano || '').trim();
+  const message = (req.body.message || req.body.mensagem || '').trim();
+
+  if (!name && !email && !whatsapp) {
+    return res.status(400).json({ error: 'Formulário vazio' });
+  }
+
+  let contact = (email && findContactByChannel(data, 'email', email)) || (whatsapp && findContactByChannel(data, 'whatsapp', whatsapp));
+
+  if (!contact) {
+    let orgId = null;
+    if (company) {
+      let org = data.organizations.find((o) => o.name.toLowerCase() === company.toLowerCase());
+      if (!org) {
+        org = { id: newId('org'), name: company, address: '', ownerId: null, extraInfo: [] };
+        data.organizations.push(org);
+      }
+      orgId = org.id;
+    }
+    contact = {
+      id: newId('c'),
+      name: name || company || 'Lead do site',
+      email,
+      phone: whatsapp,
+      orgId,
+      notes: '',
+      category: null,
+      tags: [],
+      ownerId: null,
+      extraInfo: [],
+      source: { channel: 'organico', campaign: 'site-institucional' },
+      channels: { whatsapp, facebookPsid: '', instagramId: '' }
+    };
+    data.contacts.push(contact);
+    logHistory(data, 'lead', contact.id, null, 'created', 'Lead criado pelo formulário do site');
+  }
+
+  const textParts = [];
+  if (plan) textParts.push(`Plano de interesse: ${plan}`);
+  if (message) textParts.push(message);
+  pushMessage(data, {
+    leadId: contact.id,
+    channel: 'site',
+    direction: 'in',
+    text: textParts.join('\n') || 'Novo contato recebido pelo formulário do site.'
+  });
+
+  db.write(data);
+  res.status(201).json({ ok: true, leadId: contact.id });
+});
+
 // Webhook de e-mail recebido (compatível com o formato "Inbound Parse" de provedores
 // como SendGrid/Mailgun/Postmark: campos "from" e "text"/"body-plain").
 app.post('/api/webhooks/email', (req, res) => {
@@ -672,6 +740,43 @@ app.post('/api/notifications/read-all', requireAuth, (req, res) => {
   (data.notifications || []).forEach((n) => (n.read = true));
   db.write(data);
   res.json({ ok: true });
+});
+
+// ---------- Chat interno da equipe (somente entre admins/atendentes, não visível ao lead) ----------
+app.get('/api/team-chat', requireAuth, (req, res) => {
+  const data = db.read();
+  res.json(data.teamChat || []);
+});
+
+app.post('/api/team-chat', requireAuth, (req, res) => {
+  const data = db.read();
+  if (!data.teamChat) data.teamChat = [];
+  const { text, attendantId, attachment } = req.body;
+  const trimmedText = (text || '').trim();
+  if (!trimmedText && !(attachment && attachment.dataBase64)) {
+    return res.status(400).json({ error: 'Mensagem vazia' });
+  }
+  const sender = data.users.find((u) => u.id === attendantId);
+  const message = {
+    id: newId('tc'),
+    senderId: attendantId || null,
+    senderName: sender ? sender.name : 'Atendente',
+    text: trimmedText,
+    attachment:
+      attachment && attachment.dataBase64
+        ? {
+            kind: attachment.kind || 'file',
+            filename: attachment.filename || 'arquivo',
+            mime: attachment.mime || '',
+            dataBase64: attachment.dataBase64
+          }
+        : null,
+    timestamp: new Date().toISOString()
+  };
+  data.teamChat.push(message);
+  data.teamChat = data.teamChat.slice(-500);
+  db.write(data);
+  res.status(201).json(message);
 });
 
 app.get('/api/leads/:id/messages', requireAuth, (req, res) => {

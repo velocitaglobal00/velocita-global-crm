@@ -1380,6 +1380,88 @@ table.data-table tr.clickable:hover {
   resize: vertical;
 }
 
+/* ---------- Chat da Equipe (interno) ---------- */
+.team-chat-panel {
+  background: #fff;
+  border: 1px solid var(--vg-border);
+  border-radius: 10px;
+  padding: 16px;
+  max-width: 720px;
+}
+
+.team-chat-panel .chat-thread {
+  max-height: 480px;
+}
+
+.chat-bubble-row .tc-sender {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--vg-navy);
+  margin-bottom: 2px;
+}
+
+.chat-bubble-row.out .tc-sender {
+  text-align: right;
+  color: var(--vg-orange);
+}
+
+.tc-image-bubble img {
+  max-width: 220px;
+  max-height: 220px;
+  border-radius: 10px;
+  display: block;
+}
+
+.tc-audio-bubble,
+.tc-file-bubble {
+  padding: 8px 12px;
+  border-radius: 14px;
+  background: var(--vg-bg);
+  display: inline-block;
+}
+
+.chat-bubble-row.out .tc-audio-bubble,
+.chat-bubble-row.out .tc-file-bubble {
+  background: var(--vg-orange);
+}
+
+.tc-audio-bubble audio {
+  max-width: 240px;
+}
+
+.tc-file-bubble a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: inherit;
+  text-decoration: underline;
+}
+
+#tc-btn-record.recording {
+  background: #dc2626;
+  color: #fff;
+  border-color: #dc2626;
+}
+
+.tc-attach-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--vg-bg);
+  border-radius: 8px;
+  margin-bottom: 10px;
+  font-size: 12.5px;
+}
+
+.tc-attach-preview button {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 14px;
+  color: #8a94a6;
+}
+
 /* ---------- AI Assistant floating widget ---------- */
 #ai-fab {
   position: fixed;
