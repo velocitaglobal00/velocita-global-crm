@@ -743,15 +743,19 @@ app.post('/api/notifications/read-all', requireAuth, (req, res) => {
 });
 
 // ---------- Chat interno da equipe (somente entre admins/atendentes, não visível ao lead) ----------
+// Mensagens "gerais" (sem recipientId) vão para todo mundo; mensagens privadas só
+// aparecem para o remetente e o destinatário escolhido.
 app.get('/api/team-chat', requireAuth, (req, res) => {
   const data = db.read();
-  res.json(data.teamChat || []);
+  const me = req.query.attendantId || '';
+  const msgs = (data.teamChat || []).filter((m) => !m.recipientId || m.senderId === me || m.recipientId === me);
+  res.json(msgs);
 });
 
 app.post('/api/team-chat', requireAuth, (req, res) => {
   const data = db.read();
   if (!data.teamChat) data.teamChat = [];
-  const { text, attendantId, attachment } = req.body;
+  const { text, attendantId, attachment, recipientId } = req.body;
   const trimmedText = (text || '').trim();
   if (!trimmedText && !(attachment && attachment.dataBase64)) {
     return res.status(400).json({ error: 'Mensagem vazia' });
@@ -761,6 +765,7 @@ app.post('/api/team-chat', requireAuth, (req, res) => {
     id: newId('tc'),
     senderId: attendantId || null,
     senderName: sender ? sender.name : 'Atendente',
+    recipientId: recipientId || null,
     text: trimmedText,
     attachment:
       attachment && attachment.dataBase64
@@ -771,12 +776,27 @@ app.post('/api/team-chat', requireAuth, (req, res) => {
             dataBase64: attachment.dataBase64
           }
         : null,
+    readBy: [],
     timestamp: new Date().toISOString()
   };
   data.teamChat.push(message);
   data.teamChat = data.teamChat.slice(-500);
   db.write(data);
   res.status(201).json(message);
+});
+
+// Registra o "flash de visualização" (quem já abriu/viu a mensagem).
+app.post('/api/team-chat/:id/read', requireAuth, (req, res) => {
+  const data = db.read();
+  const msg = (data.teamChat || []).find((m) => m.id === req.params.id);
+  if (!msg) return res.status(404).json({ error: 'Mensagem não encontrada' });
+  const { attendantId } = req.body;
+  if (!msg.readBy) msg.readBy = [];
+  if (attendantId && attendantId !== msg.senderId && !msg.readBy.includes(attendantId)) {
+    msg.readBy.push(attendantId);
+    db.write(data);
+  }
+  res.json(msg);
 });
 
 app.get('/api/leads/:id/messages', requireAuth, (req, res) => {

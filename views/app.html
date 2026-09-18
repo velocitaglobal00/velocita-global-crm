@@ -262,15 +262,23 @@
         <section class="view" id="view-chatequipe">
           <h2 style="color:var(--vg-navy); margin-top:0;">Chat da Equipe</h2>
           <p class="empty-state" style="text-align:left; padding:0 0 14px;">Bate-papo interno entre os administradores/atendentes — não é visto pelos leads.</p>
-          <div class="team-chat-panel">
-            <div class="chat-thread" id="team-chat-thread"></div>
-            <div id="team-chat-attachment-preview" class="tc-attach-preview" style="display:none;"></div>
-            <div class="chat-input-row" id="team-chat-input-row">
-              <button class="btn-secondary" id="tc-btn-attach" title="Anexar foto ou documento" type="button">📎</button>
-              <input type="file" id="tc-file-input" style="display:none;" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.zip,.txt" />
-              <button class="btn-secondary" id="tc-btn-record" title="Gravar áudio" type="button">🎤</button>
-              <textarea id="team-chat-input" placeholder="Digite uma mensagem para a equipe..."></textarea>
-              <button class="btn-primary" id="team-chat-send">Enviar</button>
+          <div class="comms-layout">
+            <div class="comms-list-col">
+              <div id="team-chat-contacts"></div>
+            </div>
+            <div class="comms-chat-col">
+              <div class="comms-chat-header">
+                <strong id="team-chat-target-name">🌐 Geral</strong>
+              </div>
+              <div class="chat-thread" id="team-chat-thread"></div>
+              <div id="team-chat-attachment-preview" class="tc-attach-preview" style="display:none;"></div>
+              <div class="chat-input-row" id="team-chat-input-row">
+                <button class="btn-secondary" id="tc-btn-attach" title="Anexar foto ou documento" type="button">📎</button>
+                <input type="file" id="tc-file-input" style="display:none;" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.zip,.txt" />
+                <button class="btn-secondary" id="tc-btn-record" title="Gravar áudio" type="button">🎤</button>
+                <textarea id="team-chat-input" placeholder="Digite uma mensagem..."></textarea>
+                <button class="btn-primary" id="team-chat-send">Enviar</button>
+              </div>
             </div>
           </div>
         </section>

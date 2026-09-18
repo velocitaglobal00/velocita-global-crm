@@ -32,7 +32,8 @@ const state = {
   teamChatPollHandle: null,
   teamChatPendingAttachment: null,
   teamChatRecorder: null,
-  teamChatRecordedChunks: []
+  teamChatRecordedChunks: [],
+  teamChatTarget: null // null = Geral; caso contrário, id do usuário do chat privado
 };
 
 const ATTENDANT_KEY = 'vg_attendant_id';
@@ -160,8 +161,9 @@ const Api = {
   leadActivities: (leadId) => api(`/api/leads/${leadId}/activities`),
   addLeadActivity: (leadId, payload) => api(`/api/leads/${leadId}/activities`, { method: 'POST', body: JSON.stringify(payload) }),
   syncCalendar: (activityId) => api(`/api/activities/${activityId}/sync-calendar`, { method: 'POST' }),
-  teamChat: () => api('/api/team-chat'),
-  sendTeamChat: (payload) => api('/api/team-chat', { method: 'POST', body: JSON.stringify(payload) })
+  teamChat: (attendantId) => api(`/api/team-chat?attendantId=${encodeURIComponent(attendantId || '')}`),
+  sendTeamChat: (payload) => api('/api/team-chat', { method: 'POST', body: JSON.stringify(payload) }),
+  markTeamChatRead: (id, attendantId) => api(`/api/team-chat/${id}/read`, { method: 'POST', body: JSON.stringify({ attendantId }) })
 };
 
 // ============ Init ============
@@ -2865,7 +2867,48 @@ function bindTeamChat() {
     fileInput.value = '';
   });
 
-  document.getElementById('tc-btn-record').addEventListener('click', toggleTeamChatRecording);
+  bindTeamChatRecordButton();
+}
+
+// Botão de áudio com dois jeitos de usar: segurar (grava enquanto pressionado,
+// solta e para) ou clicar rapidinho uma vez (começa a gravar, clique de novo para
+// parar). Em ambos os casos cai no preview com opção de excluir ou enviar.
+function bindTeamChatRecordButton() {
+  const btn = document.getElementById('tc-btn-record');
+  let pressTimer = null;
+  let isHoldGesture = false;
+
+  const isRecording = () => state.teamChatRecorder && state.teamChatRecorder.state === 'recording';
+
+  const onPressStart = (e) => {
+    e.preventDefault();
+    isHoldGesture = false;
+    pressTimer = setTimeout(() => {
+      isHoldGesture = true;
+      if (!isRecording()) startTeamChatRecording();
+    }, 300);
+  };
+
+  const onPressEnd = () => {
+    clearTimeout(pressTimer);
+    if (isHoldGesture) {
+      if (isRecording()) stopTeamChatRecording();
+      isHoldGesture = false;
+    } else if (isRecording()) {
+      stopTeamChatRecording();
+    } else {
+      startTeamChatRecording();
+    }
+  };
+
+  btn.addEventListener('mousedown', onPressStart);
+  btn.addEventListener('mouseup', onPressEnd);
+  btn.addEventListener('mouseleave', () => {
+    if (isRecording() && isHoldGesture) stopTeamChatRecording();
+    clearTimeout(pressTimer);
+  });
+  btn.addEventListener('touchstart', onPressStart, { passive: false });
+  btn.addEventListener('touchend', onPressEnd);
 }
 
 function handleTeamChatFile(file) {
@@ -2892,20 +2935,21 @@ function renderTeamChatAttachmentPreview() {
     return;
   }
   const icon = att.kind === 'image' ? '🖼️' : att.kind === 'audio' ? '🎤' : '📎';
+  const audioPreview = att.kind === 'audio' ? `<audio controls src="data:${att.mime};base64,${att.dataBase64}"></audio>` : '';
   box.style.display = 'flex';
-  box.innerHTML = `<span>${icon} ${escapeHtml(att.filename)}</span> <button id="tc-remove-attachment" type="button">&times;</button>`;
+  box.innerHTML = `
+    <span>${icon} ${escapeHtml(att.filename)}</span>
+    ${audioPreview}
+    <button id="tc-remove-attachment" type="button" title="Excluir">🗑️ Excluir</button>
+  `;
   document.getElementById('tc-remove-attachment').addEventListener('click', () => {
     state.teamChatPendingAttachment = null;
     renderTeamChatAttachmentPreview();
   });
 }
 
-async function toggleTeamChatRecording() {
+async function startTeamChatRecording() {
   const btn = document.getElementById('tc-btn-record');
-  if (state.teamChatRecorder && state.teamChatRecorder.state === 'recording') {
-    state.teamChatRecorder.stop();
-    return;
-  }
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     const recorder = new MediaRecorder(stream);
@@ -2938,6 +2982,12 @@ async function toggleTeamChatRecording() {
   }
 }
 
+function stopTeamChatRecording() {
+  if (state.teamChatRecorder && state.teamChatRecorder.state === 'recording') {
+    state.teamChatRecorder.stop();
+  }
+}
+
 async function sendTeamChatMessage() {
   const input = document.getElementById('team-chat-input');
   const text = input.value.trim();
@@ -2949,7 +2999,7 @@ async function sendTeamChatMessage() {
     return;
   }
   try {
-    await Api.sendTeamChat({ text, attendantId: state.attendantId, attachment });
+    await Api.sendTeamChat({ text, attendantId: state.attendantId, attachment, recipientId: state.teamChatTarget });
     input.value = '';
     state.teamChatPendingAttachment = null;
     renderTeamChatAttachmentPreview();
@@ -2971,27 +3021,86 @@ function stopTeamChatPolling() {
   }
 }
 
+function isTeamChatMsgVisibleInThread(m) {
+  if (state.teamChatTarget) {
+    return (
+      (m.senderId === state.attendantId && m.recipientId === state.teamChatTarget) ||
+      (m.senderId === state.teamChatTarget && m.recipientId === state.attendantId)
+    );
+  }
+  return !m.recipientId;
+}
+
 async function pollTeamChatBadge() {
   try {
-    const messages = await Api.teamChat();
+    const messages = await Api.teamChat(state.attendantId);
     state.teamChatMessages = messages;
     const isViewing = document.getElementById('view-chatequipe').classList.contains('active');
     const badge = document.getElementById('sidebar-teamchat-badge');
+    const unseen = messages.filter((m) => m.senderId !== state.attendantId && !(m.readBy || []).includes(state.attendantId)).length;
     if (isViewing) {
-      state.teamChatSeenCount = messages.length;
       badge.style.display = 'none';
       return;
     }
-    const unseen = messages.length - state.teamChatSeenCount;
     if (unseen > 0) {
       badge.textContent = String(unseen);
       badge.style.display = '';
     } else {
       badge.style.display = 'none';
     }
+    renderTeamChatContacts();
   } catch (err) {
     // silencioso — próxima verificação tenta de novo
   }
+}
+
+function renderTeamChatContacts() {
+  const container = document.getElementById('team-chat-contacts');
+  if (!container) return;
+  const others = state.users.filter((u) => u.id !== state.attendantId);
+  const unreadFor = (target) =>
+    state.teamChatMessages.filter(
+      (m) => isTeamChatMsgTargeted(m, target) && m.senderId !== state.attendantId && !(m.readBy || []).includes(state.attendantId)
+    ).length;
+
+  function isTeamChatMsgTargeted(m, target) {
+    if (target === null) return !m.recipientId;
+    return (m.senderId === state.attendantId && m.recipientId === target) || (m.senderId === target && m.recipientId === state.attendantId);
+  }
+
+  const geralUnread = unreadFor(null);
+  let html = `
+    <div class="comms-thread-item ${state.teamChatTarget === null ? 'active' : ''}" data-tc-target="">
+      <div>
+        <div class="ct-name">🌐 Geral ${geralUnread ? `<span class="notif-badge" style="display:inline-block;">${geralUnread}</span>` : ''}</div>
+        <div class="ct-preview">Conversa com todo o time</div>
+      </div>
+    </div>
+  `;
+  html += others
+    .map((u) => {
+      const unread = unreadFor(u.id);
+      return `
+      <div class="comms-thread-item ${state.teamChatTarget === u.id ? 'active' : ''}" data-tc-target="${u.id}">
+        <div>
+          <div class="ct-name">🔒 ${escapeHtml(u.name)} ${unread ? `<span class="notif-badge" style="display:inline-block;">${unread}</span>` : ''}</div>
+          <div class="ct-preview">Conversa privada</div>
+        </div>
+      </div>
+    `;
+    })
+    .join('');
+  container.innerHTML = html;
+
+  container.querySelectorAll('[data-tc-target]').forEach((el) => {
+    el.addEventListener('click', () => {
+      state.teamChatTarget = el.dataset.tcTarget || null;
+      const targetUser = state.users.find((u) => u.id === state.teamChatTarget);
+      document.getElementById('team-chat-target-name').textContent = targetUser ? `🔒 ${targetUser.name}` : '🌐 Geral';
+      renderTeamChatContacts();
+      renderTeamChat();
+    });
+  });
 }
 
 function renderTeamChatBubble(m) {
@@ -3007,12 +3116,29 @@ function renderTeamChatBubble(m) {
       attachmentHtml = `<div class="tc-file-bubble"><a href="${src}" download="${escapeHtml(m.attachment.filename)}">📎 ${escapeHtml(m.attachment.filename)}</a></div>`;
     }
   }
+
+  let seenHtml = '';
+  if (isOut) {
+    const readBy = m.readBy || [];
+    if (m.recipientId) {
+      seenHtml = readBy.includes(m.recipientId)
+        ? '<div class="tc-seen-flash">👁️ Visualizado</div>'
+        : '<div class="tc-seen-flash pending">Enviado</div>';
+    } else {
+      const names = readBy.map((id) => userName(id)).filter(Boolean);
+      seenHtml = names.length
+        ? `<div class="tc-seen-flash">👁️ Visualizado por ${escapeHtml(names.join(', '))}</div>`
+        : '<div class="tc-seen-flash pending">Enviado</div>';
+    }
+  }
+
   return `
-    <div class="chat-bubble-row ${isOut ? 'out' : 'in'}">
+    <div class="chat-bubble-row ${isOut ? 'out' : 'in'}" data-tc-msg-id="${m.id}">
       <div class="tc-sender">${escapeHtml(m.senderName)}</div>
       ${m.text ? `<div class="chat-bubble">${escapeHtml(m.text)}</div>` : ''}
       ${attachmentHtml}
       <div class="chat-meta">${fmtDateTime(m.timestamp)}</div>
+      ${seenHtml}
     </div>
   `;
 }
@@ -3020,16 +3146,28 @@ function renderTeamChatBubble(m) {
 async function renderTeamChat() {
   const thread = document.getElementById('team-chat-thread');
   try {
-    const messages = await Api.teamChat();
+    const messages = await Api.teamChat(state.attendantId);
     state.teamChatMessages = messages;
-    state.teamChatSeenCount = messages.length;
+    renderTeamChatContacts();
     document.getElementById('sidebar-teamchat-badge').style.display = 'none';
-    if (messages.length === 0) {
-      thread.innerHTML = '<div class="empty-state">Nenhuma mensagem ainda. Comece a conversa com a equipe!</div>';
+
+    const visible = messages.filter(isTeamChatMsgVisibleInThread);
+
+    const unseenIncoming = visible.filter((m) => m.senderId !== state.attendantId && !(m.readBy || []).includes(state.attendantId));
+    if (unseenIncoming.length && state.attendantId) {
+      await Promise.all(unseenIncoming.map((m) => Api.markTeamChatRead(m.id, state.attendantId).catch(() => {})));
+      unseenIncoming.forEach((m) => {
+        if (!m.readBy) m.readBy = [];
+        m.readBy.push(state.attendantId);
+      });
+    }
+
+    if (visible.length === 0) {
+      thread.innerHTML = '<div class="empty-state">Nenhuma mensagem ainda. Comece a conversa!</div>';
       return;
     }
     const wasAtBottom = thread.scrollTop + thread.clientHeight >= thread.scrollHeight - 40;
-    thread.innerHTML = messages.map(renderTeamChatBubble).join('');
+    thread.innerHTML = visible.map(renderTeamChatBubble).join('');
     if (wasAtBottom || !thread.dataset.rendered) {
       thread.scrollTop = thread.scrollHeight;
     }

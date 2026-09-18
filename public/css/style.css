@@ -1381,16 +1381,19 @@ table.data-table tr.clickable:hover {
 }
 
 /* ---------- Chat da Equipe (interno) ---------- */
-.team-chat-panel {
-  background: #fff;
-  border: 1px solid var(--vg-border);
-  border-radius: 10px;
-  padding: 16px;
-  max-width: 720px;
+.comms-chat-col .chat-thread {
+  max-height: none;
+  flex: 1;
 }
 
-.team-chat-panel .chat-thread {
-  max-height: 480px;
+.tc-seen-flash {
+  font-size: 10.5px;
+  color: #2f9e63;
+  margin-top: 2px;
+}
+
+.tc-seen-flash.pending {
+  color: #8a94a6;
 }
 
 .chat-bubble-row .tc-sender {
@@ -1446,12 +1449,18 @@ table.data-table tr.clickable:hover {
 .tc-attach-preview {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   padding: 8px 10px;
   background: var(--vg-bg);
   border-radius: 8px;
   margin-bottom: 10px;
   font-size: 12.5px;
+}
+
+.tc-attach-preview audio {
+  max-width: 220px;
+  height: 32px;
 }
 
 .tc-attach-preview button {
