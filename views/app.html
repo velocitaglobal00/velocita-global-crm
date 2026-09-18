@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Velocita Global | CRM</title>
+<link rel="icon" href="/img/logo.svg" />
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Top orange bar -->
+    <header class="topbar">
+      <div class="topbar-brand">
+        <img src="/img/logo.svg" alt="Velocita Global" />
+        <span id="brand-title">Velocita Global</span>
+      </div>
+      <div class="topbar-user">
+        <span>Olá, <strong id="user-name">Admin1</strong></span>
+        <button class="logout-link" id="logout-btn">Sair</button>
+      </div>
+    </header>
+
+    <!-- Toolbar: hamburger, search, nav tabs -->
+    <div class="toolbar">
+      <button class="hamburger" id="sidebar-toggle" title="Mostrar/ocultar menu">
+        <span></span><span></span><span></span>
+      </button>
+      <div class="search-box">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        <input type="text" id="global-search" placeholder="Buscar negócios, contatos, empresas..." />
+      </div>
+      <div class="nav-tabs">
+        <button class="nav-tab active" data-view="dashboard">📊 Dashboard</button>
+        <button class="nav-tab" data-view="pipeline">📋 Pipeline</button>
+        <button class="nav-tab" data-view="contacts">📇 Contatos</button>
+        <button class="nav-tab" data-view="settings">⚙️ Configurações</button>
+      </div>
+    </div>
+
+    <div class="body-wrap">
+      <!-- Sidebar -->
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-link active" data-view="dashboard">📊 Dashboard</div>
+        <div class="sidebar-link" data-view="pipeline">📋 Pipeline</div>
+        <div class="sidebar-link" data-view="contacts">📇 Contatos</div>
+        <div class="sidebar-link" data-view="settings">⚙️ Configurações</div>
+      </aside>
+
+      <!-- Main content -->
+      <main class="main-content">
+
+        <!-- ===== DASHBOARD ===== -->
+        <section class="view active" id="view-dashboard">
+          <div class="stat-grid">
+            <div class="stat-card">
+              <div class="label">Negócios em aberto</div>
+              <div class="value" id="stat-open-count">0</div>
+            </div>
+            <div class="stat-card">
+              <div class="label">Valor em aberto</div>
+              <div class="value orange" id="stat-open-value">R$ 0</div>
+            </div>
+            <div class="stat-card">
+              <div class="label">Ganhos no período</div>
+              <div class="value green" id="stat-won-value">R$ 0</div>
+            </div>
+            <div class="stat-card">
+              <div class="label">Taxa de conversão</div>
+              <div class="value" id="stat-conversion">0%</div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h3>Meta do mês</h3>
+            <div class="goal-track">
+              <div class="goal-fill" id="goal-fill" style="width:0%"></div>
+              <div class="goal-text" id="goal-text">R$ 0 de R$ 0</div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h3>Funil de conversão por estágio</h3>
+            <div id="funnel-container"></div>
+          </div>
+        </section>
+
+        <!-- ===== PIPELINE ===== -->
+        <section class="view" id="view-pipeline">
+          <div class="pipeline-header">
+            <h2>Pipeline de Vendas</h2>
+            <button class="btn-primary" id="btn-add-deal">+ Adicionar Negócio</button>
+          </div>
+          <div class="kanban-board" id="kanban-board"></div>
+        </section>
+
+        <!-- ===== CONTACTS ===== -->
+        <section class="view" id="view-contacts">
+          <div class="pipeline-header">
+            <h2>Contatos</h2>
+            <button class="btn-primary" id="btn-add-contact">+ Adicionar</button>
+          </div>
+          <div class="table-toolbar">
+            <input type="text" class="filter-input" id="contacts-filter" placeholder="Buscar por nome, e-mail ou empresa..." />
+            <div class="tab-pills">
+              <button class="tab-pill active" data-subview="people">Pessoas</button>
+              <button class="tab-pill" data-subview="orgs">Empresas</button>
+            </div>
+          </div>
+
+          <div id="people-table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Nome</th>
+                  <th>E-mail</th>
+                  <th>Telefone</th>
+                  <th>Empresa</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="people-tbody"></tbody>
+            </table>
+          </div>
+
+          <div id="orgs-table-wrap" style="display:none;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Empresa</th>
+                  <th>Endereço</th>
+                  <th>Contatos vinculados</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="orgs-tbody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ===== SETTINGS ===== -->
+        <section class="view" id="view-settings">
+          <h2 style="color:var(--vg-navy); margin-top:0;">Configurações</h2>
+          <div class="settings-tabs">
+            <button class="settings-tab active" data-stab="stages">Etapas do Funil</button>
+            <button class="settings-tab" data-stab="users">Usuários</button>
+            <button class="settings-tab" data-stab="fields">Campos Personalizados</button>
+          </div>
+
+          <div id="stab-stages" class="settings-panel">
+            <div class="panel">
+              <h3>Estágios do Pipeline</h3>
+              <div id="stages-list"></div>
+              <div class="inline-add">
+                <input type="text" id="new-stage-name" placeholder="Nome da nova etapa" />
+                <button class="btn-primary" id="btn-add-stage">Adicionar</button>
+              </div>
+            </div>
+          </div>
+
+          <div id="stab-users" class="settings-panel" style="display:none;">
+            <div class="panel">
+              <h3>Usuários</h3>
+              <div id="users-list"></div>
+              <div class="inline-add">
+                <input type="text" id="new-user-name" placeholder="Nome do novo usuário" />
+                <button class="btn-primary" id="btn-add-user">Adicionar</button>
+              </div>
+            </div>
+          </div>
+
+          <div id="stab-fields" class="settings-panel" style="display:none;">
+            <div class="panel">
+              <h3>Campos Personalizados de Negócio</h3>
+              <div id="fields-list"></div>
+              <div class="inline-add">
+                <input type="text" id="new-field-name" placeholder="Nome do campo personalizado" />
+                <button class="btn-primary" id="btn-add-field">Adicionar</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- ===== MODAL: Add/Edit Deal ===== -->
+  <div class="modal-overlay" id="modal-deal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="deal-modal-title">Adicionar Negócio</h3>
+        <button class="modal-close" data-close="modal-deal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="deal-id" />
+        <div class="form-group">
+          <label>Título do Negócio</label>
+          <input type="text" id="deal-title" placeholder="Ex: Contrato de fornecimento" />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Valor</label>
+            <input type="number" id="deal-value" placeholder="0,00" min="0" step="0.01" />
+          </div>
+          <div class="form-group">
+            <label>Moeda</label>
+            <select id="deal-currency">
+              <option value="BRL">BRL (R$)</option>
+              <option value="USD">USD ($)</option>
+              <option value="EUR">EUR (€)</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Organização / Pessoa</label>
+          <select id="deal-person"></select>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Estágio inicial</label>
+            <select id="deal-stage"></select>
+          </div>
+          <div class="form-group">
+            <label>Data de fechamento esperada</label>
+            <input type="date" id="deal-close-date" />
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" data-close="modal-deal">Cancelar</button>
+        <button class="btn-primary" id="btn-save-deal">Salvar Negócio</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== MODAL: Deal Detail ===== -->
+  <div class="modal-overlay" id="modal-deal-detail">
+    <div class="modal wide">
+      <div class="modal-header">
+        <h3 id="dd-title">Negócio</h3>
+        <button class="modal-close" data-close="modal-deal-detail">&times;</button>
+      </div>
+      <div class="deal-detail-grid">
+        <div class="dd-col left">
+          <div class="dd-value" id="dd-value">R$ 0</div>
+          <div class="dd-label">Valor do negócio</div>
+          <div id="dd-status-badge"></div>
+          <br/>
+          <div class="dd-actions">
+            <button class="btn-win" id="btn-mark-won">✓ Ganho</button>
+            <button class="btn-lose" id="btn-mark-lost">✕ Perdido</button>
+          </div>
+          <div class="dd-meta-item">
+            <div class="k">Estágio</div>
+            <div class="v" id="dd-stage-name">-</div>
+          </div>
+          <div class="dd-meta-item">
+            <div class="k">Data de Fechamento</div>
+            <div class="v" id="dd-close-date">-</div>
+          </div>
+          <div class="dd-meta-item">
+            <div class="k">Dono do Negócio</div>
+            <div class="v" id="dd-owner">-</div>
+          </div>
+          <button class="btn-secondary" id="btn-delete-deal" style="width:100%; margin-top:10px;">Excluir negócio</button>
+        </div>
+
+        <div class="dd-col center">
+          <div class="activity-tabs">
+            <button class="activity-tab active" data-atype="all">Tudo</button>
+            <button class="activity-tab" data-atype="note">Notas</button>
+            <button class="activity-tab" data-atype="email">E-mails</button>
+            <button class="activity-tab" data-atype="call">Chamadas</button>
+            <button class="activity-tab" data-atype="meeting">Reuniões</button>
+            <button class="activity-tab" data-atype="task">Tarefas</button>
+          </div>
+          <div class="activity-add">
+            <select id="new-activity-type" style="width:110px; padding:9px 8px; border-radius:7px; border:1.5px solid var(--vg-border);">
+              <option value="note">Nota</option>
+              <option value="email">E-mail</option>
+              <option value="call">Chamada</option>
+              <option value="meeting">Reunião</option>
+              <option value="task">Tarefa</option>
+            </select>
+            <textarea id="new-activity-text" placeholder="Adicionar uma atividade..."></textarea>
+            <button class="btn-primary" id="btn-add-activity">Adicionar</button>
+          </div>
+          <div id="activity-feed"></div>
+        </div>
+
+        <div class="dd-col right">
+          <div class="dd-meta-item">
+            <div class="k">Contato</div>
+            <div class="v" id="dd-contact-name">-</div>
+          </div>
+          <div class="dd-meta-item">
+            <div class="k">E-mail</div>
+            <div class="v" id="dd-contact-email">-</div>
+          </div>
+          <div class="dd-meta-item">
+            <div class="k">Telefone</div>
+            <div class="v" id="dd-contact-phone">-</div>
+          </div>
+          <div class="dd-meta-item">
+            <div class="k">Empresa</div>
+            <div class="v" id="dd-org-name">-</div>
+          </div>
+          <div class="dd-meta-item">
+            <div class="k">Endereço</div>
+            <div class="v" id="dd-org-address">-</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== MODAL: Add/Edit Contact ===== -->
+  <div class="modal-overlay" id="modal-contact">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="contact-modal-title">Adicionar Contato</h3>
+        <button class="modal-close" data-close="modal-contact">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="contact-id" />
+        <div class="form-group">
+          <label>Nome</label>
+          <input type="text" id="contact-name" />
+        </div>
+        <div class="form-group">
+          <label>E-mail</label>
+          <input type="email" id="contact-email" />
+        </div>
+        <div class="form-group">
+          <label>Telefone</label>
+          <input type="text" id="contact-phone" />
+        </div>
+        <div class="form-group">
+          <label>Empresa</label>
+          <select id="contact-org"></select>
+        </div>
+        <div class="form-group">
+          <label>Notas</label>
+          <textarea id="contact-notes" rows="3"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" data-close="modal-contact">Cancelar</button>
+        <button class="btn-primary" id="btn-save-contact">Salvar Contato</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== MODAL: Add/Edit Organization ===== -->
+  <div class="modal-overlay" id="modal-org">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="org-modal-title">Adicionar Empresa</h3>
+        <button class="modal-close" data-close="modal-org">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="org-id" />
+        <div class="form-group">
+          <label>Nome da Empresa</label>
+          <input type="text" id="org-name" />
+        </div>
+        <div class="form-group">
+          <label>Endereço</label>
+          <input type="text" id="org-address" />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" data-close="modal-org">Cancelar</button>
+        <button class="btn-primary" id="btn-save-org">Salvar Empresa</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="/js/app.js"></script>
+</body>
+</html>

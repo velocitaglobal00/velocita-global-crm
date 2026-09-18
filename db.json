@@ -1,0 +1,253 @@
+{
+  "stages": [
+    {
+      "id": "st-1",
+      "name": "Lead Entrante",
+      "order": 1
+    },
+    {
+      "id": "st-2",
+      "name": "Contato Realizado",
+      "order": 2
+    },
+    {
+      "id": "st-3",
+      "name": "Proposta Enviada",
+      "order": 3
+    },
+    {
+      "id": "st-4",
+      "name": "Em Negociação",
+      "order": 4
+    },
+    {
+      "id": "st-5",
+      "name": "Fechado/Ganho",
+      "order": 5
+    },
+    {
+      "id": "st-6",
+      "name": "Perdido",
+      "order": 6
+    }
+  ],
+  "users": [
+    {
+      "id": "u-1",
+      "name": "Admin1"
+    }
+  ],
+  "organizations": [
+    {
+      "id": "org-1",
+      "name": "Norte Logística Ltda",
+      "address": "São Paulo, SP"
+    },
+    {
+      "id": "org-2",
+      "name": "Grupo Atlas Indústria",
+      "address": "Curitiba, PR"
+    },
+    {
+      "id": "org-3",
+      "name": "Vetta Alimentos S.A.",
+      "address": "Belo Horizonte, MG"
+    },
+    {
+      "id": "org-4",
+      "name": "Prisma Tecnologia",
+      "address": "Porto Alegre, RS"
+    }
+  ],
+  "contacts": [
+    {
+      "id": "c-1",
+      "name": "Marcos Oliveira",
+      "email": "marcos.oliveira@nortelog.com.br",
+      "phone": "(11) 98765-4321",
+      "orgId": "org-1",
+      "notes": "Diretor comercial, prefere contato por e-mail."
+    },
+    {
+      "id": "c-2",
+      "name": "Fernanda Souza",
+      "email": "fernanda.souza@grupoatlas.com",
+      "phone": "(41) 99887-1122",
+      "orgId": "org-2",
+      "notes": ""
+    },
+    {
+      "id": "c-3",
+      "name": "Ricardo Lima",
+      "email": "ricardo.lima@vetta.com.br",
+      "phone": "(31) 98212-3344",
+      "orgId": "org-3",
+      "notes": "Cliente antigo, renovação anual em março."
+    },
+    {
+      "id": "c-4",
+      "name": "Juliana Prado",
+      "email": "juliana.prado@prismatech.com",
+      "phone": "(51) 99001-2233",
+      "orgId": "org-4",
+      "notes": ""
+    },
+    {
+      "id": "c-5",
+      "name": "Eduardo Martins",
+      "email": "eduardo.martins@nortelog.com.br",
+      "phone": "(11) 97654-3210",
+      "orgId": "org-1",
+      "notes": ""
+    }
+  ],
+  "deals": [
+    {
+      "id": "d-1",
+      "title": "Contrato de frete anual",
+      "value": 85000,
+      "currency": "BRL",
+      "personId": "c-1",
+      "orgId": "org-1",
+      "stage": "st-1",
+      "ownerId": "u-1",
+      "closeDate": "2026-10-15",
+      "status": "open",
+      "createdAt": "2026-09-01T10:00:00.000Z"
+    },
+    {
+      "id": "d-2",
+      "title": "Licenciamento software ERP",
+      "value": 42000,
+      "currency": "BRL",
+      "personId": "c-4",
+      "orgId": "org-4",
+      "stage": "st-1",
+      "ownerId": "u-1",
+      "closeDate": "2026-10-20",
+      "status": "open",
+      "createdAt": "2026-09-02T10:00:00.000Z"
+    },
+    {
+      "id": "d-3",
+      "title": "Fornecimento de embalagens",
+      "value": 27500,
+      "currency": "BRL",
+      "personId": "c-3",
+      "orgId": "org-3",
+      "stage": "st-2",
+      "ownerId": "u-1",
+      "closeDate": "2026-10-05",
+      "status": "open",
+      "createdAt": "2026-09-03T10:00:00.000Z"
+    },
+    {
+      "id": "d-4",
+      "title": "Expansão de linha industrial",
+      "value": 156000,
+      "currency": "BRL",
+      "personId": "c-2",
+      "orgId": "org-2",
+      "stage": "st-3",
+      "ownerId": "u-1",
+      "closeDate": "2026-11-01",
+      "status": "open",
+      "createdAt": "2026-09-04T10:00:00.000Z"
+    },
+    {
+      "id": "d-5",
+      "title": "Consultoria de processos",
+      "value": 18000,
+      "currency": "BRL",
+      "personId": "c-5",
+      "orgId": "org-1",
+      "stage": "st-3",
+      "ownerId": "u-1",
+      "closeDate": "2026-10-25",
+      "status": "open",
+      "createdAt": "2026-09-05T10:00:00.000Z"
+    },
+    {
+      "id": "d-6",
+      "title": "Renovação de contrato de manutenção",
+      "value": 63000,
+      "currency": "BRL",
+      "personId": "c-3",
+      "orgId": "org-3",
+      "stage": "st-4",
+      "ownerId": "u-1",
+      "closeDate": "2026-10-10",
+      "status": "open",
+      "createdAt": "2026-09-06T10:00:00.000Z"
+    },
+    {
+      "id": "d-7",
+      "title": "Projeto de automação",
+      "value": 98000,
+      "currency": "BRL",
+      "personId": "c-4",
+      "orgId": "org-4",
+      "stage": "st-5",
+      "ownerId": "u-1",
+      "closeDate": "2026-09-10",
+      "status": "won",
+      "createdAt": "2026-08-20T10:00:00.000Z"
+    },
+    {
+      "id": "d-8",
+      "title": "Ampliação de frota",
+      "value": 31000,
+      "currency": "BRL",
+      "personId": "c-1",
+      "orgId": "org-1",
+      "stage": "st-6",
+      "ownerId": "u-1",
+      "closeDate": "2026-09-01",
+      "status": "lost",
+      "createdAt": "2026-08-15T10:00:00.000Z"
+    }
+  ],
+  "activities": [
+    {
+      "id": "a-1",
+      "dealId": "d-1",
+      "type": "note",
+      "text": "Cliente pediu revisão da proposta de valores.",
+      "date": "2026-09-10T14:00:00.000Z",
+      "done": true
+    },
+    {
+      "id": "a-2",
+      "dealId": "d-1",
+      "type": "task",
+      "text": "Enviar contrato revisado para aprovação",
+      "date": "2026-09-22T12:00:00.000Z",
+      "done": false
+    },
+    {
+      "id": "a-3",
+      "dealId": "d-4",
+      "type": "meeting",
+      "text": "Reunião de apresentação técnica na fábrica",
+      "date": "2026-09-25T15:00:00.000Z",
+      "done": false
+    },
+    {
+      "id": "a-4",
+      "dealId": "d-6",
+      "type": "call",
+      "text": "Ligação de alinhamento sobre renovação",
+      "date": "2026-09-12T09:30:00.000Z",
+      "done": true
+    }
+  ],
+  "settings": {
+    "customFields": [
+      {
+        "id": "cf-1",
+        "name": "Origem do Lead"
+      }
+    ],
+    "monthlyGoal": 250000
+  }
+}

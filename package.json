@@ -1,0 +1,14 @@
+{
+  "name": "velocita-global-crm",
+  "version": "1.0.0",
+  "description": "CRM comercial Velocita Global, inspirado no Pipedrive",
+  "private": true,
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "express-session": "^1.18.0"
+  }
+}
