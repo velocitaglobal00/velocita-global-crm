@@ -312,6 +312,7 @@ body {
   cursor: pointer;
   margin-bottom: 2px;
   white-space: nowrap;
+  text-decoration: none;
   transition: background 0.15s, color 0.15s;
 }
 

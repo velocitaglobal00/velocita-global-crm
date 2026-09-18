@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Roteiro do Dia — Administração</title>
+<link rel="icon" href="assets/logo-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#0F2242; --navy-2:#16305A; --bg:#081428;
+    --border:#28416E; --text:#F3F6FC; --muted:#93A2C4;
+    --orange:#FC6D17; --orange-d:#E15A0C;
+    --ok:#35D399; --warn:#FFB648; --danger:#FF5470; --radius:14px;
+    --font-display:'Poppins',system-ui,sans-serif;
+    --font-body:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--font-body); background:var(--bg); color:var(--text); min-height:100vh}
+  header{
+    display:flex; align-items:center; justify-content:space-between; padding:14px 22px; border-bottom:1px solid var(--border);
+    background:rgba(15,34,66,.5); backdrop-filter:blur(6px); position:sticky; top:0; z-index:10;
+  }
+  .logo{display:flex; align-items:center; gap:10px; font-family:var(--font-display); font-weight:700; font-size:15px}
+  .logo .mark{background:#fff; border-radius:9px; padding:5px 8px; flex:none; display:flex; align-items:center; justify-content:center; line-height:0}
+  .logo .mark img{height:20px; width:auto; display:block}
+  .badge-admin{font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--orange); border:1px solid var(--orange); padding:2px 8px; border-radius:999px}
+  .userbox{display:flex; align-items:center; gap:12px; font-size:13.5px; color:var(--muted)}
+  .out{padding:7px 13px; border-radius:8px; border:1px solid var(--border); background:transparent; color:var(--muted); font:inherit; font-size:13px; cursor:pointer; transition:color .15s ease, border-color .15s ease}
+  .out:hover{color:var(--text); border-color:var(--muted)}
+
+  main{max-width:1180px; margin:0 auto; padding:24px 18px 60px}
+  .cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:14px; margin-bottom:22px}
+  .kpi{background:var(--navy); border:1px solid var(--border); border-radius:var(--radius); padding:16px; transition:transform .12s ease, border-color .12s ease}
+  .kpi:hover{transform:translateY(-2px); border-color:var(--muted)}
+  .kpi .n{font-family:var(--font-display); font-size:26px; font-weight:800; font-variant-numeric:tabular-nums}
+  .kpi .l{font-size:12px; color:var(--muted); margin-top:2px}
+  .kpi.online .n{color:var(--ok)} .kpi.susp .n{color:var(--warn)} .kpi.ban .n{color:var(--danger)} .kpi.gen .n{color:var(--orange)}
+
+  .panel{background:var(--navy); border:1px solid var(--border); border-radius:var(--radius); padding:20px; margin-bottom:22px; position:relative; overflow:hidden}
+  .panel::before{content:""; position:absolute; top:0; left:0; right:0; height:3px; background:linear-gradient(90deg,var(--navy-2),var(--orange),var(--navy-2))}
+  .panel h2{font-family:var(--font-display); font-size:15px; margin-bottom:14px; display:flex; align-items:center; justify-content:space-between}
+  .panel h2 .sub{font-size:12px; color:var(--muted); font-weight:400; font-family:var(--font-body)}
+
+  .chart{display:flex; align-items:flex-end; gap:6px; height:110px}
+  .chart .bar{flex:1; background:linear-gradient(180deg,var(--orange),rgba(252,109,23,.2)); border-radius:4px 4px 0 0; min-height:2px; position:relative}
+  .chart .bar span{position:absolute; top:-18px; left:50%; transform:translateX(-50%); font-size:10px; color:var(--muted)}
+  .chart-labels{display:flex; gap:6px; margin-top:6px}
+  .chart-labels div{flex:1; text-align:center; font-size:9.5px; color:var(--muted)}
+
+  .tabs{display:inline-flex; background:var(--navy-2); border-radius:9px; padding:3px; margin-bottom:14px}
+  .tabs button{padding:8px 16px; border:0; border-radius:7px; background:transparent; color:var(--muted); font:inherit; font-size:13px; font-weight:600; cursor:pointer; transition:background .15s ease, color .15s ease}
+  .tabs button.active{background:var(--orange); color:#fff}
+  .tabs button.active.wl{background:var(--ok); color:#06283D}
+
+  table{width:100%; border-collapse:collapse; font-size:13.5px}
+  th{font-size:11px; text-transform:uppercase; letter-spacing:.8px; color:var(--muted); text-align:left; padding:8px 10px; border-bottom:1px solid var(--border)}
+  td{padding:11px 10px; border-bottom:1px solid var(--border); vertical-align:middle}
+  tr:last-child td{border-bottom:0}
+  tr:hover td{background:rgba(255,255,255,.02)}
+  .u{font-weight:700}
+  .u small{display:block; font-weight:400; color:var(--muted); font-size:11.5px}
+  .dot{display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; background:#4C5C82}
+  .dot.on{background:var(--ok); box-shadow:0 0 6px var(--ok)}
+  .st{font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px}
+  .st.ativo{background:rgba(53,211,153,.13); color:var(--ok)}
+  .st.suspenso{background:rgba(255,182,72,.13); color:var(--warn)}
+  .st.banido{background:rgba(255,84,112,.13); color:var(--danger)}
+  .role-badge{font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px; background:rgba(147,162,196,.12); color:var(--muted); border:1px solid var(--border)}
+  .role-badge.mod{background:rgba(252,109,23,.13); color:var(--orange); border-color:transparent}
+  .num{font-variant-numeric:tabular-nums; text-align:right}
+  .spark{display:flex; align-items:flex-end; gap:1.5px; height:24px; width:70px}
+  .spark i{flex:1; background:var(--orange); opacity:.85; border-radius:1px; min-height:1px}
+  .actions{display:flex; gap:6px; justify-content:flex-end}
+  .act{border:1px solid var(--border); background:transparent; font:inherit; font-size:11.5px; font-weight:600; padding:6px 10px; border-radius:7px; cursor:pointer; color:var(--muted); transition:color .15s ease, border-color .15s ease}
+  .act.susp:hover{border-color:var(--warn); color:var(--warn)}
+  .act.ban:hover{border-color:var(--danger); color:var(--danger)}
+  .act.ok:hover{border-color:var(--ok); color:var(--ok)}
+  .emptyrow{color:var(--muted); text-align:center; padding:24px}
+  .search-row{display:flex; gap:8px; margin-bottom:14px}
+  .search-row input{flex:1; padding:10px 12px; border-radius:10px; border:1px solid var(--border); background:var(--bg); color:var(--text); font:inherit; font-size:13.5px; transition:box-shadow .15s ease, border-color .15s ease}
+  .search-row input:focus{outline:none; border-color:var(--orange); box-shadow:0 0 0 3px rgba(252,109,23,.2)}
+  .clear-btn{
+    flex:none; padding:0 16px; border-radius:10px; border:1px solid var(--border);
+    background:transparent; color:var(--muted); font:inherit; font-size:13px; font-weight:600; cursor:pointer;
+    transition:color .15s ease, border-color .15s ease;
+  }
+  .clear-btn:hover{color:var(--text); border-color:var(--muted)}
+  .clear-btn:disabled{opacity:.4; cursor:default}
+  .feed{font-size:13px; line-height:1.8; color:var(--muted); max-height:220px; overflow:auto}
+  .feed b{color:var(--text)}
+  .feed .p{color:var(--orange)}
+  @media(max-width:760px){ .hide-sm{display:none} }
+
+  .h2-actions{display:flex; align-items:center; gap:10px}
+  .btn-sm{
+    padding:8px 14px; border-radius:8px; border:0; background:var(--orange); color:#fff;
+    font:inherit; font-size:13px; font-weight:700; cursor:pointer; transition:background .15s ease, transform .1s ease;
+    white-space:nowrap;
+  }
+  .btn-sm:hover{background:var(--orange-d); transform:translateY(-1px)}
+  .btn-sm:disabled{opacity:.55; cursor:wait; transform:none}
+  .btn-sm.outline{background:transparent; border:1px solid var(--border); color:var(--muted)}
+  .btn-sm.outline:hover{color:var(--text); border-color:var(--muted); background:transparent}
+
+  .ai-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; margin-top:14px}
+  .ai-card{background:var(--navy-2); border:1px solid var(--border); border-radius:10px; padding:14px}
+  .ai-card .name{font-family:var(--font-display); font-weight:700; font-size:14px; display:flex; align-items:center; justify-content:space-between; margin-bottom:8px}
+  .ai-card .st-dot{width:9px; height:9px; border-radius:50%; display:inline-block}
+  .ai-card .st-dot.ok{background:var(--ok); box-shadow:0 0 6px var(--ok)}
+  .ai-card .st-dot.fail{background:var(--danger); box-shadow:0 0 6px var(--danger)}
+  .ai-card .st-dot.off{background:#4C5C82}
+  .ai-card .msg{font-size:12px; color:var(--muted); line-height:1.5; word-break:break-word}
+  .ai-card .latency{font-size:11px; color:var(--muted); margin-top:6px}
+
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(4,10,22,.65); backdrop-filter:blur(3px);
+    display:flex; align-items:center; justify-content:center; z-index:100; padding:20px;
+  }
+  .modal{
+    background:var(--navy); border:1px solid var(--border); border-radius:var(--radius);
+    padding:24px; width:100%; max-width:400px; position:relative; overflow:hidden;
+  }
+  .modal::before{content:""; position:absolute; top:0; left:0; right:0; height:3px; background:linear-gradient(90deg,var(--navy-2),var(--orange),var(--navy-2))}
+  .modal h3{font-family:var(--font-display); font-size:16px; margin-bottom:16px}
+  .modal label{display:block; font-family:var(--font-display); font-size:12px; font-weight:600; color:var(--muted); margin:12px 0 6px}
+  .modal input{
+    width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--border);
+    background:var(--bg); color:var(--text); font:inherit; font-size:14px;
+  }
+  .modal input:focus{outline:none; border-color:var(--orange); box-shadow:0 0 0 3px rgba(252,109,23,.2)}
+  .modal .row{display:flex; gap:10px; margin-top:20px}
+  .modal .row .btn-sm{flex:1; padding:11px; font-size:14px}
+  .modal .msg{margin-top:14px; padding:10px 12px; border-radius:8px; font-size:13px; display:none}
+  .modal .msg.err{display:block; background:rgba(255,84,112,.12); border:1px solid rgba(255,84,112,.4); color:var(--danger)}
+  .modal .msg.ok{display:block; background:rgba(53,211,153,.12); border:1px solid rgba(53,211,153,.4); color:var(--ok)}
+  .hidden{display:none !important}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo"><div class="mark"><img src="assets/logo-icon.png" alt="Velocita Global"></div>Roteiro do Dia <span class="badge-admin" id="roleBadge">Admin</span></div>
+  <div class="userbox"><a class="out" href="/app" style="text-decoration:none; display:inline-block;">&larr; Voltar ao CRM</a><span id="who"></span><button class="out" onclick="logout()">Sair</button></div>
+</header>
+
+<main>
+  <div class="cards" id="kpis"></div>
+
+  <div class="panel">
+    <h2>Gerações por dia <span class="sub">últimos 14 dias · atualiza a cada 10s</span></h2>
+    <div class="chart" id="chart"></div>
+    <div class="chart-labels" id="chartLabels"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Testar IA <span class="sub">chama cada provedor configurado com uma mensagem curta</span></h2>
+    <button class="btn-sm" id="btnTestAi" onclick="testAI()">Rodar teste</button>
+    <div class="ai-grid" id="aiResults"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Afiliados <span class="h2-actions">
+      <button class="btn-sm outline" onclick="exportUsers()">⬇ Baixar planilha</button>
+      <button class="btn-sm" onclick="openAddAffiliate()">+ Adicionar afiliado</button>
+    </span></h2>
+    <div class="tabs">
+      <button id="tWl" class="active wl" onclick="setTab('wl')">Whitelist (ativos)</button>
+      <button id="tBl" onclick="setTab('bl')">Blacklist (suspensos/banidos)</button>
+    </div>
+    <div style="overflow-x:auto">
+      <table>
+        <thead><tr>
+          <th>Afiliado</th><th>Papel</th><th>Conexão</th><th>Status</th>
+          <th class="num">Hoje</th><th class="num">7 dias</th><th class="num">Total</th>
+          <th class="hide-sm">Atividade (14d)</th><th class="hide-sm">Última geração</th><th></th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Histórico de gerações <span class="sub">tempo real</span></h2>
+    <div class="search-row">
+      <input id="feedSearch" placeholder="Pesquisar por produto ou afiliado..." oninput="onFeedSearch()">
+      <button class="clear-btn" id="feedClear" onclick="clearFeedSearch()" disabled>Limpar pesquisa</button>
+    </div>
+    <div class="feed" id="feed"></div>
+  </div>
+</main>
+
+<div class="modal-overlay hidden" id="addModalOverlay">
+  <div class="modal">
+    <h3>Adicionar afiliado manualmente</h3>
+    <label for="addEmail">Email</label>
+    <input id="addEmail" type="email" placeholder="afiliado@email.com">
+    <label for="addUser">Usuário</label>
+    <input id="addUser" placeholder="3 a 24 caracteres">
+    <label for="addPass">Senha</label>
+    <input id="addPass" type="password" placeholder="mínimo 6 caracteres">
+    <div class="row">
+      <button class="btn-sm outline" onclick="closeAddAffiliate()">Cancelar</button>
+      <button class="btn-sm" id="btnAddAffiliate" onclick="submitAddAffiliate()">Criar conta</button>
+    </div>
+    <div class="msg" id="addMsg"></div>
+  </div>
+</div>
+
+<script>
+const token = localStorage.getItem('rd_token');
+const role = localStorage.getItem('rd_role');
+if(!token || (role !== 'admin' && role !== 'moderador')){ window.location.href = './'; }
+document.getElementById('who').textContent = localStorage.getItem('rd_user') || '';
+document.getElementById('roleBadge').textContent = role === 'admin' ? 'Admin' : 'Moderador';
+let isSuperAdmin = role === 'admin';
+const authHeaders = { 'Content-Type':'application/json', 'Authorization':'Bearer ' + token };
+
+let tab = 'wl';
+let lastData = null;
+
+function setTab(t){
+  tab = t;
+  document.getElementById('tWl').className = t==='wl' ? 'active wl' : '';
+  document.getElementById('tBl').className = t==='bl' ? 'active' : '';
+  if(lastData) renderRows(lastData.users);
+}
+
+async function logout(){
+  try{ await fetch('api/logout', { method:'POST', headers: authHeaders }); }catch(e){}
+  localStorage.clear(); window.location.href='./';
+}
+
+function fmtTime(ts){
+  if(!ts) return '—';
+  const d = new Date(ts);
+  const today = new Date();
+  const sameDay = d.toDateString() === today.toDateString();
+  const hm = d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  return sameDay ? `hoje ${hm}` : d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}) + ' ' + hm;
+}
+function esc(s){ const d=document.createElement('div'); d.textContent=s==null?'':String(s); return d.innerHTML; }
+
+async function load(){
+  try{
+    const r = await fetch('api/admin/overview', { headers: authHeaders });
+    if(r.status === 401 || r.status === 403){ localStorage.clear(); window.location.href='./'; return; }
+    const data = await r.json();
+    lastData = data;
+    if(data.myRole){
+      isSuperAdmin = data.myRole === 'admin';
+      document.getElementById('roleBadge').textContent = isSuperAdmin ? 'Admin' : 'Moderador';
+    }
+    renderKpis(data.summary);
+    renderChart(data.perDay);
+    renderRows(data.users);
+    loadFeed();
+  }catch(e){ /* mantém última tela em falha momentânea */ }
+}
+
+function renderKpis(s){
+  document.getElementById('kpis').innerHTML = `
+    <div class="kpi"><div class="n">${s.totalAffiliates}</div><div class="l">Afiliados</div></div>
+    <div class="kpi"><div class="n">${s.totalModerators}</div><div class="l">Moderadores</div></div>
+    <div class="kpi online"><div class="n">${s.online}</div><div class="l">Online agora</div></div>
+    <div class="kpi"><div class="n">${s.active}</div><div class="l">Ativos (whitelist)</div></div>
+    <div class="kpi susp"><div class="n">${s.suspended}</div><div class="l">Suspensos</div></div>
+    <div class="kpi ban"><div class="n">${s.banned}</div><div class="l">Banidos</div></div>
+    <div class="kpi gen"><div class="n">${s.generationsToday}</div><div class="l">Gerações hoje</div></div>
+    <div class="kpi gen"><div class="n">${s.generationsTotal}</div><div class="l">Gerações no total</div></div>`;
+}
+
+function renderChart(perDay){
+  const max = Math.max(1, ...perDay.map(d=>d.count));
+  document.getElementById('chart').innerHTML = perDay.map(d=>
+    `<div class="bar" style="height:${Math.round(d.count/max*100)}%"><span>${d.count||''}</span></div>`).join('');
+  document.getElementById('chartLabels').innerHTML = perDay.map(d=>
+    `<div>${d.day.slice(8,10)}/${d.day.slice(5,7)}</div>`).join('');
+}
+
+function renderRows(users){
+  const list = users.filter(u => tab==='wl' ? u.status==='ativo' : u.status!=='ativo');
+  const rows = document.getElementById('rows');
+  if(!list.length){
+    rows.innerHTML = `<tr><td colspan="10" class="emptyrow">${tab==='wl' ? 'Nenhum afiliado ativo ainda.' : 'Ninguém na blacklist. Bom sinal!'}</td></tr>`;
+    return;
+  }
+  rows.innerHTML = list.map(u=>{
+    const sparkMax = Math.max(1, ...u.spark);
+    const spark = u.spark.map(v=>`<i style="height:${Math.max(4, Math.round(v/sparkMax*100))}%; ${v===0?'opacity:.15':''}"></i>`).join('');
+    const isMod = u.role === 'moderador';
+
+    let statusActions = u.status==='ativo'
+      ? `<button class="act susp" onclick="setStatus('${u.id}','suspenso','${esc(u.username)}')">Suspender</button>
+         <button class="act ban" onclick="setStatus('${u.id}','banido','${esc(u.username)}')">Banir</button>`
+      : `<button class="act ok" onclick="setStatus('${u.id}','ativo','${esc(u.username)}')">Reativar</button>
+         ${u.status==='suspenso' ? `<button class="act ban" onclick="setStatus('${u.id}','banido','${esc(u.username)}')">Banir</button>`:''}`;
+    // Moderador comum não pode agir sobre outro moderador (só o servidor já bloqueia isso,
+    // mas escondemos os botões pra não sugerir uma ação que vai falhar).
+    if(!isSuperAdmin && isMod) statusActions = '<span style="color:var(--muted); font-size:12px">—</span>';
+
+    const roleActions = isSuperAdmin
+      ? (isMod
+          ? `<button class="act" onclick="changeRole('${u.id}','afiliado','${esc(u.username)}')">Rebaixar</button>`
+          : `<button class="act" onclick="changeRole('${u.id}','moderador','${esc(u.username)}')">Promover</button>`)
+      : '';
+    const removeAction = isSuperAdmin
+      ? `<button class="act ban" onclick="removeUser('${u.id}','${esc(u.username)}')">Remover</button>`
+      : '';
+
+    return `<tr>
+      <td class="u">${esc(u.username)}<small>${esc(u.email)}</small></td>
+      <td><span class="role-badge ${isMod?'mod':''}">${isMod?'Moderador':'Afiliado'}</span></td>
+      <td><span class="dot ${u.online?'on':''}"></span>${u.online?'Online':'Offline'}</td>
+      <td><span class="st ${u.status}">${u.status}</span></td>
+      <td class="num">${u.today}</td>
+      <td class="num">${u.last7}</td>
+      <td class="num"><b>${u.total}</b></td>
+      <td class="hide-sm"><div class="spark">${spark}</div></td>
+      <td class="hide-sm">${fmtTime(u.lastActivity)}${u.lastProduct?`<br><small style="color:var(--muted)">${esc(u.lastProduct.slice(0,32))}</small>`:''}</td>
+      <td><div class="actions">${statusActions}${roleActions}${removeAction}</div></td>
+    </tr>`;
+  }).join('');
+}
+
+async function setStatus(id, status, username){
+  const verbo = status==='banido' ? 'BANIR' : status==='suspenso' ? 'suspender' : 'reativar';
+  if(!confirm(`Confirma ${verbo} o afiliado "${username}"?`)) return;
+  const r = await fetch(`api/admin/users/${id}/status`, {
+    method:'POST', headers: authHeaders, body: JSON.stringify({ status })
+  });
+  if(!r.ok){ const d = await r.json(); alert(d.error || 'Erro ao alterar status.'); }
+  load();
+}
+
+async function changeRole(id, newRole, username){
+  const verbo = newRole === 'moderador' ? `promover "${username}" a moderador` : `rebaixar "${username}" de volta a afiliado`;
+  if(!confirm(`Confirma ${verbo}?`)) return;
+  const r = await fetch(`api/admin/users/${id}/role`, {
+    method:'POST', headers: authHeaders, body: JSON.stringify({ role: newRole })
+  });
+  if(!r.ok){ const d = await r.json(); alert(d.error || 'Erro ao alterar o papel do usuário.'); }
+  load();
+}
+
+async function removeUser(id, username){
+  if(!confirm(`Remover a conta de "${username}" definitivamente? Essa ação não pode ser desfeita (o histórico de gerações continua registrado).`)) return;
+  const r = await fetch(`api/admin/users/${id}`, { method:'DELETE', headers: authHeaders });
+  if(!r.ok){ const d = await r.json(); alert(d.error || 'Erro ao remover usuário.'); }
+  load();
+}
+
+async function exportUsers(){
+  try{
+    const r = await fetch('api/admin/export', { headers: authHeaders });
+    if(!r.ok){ alert('Erro ao gerar a planilha.'); return; }
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'afiliados-roteiro-do-dia.csv';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }catch(e){
+    alert('Falha de conexão ao baixar a planilha.');
+  }
+}
+
+let feedSearchTimer = null;
+function onFeedSearch(){
+  const q = document.getElementById('feedSearch').value.trim();
+  document.getElementById('feedClear').disabled = !q;
+  clearTimeout(feedSearchTimer);
+  feedSearchTimer = setTimeout(()=>loadFeed(), 300);
+}
+
+function clearFeedSearch(){
+  document.getElementById('feedSearch').value = '';
+  document.getElementById('feedClear').disabled = true;
+  loadFeed();
+}
+
+async function loadFeed(){
+  const q = document.getElementById('feedSearch').value.trim();
+  try{
+    const url = '/api/admin/logs?limit=30' + (q ? `&q=${encodeURIComponent(q)}` : '');
+    const r = await fetch(url, { headers: authHeaders });
+    const data = await r.json();
+    document.getElementById('feed').innerHTML = (data.logs||[]).map(l=>
+      `<div>${fmtTime(l.ts)} — <b>${esc(l.username)}</b> gerou roteiro para <span class="p">${esc(l.product)}</span> (${esc(l.platform)})</div>`
+    ).join('') || `<div>${q ? 'Nenhuma geração encontrada para essa pesquisa.' : 'Nenhuma geração registrada ainda.'}</div>`;
+  }catch(e){}
+}
+
+load();
+setInterval(load, 10000);
+
+// ====================== TESTAR IA ======================
+async function testAI(){
+  const btn = document.getElementById('btnTestAi');
+  const box = document.getElementById('aiResults');
+  btn.disabled = true; btn.textContent = 'Testando...';
+  box.innerHTML = '';
+  try{
+    const r = await fetch('api/admin/test-ai', { headers: authHeaders });
+    const data = await r.json();
+    box.innerHTML = (data.results||[]).map(p=>{
+      const dot = !p.configured ? 'off' : (p.ok ? 'ok' : 'fail');
+      const statusText = !p.configured ? 'Sem chave' : (p.ok ? `OK · ${p.latencyMs}ms` : 'Falhou');
+      return `<div class="ai-card">
+        <div class="name">${esc(p.name)} <span class="st-dot ${dot}"></span></div>
+        <div class="msg"><b style="color:var(--text)">${statusText}</b><br>${esc(p.message)}</div>
+      </div>`;
+    }).join('');
+  }catch(e){
+    box.innerHTML = `<div class="ai-card"><div class="msg">Não foi possível rodar o teste agora.</div></div>`;
+  }finally{
+    btn.disabled = false; btn.textContent = 'Rodar teste';
+  }
+}
+
+// ====================== ADICIONAR AFILIADO ======================
+function openAddAffiliate(){
+  document.getElementById('addEmail').value = '';
+  document.getElementById('addUser').value = '';
+  document.getElementById('addPass').value = '';
+  document.getElementById('addMsg').className = 'msg';
+  document.getElementById('addModalOverlay').classList.remove('hidden');
+  document.getElementById('addEmail').focus();
+}
+
+function closeAddAffiliate(){
+  document.getElementById('addModalOverlay').classList.add('hidden');
+}
+
+async function submitAddAffiliate(){
+  const btn = document.getElementById('btnAddAffiliate');
+  const msg = document.getElementById('addMsg');
+  msg.className = 'msg';
+  const email = document.getElementById('addEmail').value;
+  const username = document.getElementById('addUser').value;
+  const password = document.getElementById('addPass').value;
+
+  btn.disabled = true; btn.textContent = 'Criando...';
+  try{
+    const r = await fetch('api/admin/users', {
+      method:'POST', headers: authHeaders,
+      body: JSON.stringify({ email, username, password })
+    });
+    const data = await r.json();
+    if(!r.ok){
+      msg.className = 'msg err'; msg.textContent = data.error || 'Erro ao criar afiliado.';
+      return;
+    }
+    msg.className = 'msg ok'; msg.textContent = `Afiliado "${data.username}" criado com sucesso!`;
+    load();
+    setTimeout(closeAddAffiliate, 1200);
+  }catch(e){
+    msg.className = 'msg err'; msg.textContent = 'Falha de conexão com o servidor.';
+  }finally{
+    btn.disabled = false; btn.textContent = 'Criar conta';
+  }
+}
+
+document.getElementById('addModalOverlay').addEventListener('click', (e)=>{
+  if(e.target.id === 'addModalOverlay') closeAddAffiliate();
+});
+</script>
+</body>
+</html>

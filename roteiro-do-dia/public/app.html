@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Roteiro do Dia — Gerador</title>
+<link rel="icon" href="assets/logo-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<style>
+  :root{
+    --navy:#0F2242; --navy-2:#16305A; --bg:#081428;
+    --border:#28416E; --text:#F3F6FC; --muted:#93A2C4;
+    --orange:#FC6D17; --orange-d:#E15A0C;
+    --danger:#FF5470; --radius:14px;
+    --font-display:'Poppins',system-ui,sans-serif;
+    --font-body:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:var(--font-body);
+    background:var(--bg); color:var(--text); min-height:100vh;
+    background-image:
+      radial-gradient(750px 420px at 92% 0%, rgba(252,109,23,.08), transparent 60%),
+      radial-gradient(550px 420px at 0% 100%, rgba(22,48,90,.5), transparent 60%);
+  }
+  header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:14px 22px; border-bottom:1px solid var(--border);
+    background:rgba(15,34,66,.5); backdrop-filter:blur(6px); position:sticky; top:0; z-index:10;
+  }
+  .logo{display:flex; align-items:center; gap:10px; font-family:var(--font-display); font-weight:700; font-size:15px}
+  .logo .mark{
+    background:#fff; border-radius:9px; padding:5px 8px; flex:none;
+    display:flex; align-items:center; justify-content:center; line-height:0;
+  }
+  .logo .mark img{height:20px; width:auto; display:block}
+  .userbox{display:flex; align-items:center; gap:12px; font-size:13.5px; color:var(--muted)}
+  .userbox b{color:var(--text)}
+  .out{
+    padding:7px 13px; border-radius:8px; border:1px solid var(--border);
+    background:transparent; color:var(--muted); font:inherit; font-size:13px; cursor:pointer;
+    transition:color .15s ease, border-color .15s ease;
+  }
+  .out:hover{color:var(--text); border-color:var(--muted)}
+
+  main{max-width:1060px; margin:0 auto; padding:26px 18px 60px; display:grid; grid-template-columns:380px 1fr; gap:24px}
+  @media(max-width:880px){ main{grid-template-columns:1fr} }
+
+  .panel{background:var(--navy); border:1px solid var(--border); border-radius:var(--radius); padding:22px; position:relative; overflow:hidden}
+  .panel::before{
+    content:""; position:absolute; top:0; left:0; right:0; height:3px;
+    background:linear-gradient(90deg,var(--navy-2),var(--orange),var(--navy-2));
+  }
+  .panel h2{font-family:var(--font-display); font-size:16px; margin-bottom:4px}
+  .panel .hint{font-size:12.5px; color:var(--muted); margin-bottom:14px}
+  .full-width{grid-column:1 / -1}
+
+  .hist-head{display:flex; align-items:baseline; justify-content:space-between; margin-bottom:14px}
+  .hist-head h2{margin-bottom:0}
+  .hist-count{font-size:12px; color:var(--muted)}
+  .search-row{display:flex; gap:8px; margin-bottom:16px}
+  .search-row input{flex:1}
+  .clear-btn{
+    flex:none; padding:0 16px; border-radius:10px; border:1px solid var(--border);
+    background:transparent; color:var(--muted); font:inherit; font-size:13.5px; font-weight:600; cursor:pointer;
+    transition:color .15s ease, border-color .15s ease;
+  }
+  .clear-btn:hover{color:var(--text); border-color:var(--muted)}
+  .clear-btn:disabled{opacity:.4; cursor:default}
+  .hist-list{display:flex; flex-direction:column; gap:8px; max-height:420px; overflow-y:auto}
+  .hist-item{
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    padding:12px 14px; border-radius:10px; border:1px solid var(--border);
+    background:var(--navy-2); cursor:pointer; text-align:left; font:inherit; color:var(--text); width:100%;
+    transition:border-color .15s ease, transform .1s ease;
+  }
+  .hist-item:hover{border-color:var(--orange); transform:translateX(2px)}
+  .hist-item .p{font-size:14px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .hist-item .meta{flex:none; display:flex; align-items:center; gap:10px; font-size:11.5px; color:var(--muted)}
+  .hist-item .plat{background:var(--bg); border:1px solid var(--border); padding:2px 8px; border-radius:999px}
+  .hist-empty{color:var(--muted); font-size:13.5px; text-align:center; padding:20px}
+
+  label{display:block; font-family:var(--font-display); font-size:12px; font-weight:600; color:var(--muted); margin:13px 0 6px}
+  input,select,textarea{
+    width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--border);
+    background:var(--bg); color:var(--text); font:inherit; font-size:14px;
+    transition:box-shadow .15s ease, border-color .15s ease;
+  }
+  input:focus,select:focus,textarea:focus{outline:none; border-color:var(--orange); box-shadow:0 0 0 3px rgba(252,109,23,.2)}
+
+  .drop{
+    margin-top:6px; border:1.5px dashed var(--border); border-radius:10px; padding:14px;
+    text-align:center; color:var(--muted); font-size:13px; cursor:pointer;
+    transition:border-color .15s ease, color .15s ease;
+  }
+  .drop:hover{border-color:var(--orange); color:var(--text)}
+  .drop img{max-width:100%; max-height:130px; border-radius:8px; margin-top:8px}
+
+  .csv-preview{margin-top:8px; border:1px solid var(--border); border-radius:10px; overflow:hidden}
+  .csv-preview .csv-head{
+    display:flex; align-items:center; justify-content:space-between; padding:8px 12px;
+    background:var(--navy-2); font-size:12.5px; color:var(--muted);
+  }
+  .csv-preview .csv-head b{color:var(--text)}
+  .csv-remove{background:transparent; border:0; color:var(--muted); cursor:pointer; font-size:12px; text-decoration:underline}
+  .csv-remove:hover{color:var(--danger)}
+  .csv-table-wrap{max-height:180px; overflow:auto}
+  .csv-table{width:100%; border-collapse:collapse; font-size:11.5px}
+  .csv-table th,.csv-table td{padding:6px 9px; border-bottom:1px solid var(--border); white-space:nowrap; text-align:left}
+  .csv-table th{color:var(--orange); position:sticky; top:0; background:var(--navy)}
+  .csv-table td{color:var(--muted)}
+
+  .timer{font-variant-numeric:tabular-nums}
+
+  .btn{
+    width:100%; margin-top:20px; padding:13px; border:0; border-radius:10px;
+    background:var(--orange); color:#fff; font:inherit; font-size:15px; font-weight:700; cursor:pointer;
+    transition:background .15s ease, transform .1s ease;
+  }
+  .btn:hover{background:var(--orange-d); transform:translateY(-1px)}
+  .btn:active{transform:translateY(0)}
+  .btn:disabled{opacity:.55; cursor:wait; transform:none}
+  .btn-row{display:flex; gap:10px; margin-top:20px}
+  .btn-row .btn{margin-top:0}
+  .btn-outline{
+    width:100%; padding:13px; border-radius:10px; border:1px solid var(--border);
+    background:transparent; color:var(--muted); font:inherit; font-size:15px; font-weight:700; cursor:pointer;
+    transition:color .15s ease, border-color .15s ease;
+  }
+  .btn-outline:hover{color:var(--text); border-color:var(--muted)}
+  .err{margin-top:14px; padding:11px 13px; border-radius:10px; font-size:13.5px;
+    background:rgba(255,84,112,.12); border:1px solid rgba(255,84,112,.4); color:var(--danger); display:none}
+
+  /* Resultado */
+  .empty{
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    min-height:340px; color:var(--muted); text-align:center; gap:10px; font-size:14px;
+  }
+  .phone-ish{width:70px; height:120px; border:2px solid var(--border); border-radius:16px; position:relative}
+  .phone-ish::after{content:"▶"; position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--orange); font-size:20px}
+
+  .block{margin-bottom:18px}
+  .block h3{
+    font-family:var(--font-display); font-size:11.5px; text-transform:uppercase; letter-spacing:1.2px; color:var(--orange);
+    margin-bottom:8px; display:flex; align-items:center; justify-content:space-between;
+  }
+  .copy{
+    border:1px solid var(--border); background:transparent; color:var(--muted);
+    font-size:11px; padding:4px 9px; border-radius:6px; cursor:pointer; font-family:inherit;
+    transition:color .15s ease, border-color .15s ease;
+  }
+  .copy:hover{color:var(--text); border-color:var(--muted)}
+  .hook{font-family:var(--font-display); font-size:17px; font-weight:600; line-height:1.4}
+  .scene{
+    display:grid; grid-template-columns:52px 1fr; gap:12px; padding:12px 0;
+    border-top:1px solid var(--border);
+  }
+  .scene .t{font-family:ui-monospace,monospace; color:var(--orange); font-weight:700; font-size:13px}
+  .scene .cam{font-size:12px; color:var(--muted); margin-bottom:3px}
+  .scene .vis{font-size:14px; line-height:1.45}
+  .scene .txt{display:inline-block; margin-top:6px; font-size:12px; font-weight:700; background:var(--navy-2); border:1px solid var(--border); padding:3px 9px; border-radius:6px}
+  .caption,.cta,.prompt{font-size:14px; line-height:1.55; background:var(--navy-2); border:1px solid var(--border); border-radius:10px; padding:12px}
+  .prompt{font-family:ui-monospace,monospace; font-size:12.5px; color:#BFD3F5}
+  .tags{display:flex; flex-wrap:wrap; gap:7px}
+  .tags span{font-size:12.5px; background:rgba(147,162,196,.12); border:1px solid var(--border); color:var(--muted); padding:4px 10px; border-radius:999px}
+  .dur{font-size:12px; color:var(--muted); margin-bottom:14px}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo"><div class="mark"><img src="assets/logo-icon.png" alt="Velocita Global"></div>Roteiro do Dia</div>
+  <div class="userbox"><a class="out" href="/app" style="text-decoration:none; display:inline-block;">&larr; Voltar ao CRM</a><span>Olá, <b id="who">...</b></span><button class="out" onclick="logout()">Sair</button></div>
+</header>
+
+<main>
+  <section class="panel">
+    <h2>Novo roteiro</h2>
+    <p class="hint">Só o nome do produto já basta. Quanto mais detalhes, melhor o resultado.</p>
+
+    <label for="product">Nome do produto *</label>
+    <input id="product" placeholder="Ex: Mini processador elétrico de alho">
+    <label for="category">Categoria (opcional)</label>
+    <input id="category" placeholder="Ex: Cozinha, beleza, fitness...">
+    <label for="diff">Diferencial (opcional)</label>
+    <input id="diff" placeholder="Ex: recarregável por USB, cabe no bolso...">
+    <label for="price">Preço (opcional)</label>
+    <input id="price" placeholder="Ex: R$ 79,90">
+    <label for="weight">Peso (opcional)</label>
+    <input id="weight" placeholder="Ex: 250g">
+    <label for="dimensions">Dimensões (opcional)</label>
+    <input id="dimensions" placeholder="Ex: 12 x 8 x 5 cm">
+    <label for="platform">Plataforma</label>
+    <select id="platform">
+      <option>Geral (TikTok, Reels e Shorts)</option>
+      <option>TikTok</option>
+      <option>Instagram Reels</option>
+      <option>YouTube Shorts</option>
+      <option>Kwai</option>
+    </select>
+    <label>Foto do produto (opcional)</label>
+    <div class="drop" id="drop" onclick="document.getElementById('file').click()">
+      Toque para enviar uma foto do produto
+      <input type="file" id="file" accept="image/*" hidden>
+      <div id="preview"></div>
+    </div>
+
+    <label>Planilha de especificações — .csv (opcional)</label>
+    <div class="drop" id="dropCsv" onclick="document.getElementById('csvFile').click()">
+      Toque para enviar um CSV com as especificações do produto
+      <input type="file" id="csvFile" accept=".csv,text/csv" hidden>
+    </div>
+    <div id="csvPreviewWrap"></div>
+
+    <div class="btn-row">
+      <button class="btn-outline" id="clearForm" onclick="clearGenerator()">Limpar / nova pesquisa</button>
+      <button class="btn" id="go" onclick="generate()">Gerar roteiro viral</button>
+    </div>
+    <div class="err" id="err"></div>
+  </section>
+
+  <section class="panel" id="result">
+    <div class="empty" id="emptyState">
+      <div class="phone-ish"></div>
+      <div>Seu roteiro aparece aqui:<br>hook, cenas, legenda, hashtags e prompt de vídeo por IA.</div>
+    </div>
+    <div id="content" style="display:none"></div>
+  </section>
+
+  <section class="panel full-width" id="historyPanel">
+    <div class="hist-head">
+      <h2>Histórico</h2>
+      <span class="hist-count" id="histCount"></span>
+    </div>
+    <div class="search-row">
+      <input id="histSearch" placeholder="Pesquisar por nome do produto..." oninput="onHistSearch()">
+      <button class="clear-btn" id="histClear" onclick="clearHistSearch()" disabled>Limpar pesquisa</button>
+    </div>
+    <div class="hist-list" id="histList"></div>
+  </section>
+</main>
+
+<script>
+const token = localStorage.getItem('rd_token');
+if(!token){ window.location.href = './'; }
+document.getElementById('who').textContent = localStorage.getItem('rd_user') || '';
+
+const authHeaders = { 'Content-Type':'application/json', 'Authorization':'Bearer ' + token };
+
+// valida sessão ao abrir
+fetch('api/me', { headers: authHeaders }).then(async r=>{
+  if(!r.ok){ localStorage.clear(); window.location.href='./'; }
+});
+
+loadHistory();
+
+async function logout(){
+  try{ await fetch('api/logout', { method:'POST', headers: authHeaders }); }catch(e){}
+  localStorage.clear();
+  window.location.href = './';
+}
+
+let imageBase64 = null, imageMimeType = null;
+document.getElementById('file').addEventListener('change', (e)=>{
+  const f = e.target.files[0];
+  if(!f) return;
+  imageMimeType = f.type || 'image/jpeg';
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    imageBase64 = reader.result.split(',')[1];
+    document.getElementById('preview').innerHTML = `<img src="${reader.result}" alt="Foto do produto">`;
+  };
+  reader.readAsDataURL(f);
+});
+
+let csvText = null, csvFileName = null;
+document.getElementById('csvFile').addEventListener('change', (e)=>{
+  const f = e.target.files[0];
+  if(!f) return;
+  csvFileName = f.name;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    csvText = reader.result;
+    renderCsvPreview(csvText, csvFileName);
+  };
+  reader.readAsText(f, 'UTF-8');
+});
+
+function renderCsvPreview(text, filename){
+  const wrap = document.getElementById('csvPreviewWrap');
+  let rows = [];
+  try{
+    const parsed = Papa.parse(text.trim(), { skipEmptyLines: true });
+    rows = parsed.data || [];
+  }catch(e){ rows = []; }
+
+  if(!rows.length){
+    wrap.innerHTML = `<div class="csv-preview"><div class="csv-head"><span>${esc(filename)} — não foi possível ler como planilha</span><button class="csv-remove" onclick="removeCsv()">Remover</button></div></div>`;
+    return;
+  }
+
+  const header = rows[0];
+  const body = rows.slice(1, 9); // mostra so as primeiras linhas na previa
+  wrap.innerHTML = `
+    <div class="csv-preview">
+      <div class="csv-head"><span>📄 <b>${esc(filename)}</b> · ${rows.length - 1} linha${rows.length-1===1?'':'s'}</span>
+        <button class="csv-remove" onclick="removeCsv()">Remover</button></div>
+      <div class="csv-table-wrap">
+        <table class="csv-table">
+          <thead><tr>${header.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead>
+          <tbody>${body.map(r=>`<tr>${r.map(c=>`<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+function removeCsv(){
+  csvText = null; csvFileName = null;
+  document.getElementById('csvFile').value = '';
+  document.getElementById('csvPreviewWrap').innerHTML = '';
+}
+
+function esc(s){ const d=document.createElement('div'); d.textContent = s==null?'':String(s); return d.innerHTML; }
+
+function clearGenerator(){
+  document.getElementById('product').value = '';
+  document.getElementById('category').value = '';
+  document.getElementById('diff').value = '';
+  document.getElementById('price').value = '';
+  document.getElementById('weight').value = '';
+  document.getElementById('dimensions').value = '';
+  document.getElementById('platform').selectedIndex = 0;
+  document.getElementById('file').value = '';
+  document.getElementById('preview').innerHTML = '';
+  imageBase64 = null; imageMimeType = null;
+  removeCsv();
+
+  document.getElementById('err').style.display = 'none';
+  document.getElementById('content').style.display = 'none';
+  document.getElementById('content').innerHTML = '';
+  document.getElementById('emptyState').style.display = 'flex';
+
+  document.getElementById('product').focus();
+}
+
+function copyText(text, btn){
+  navigator.clipboard.writeText(text).then(()=>{
+    const old = btn.textContent; btn.textContent='Copiado!';
+    setTimeout(()=>btn.textContent=old, 1500);
+  });
+}
+
+async function generate(){
+  const err = document.getElementById('err');
+  err.style.display='none';
+  const product = document.getElementById('product').value.trim();
+  if(!product){ err.textContent='Informe o nome do produto.'; err.style.display='block'; return; }
+
+  const btn = document.getElementById('go');
+  btn.disabled = true;
+  const startedAt = Date.now();
+  const tick = () => {
+    const secs = Math.floor((Date.now() - startedAt) / 1000);
+    btn.innerHTML = `Gerando<span class="timer">... ${secs}s</span>`;
+  };
+  tick();
+  const timerId = setInterval(tick, 1000);
+
+  try{
+    const r = await fetch('api/generate', {
+      method:'POST', headers: authHeaders,
+      body: JSON.stringify({
+        product,
+        category: document.getElementById('category').value.trim(),
+        diff: document.getElementById('diff').value.trim(),
+        price: document.getElementById('price').value.trim(),
+        weight: document.getElementById('weight').value.trim(),
+        dimensions: document.getElementById('dimensions').value.trim(),
+        platform: document.getElementById('platform').value,
+        csvText,
+        imageBase64, imageMimeType
+      })
+    });
+    const data = await r.json();
+    if(r.status === 401){ localStorage.clear(); window.location.href='./'; return; }
+    if(!r.ok){ err.textContent = data.error || 'Erro ao gerar.'; err.style.display='block'; return; }
+    render(data);
+    loadHistory(document.getElementById('histSearch').value.trim());
+  }catch(e){
+    err.textContent = 'Falha de conexão com o servidor.'; err.style.display='block';
+  }finally{
+    clearInterval(timerId);
+    btn.disabled=false; btn.textContent='Gerar roteiro viral';
+  }
+}
+
+function render(d){
+  document.getElementById('emptyState').style.display='none';
+  const c = document.getElementById('content');
+  c.style.display='block';
+
+  const scenes = (d.cenas||[]).map(s=>`
+    <div class="scene">
+      <div class="t">${esc(s.tempo)}</div>
+      <div>
+        <div class="cam">🎥 ${esc(s.camera)}</div>
+        <div class="vis">${esc(s.visual)}</div>
+        ${s.texto_tela ? `<span class="txt">${esc(s.texto_tela)}</span>` : ''}
+      </div>
+    </div>`).join('');
+
+  const tags = (d.hashtags||[]).map(t=>`<span>${esc(t)}</span>`).join('');
+  const tagsText = (d.hashtags||[]).join(' ');
+
+  c.innerHTML = `
+    <div class="dur">Duração sugerida: <b>${esc(d.duracao||'—')}</b></div>
+    <div class="block"><h3>Faixa branca (topo do vídeo) <button class="copy" onclick="copyText(${JSON.stringify(d.banner_topo||'')}, this)">Copiar</button></h3>
+      <div class="caption">${esc(d.banner_topo)}</div></div>
+    <div class="block"><h3>Hook (abertura) <button class="copy" onclick="copyText(${JSON.stringify(d.hook||'')}, this)">Copiar</button></h3>
+      <div class="hook">“${esc(d.hook)}”</div></div>
+    <div class="block"><h3>Cenas</h3>${scenes}</div>
+    <div class="block"><h3>Narração (português) <button class="copy" onclick="copyText(${JSON.stringify(d.narracao||'')}, this)">Copiar</button></h3>
+      <div class="caption">${esc(d.narracao)}</div></div>
+    <div class="block"><h3>Legenda <button class="copy" onclick='copyText(${JSON.stringify((d.legenda||'') + "\n\n" + tagsText)}, this)'>Copiar com hashtags</button></h3>
+      <div class="caption">${esc(d.legenda)}</div></div>
+    <div class="block"><h3>Hashtags</h3><div class="tags">${tags}</div></div>
+    <div class="block"><h3>Prompt para vídeo por IA <button class="copy" onclick='copyText(${JSON.stringify(d.prompt_video_ia||'')}, this)'>Copiar</button></h3>
+      <div class="prompt">${esc(d.prompt_video_ia)}</div></div>
+    <div class="block"><h3>Call to action</h3><div class="cta">${esc(d.cta)}</div></div>
+  `;
+  c.scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+// ====================== HISTÓRICO ======================
+function fmtHistTime(ts){
+  const d = new Date(ts);
+  const today = new Date();
+  const sameDay = d.toDateString() === today.toDateString();
+  const hm = d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  return sameDay ? `hoje ${hm}` : d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}) + ' ' + hm;
+}
+
+let histSearchTimer = null;
+function onHistSearch(){
+  const q = document.getElementById('histSearch').value.trim();
+  document.getElementById('histClear').disabled = !q;
+  clearTimeout(histSearchTimer);
+  histSearchTimer = setTimeout(()=>loadHistory(q), 300);
+}
+
+function clearHistSearch(){
+  document.getElementById('histSearch').value = '';
+  document.getElementById('histClear').disabled = true;
+  loadHistory();
+}
+
+async function loadHistory(q){
+  const list = document.getElementById('histList');
+  const count = document.getElementById('histCount');
+  try{
+    const url = '/api/history' + (q ? `?q=${encodeURIComponent(q)}` : '');
+    const r = await fetch(url, { headers: authHeaders });
+    if(r.status === 401){ localStorage.clear(); window.location.href='./'; return; }
+    const data = await r.json();
+    const items = data.items || [];
+    count.textContent = items.length ? `${items.length} gerado${items.length>1?'s':''}` : '';
+    if(!items.length){
+      list.innerHTML = `<div class="hist-empty">${q ? 'Nenhum roteiro encontrado para essa pesquisa.' : 'Seus roteiros gerados aparecem aqui.'}</div>`;
+      return;
+    }
+    list.innerHTML = items.map((it, i)=>`
+      <button class="hist-item" onclick="openHistItem(${i})">
+        <span class="p">${esc(it.product)}</span>
+        <span class="meta"><span class="plat">${esc(it.platform)}</span>${fmtHistTime(it.ts)}</span>
+      </button>`).join('');
+    window._histItems = items;
+  }catch(e){
+    list.innerHTML = `<div class="hist-empty">Não foi possível carregar o histórico agora.</div>`;
+  }
+}
+
+function openHistItem(i){
+  const it = (window._histItems || [])[i];
+  if(!it || !it.result) return;
+  render(it.result);
+}
+</script>
+</body>
+</html>

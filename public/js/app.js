@@ -242,7 +242,7 @@ function switchView(viewName) {
 }
 
 function bindNav() {
-  document.querySelectorAll('.sidebar-link').forEach((link) => {
+  document.querySelectorAll('.sidebar-link[data-view]').forEach((link) => {
     link.addEventListener('click', () => switchView(link.dataset.view));
   });
 }

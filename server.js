@@ -1078,6 +1078,20 @@ app.post('/api/activities/:id/sync-calendar', requireAuth, async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Velocita Global CRM rodando em http://localhost:${PORT}`);
-});
+// ---------- Roteiro do Dia (gerador de roteiros virais para afiliados) ----------
+// Aplicação independente (login, banco e IA próprios), montada dentro do mesmo
+// site em /roteiro-do-dia. Não compartilha sessão nem dados com o CRM.
+const roteiroDoDia = require('./roteiro-do-dia/server');
+app.use('/roteiro-do-dia', roteiroDoDia.app);
+
+(async () => {
+  try {
+    await roteiroDoDia.init();
+  } catch (e) {
+    console.error('Falha ao iniciar o Roteiro do Dia:', e);
+  }
+
+  app.listen(PORT, () => {
+    console.log(`Velocita Global CRM rodando em http://localhost:${PORT}`);
+  });
+})();

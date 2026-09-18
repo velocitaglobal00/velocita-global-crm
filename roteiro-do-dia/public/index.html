@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Roteiro do Dia — Velocita Global</title>
+<link rel="icon" href="assets/logo-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#0F2242; --navy-2:#16305A; --bg:#081428;
+    --border:#28416E; --text:#F3F6FC; --muted:#93A2C4;
+    --orange:#FC6D17; --orange-d:#E15A0C;
+    --danger:#FF5470; --ok:#35D399;
+    --radius:14px;
+    --font-display:'Poppins',system-ui,sans-serif;
+    --font-body:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:var(--font-body);
+    background:var(--bg); color:var(--text);
+    min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px;
+    background-image:
+      radial-gradient(650px 420px at 88% 6%, rgba(252,109,23,.14), transparent 60%),
+      radial-gradient(550px 400px at 6% 96%, rgba(22,48,90,.55), transparent 60%);
+  }
+  .card{
+    width:100%; max-width:420px; background:var(--navy);
+    border:1px solid var(--border); border-radius:var(--radius);
+    padding:32px 28px 28px; position:relative; overflow:hidden;
+    box-shadow:0 24px 60px -20px rgba(0,0,0,.55);
+  }
+  .card::before{
+    content:""; position:absolute; top:0; left:0; right:0; height:4px;
+    background:linear-gradient(90deg,var(--navy-2),var(--orange),var(--navy-2));
+    background-size:200% 100%;
+    animation:sweep 5s linear infinite;
+  }
+  @keyframes sweep{
+    0%{background-position:0% 0}
+    100%{background-position:-200% 0}
+  }
+  @media (prefers-reduced-motion: reduce){ .card::before{ animation:none } }
+
+  .brand{display:flex; justify-content:center; margin-bottom:18px}
+  .brand-plate{
+    background:#fff; border-radius:16px; padding:14px 22px 10px;
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 10px 24px -10px rgba(0,0,0,.35);
+  }
+  .brand-plate img{height:58px; width:auto; display:block}
+
+  h1{font-family:var(--font-display); font-size:19px; font-weight:700; letter-spacing:-.2px; text-align:center}
+  .sub{color:var(--muted); font-size:13px; margin-bottom:22px; text-align:center}
+
+  .tabs{display:flex; background:var(--navy-2); border-radius:10px; padding:4px; margin-bottom:20px}
+  .tabs button{
+    flex:1; padding:9px; border:0; border-radius:8px; background:transparent;
+    color:var(--muted); font:inherit; font-size:14px; font-weight:600; cursor:pointer;
+    transition:background .15s ease, color .15s ease;
+  }
+  .tabs button.active{background:var(--orange); color:#fff}
+
+  label{display:block; font-family:var(--font-display); font-size:12px; font-weight:600; color:var(--muted); margin:14px 0 6px}
+  input{
+    width:100%; padding:11px 13px; border-radius:10px; border:1px solid var(--border);
+    background:var(--bg); color:var(--text); font:inherit; font-size:14.5px;
+    transition:box-shadow .15s ease, border-color .15s ease;
+  }
+  input:focus{outline:none; border-color:var(--orange); box-shadow:0 0 0 3px rgba(252,109,23,.22)}
+
+  .roles{display:flex; gap:10px; margin-top:6px}
+  .roles label.role{
+    flex:1; margin:0; display:flex; align-items:center; justify-content:center; gap:7px;
+    padding:11px; border:1px solid var(--border); border-radius:10px; cursor:pointer;
+    font-size:14px; font-weight:600; color:var(--muted); background:var(--bg);
+    transition:border-color .15s ease, background .15s ease, color .15s ease;
+  }
+  .roles input{display:none}
+  .roles label.role:has(input:checked){border-color:var(--orange); color:var(--text); background:rgba(252,109,23,.12)}
+
+  .role-btn{
+    flex:1; padding:16px 11px; border:1px solid var(--border); border-radius:10px; cursor:pointer;
+    font:inherit; font-size:15px; font-weight:700; color:var(--text); background:var(--bg);
+    transition:border-color .15s ease, background .15s ease, transform .1s ease;
+  }
+  .role-btn:hover{border-color:var(--orange); background:rgba(252,109,23,.12); transform:translateY(-1px)}
+  .role-btn:disabled{opacity:.55; cursor:wait; transform:none}
+
+  .back-link{
+    display:inline-block; margin-bottom:14px; color:var(--muted); font-size:13px;
+    font-weight:600; text-decoration:none; transition:color .15s ease;
+  }
+  .back-link:hover{color:var(--text)}
+
+  .btn{
+    width:100%; margin-top:22px; padding:13px; border:0; border-radius:10px;
+    background:var(--orange); color:#fff; font:inherit; font-size:15px; font-weight:700; cursor:pointer;
+    transition:background .15s ease, transform .1s ease;
+  }
+  .btn:hover{background:var(--orange-d); transform:translateY(-1px)}
+  .btn:active{transform:translateY(0)}
+  .btn:disabled{opacity:.55; cursor:wait; transform:none}
+
+  .msg{margin-top:16px; padding:12px 14px; border-radius:10px; font-size:13.5px; line-height:1.45; display:none}
+  .msg.err{display:block; background:rgba(255,84,112,.12); border:1px solid rgba(255,84,112,.4); color:var(--danger)}
+  .msg.ok{display:block; background:rgba(53,211,153,.12); border:1px solid rgba(53,211,153,.4); color:var(--ok)}
+  .msg a.contact{
+    display:inline-block; margin-top:10px; padding:9px 14px; border-radius:8px;
+    background:var(--danger); color:#fff; text-decoration:none; font-weight:700; font-size:13px;
+    transition:opacity .15s ease;
+  }
+  .msg a.contact:hover{opacity:.85}
+  .hidden{display:none}
+</style>
+</head>
+<body>
+<div class="card">
+  <a class="back-link" href="/app">&larr; Voltar ao CRM</a>
+  <div class="brand"><div class="brand-plate"><img src="assets/logo-full.png" alt="Velocita Global"></div></div>
+  <h1>Roteiro do Dia</h1>
+  <p class="sub">Conteúdo viral pronto para o seu link de afiliado.</p>
+
+  <label>Entrar como</label>
+  <div class="roles">
+    <button type="button" class="role-btn" id="btnAfiliado" onclick="quickLogin('afiliado')">Afiliado</button>
+    <button type="button" class="role-btn" id="btnAdmin" onclick="quickLogin('admin')">Admin</button>
+  </div>
+  <div class="msg" id="msgLogin"></div>
+</div>
+
+<script>
+function setMsg(el, type, html){
+  el.className = 'msg ' + type;
+  el.innerHTML = html;
+}
+
+async function quickLogin(role){
+  const msg = document.getElementById('msgLogin');
+  msg.className = 'msg';
+  document.getElementById('btnAfiliado').disabled = true;
+  document.getElementById('btnAdmin').disabled = true;
+  try{
+    const r = await fetch('api/quick-login', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ role })
+    });
+    const data = await r.json();
+    if(!r.ok){
+      setMsg(msg, 'err', data.error || 'Erro ao entrar.');
+      return;
+    }
+    localStorage.setItem('rd_token', data.token);
+    localStorage.setItem('rd_user', data.username);
+    localStorage.setItem('rd_role', data.role);
+    window.location.href = data.role === 'admin' ? 'admin.html' : 'app.html';
+  }catch(e){
+    setMsg(msg, 'err', 'Falha de conexão com o servidor.');
+  }finally{
+    document.getElementById('btnAfiliado').disabled = false;
+    document.getElementById('btnAdmin').disabled = false;
+  }
+}
+</script>
+</body>
+</html>
