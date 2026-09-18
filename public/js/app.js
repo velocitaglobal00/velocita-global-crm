@@ -38,7 +38,41 @@ const state = {
 
 const ATTENDANT_KEY = 'vg_attendant_id';
 const CURRENCY_SYMBOL = { BRL: 'R$', USD: '$', EUR: '€' };
-const ACTIVITY_ICON = { note: '📝', email: '✉️', call: '📞', meeting: '📅', task: '✅' };
+
+// ============ Ícones (SVG padronizado, substitui emojis soltos na interface) ============
+const ICON_PATHS = {
+  note: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line>',
+  email: '<path d="M22 6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2z"></path><polyline points="22 6 12 13 2 6"></polyline>',
+  call: '<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"></path>',
+  calendar: '<rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line>',
+  check: '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline>',
+  edit: '<path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>',
+  trash: '<polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line>',
+  attach: '<path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>',
+  mic: '<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line>',
+  image: '<rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline>',
+  eye: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle>',
+  globe: '<circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>',
+  lock: '<rect x="3" y="11" width="18" height="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path>',
+  chat: '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 20l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>',
+  facebook: '<path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"></path>',
+  instagram: '<rect x="2" y="2" width="20" height="20" rx="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.5" y2="6.5"></line>',
+  warning: '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line>',
+  errorX: '<circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line>',
+  target: '<circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle>',
+  clock: '<circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline>',
+  sparkle: '<path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z"></path>',
+  clipboard: '<line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line>',
+  smile: '<circle cx="12" cy="12" r="10"></circle><path d="M8 14s1.5 2 4 2 4-2 4-2"></path><line x1="9" y1="9" x2="9.01" y2="9"></line><line x1="15" y1="9" x2="15.01" y2="9"></line>'
+};
+
+function svgIcon(name, size) {
+  const s = size || 14;
+  const path = ICON_PATHS[name] || ICON_PATHS.note;
+  return `<svg class="ic" viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;">${path}</svg>`;
+}
+
+const ACTIVITY_ICON = { note: svgIcon('note'), email: svgIcon('email'), call: svgIcon('call'), meeting: svgIcon('calendar'), task: svgIcon('check') };
 const ACTIVITY_LABEL = { note: 'Nota', email: 'E-mail', call: 'Chamada', meeting: 'Reunião', task: 'Tarefa' };
 const SOURCE_LABEL = {
   facebook_ads: 'Facebook Ads',
@@ -384,7 +418,7 @@ function renderReminders() {
   const container = document.getElementById('reminders-container');
   const reminders = state.reminders || [];
   if (reminders.length === 0) {
-    container.innerHTML = '<div class="empty-state">Nenhum lembrete pendente. 🎉</div>';
+    container.innerHTML = '<div class="empty-state">Nenhum lembrete pendente.</div>';
     return;
   }
   container.innerHTML = reminders
@@ -393,7 +427,7 @@ function renderReminders() {
       (r) => `
     <div class="reminder-item ${r.overdue ? 'overdue' : ''}" data-open-deal="${r.dealId || ''}" data-open-lead="${r.leadId || ''}">
       <div>
-        <div class="rt-text">${r.overdue ? '⚠️ ' : ''}${escapeHtml(r.text)}</div>
+        <div class="rt-text">${r.overdue ? svgIcon('warning') + ' ' : ''}${escapeHtml(r.text)}</div>
         <div class="rt-deal">${escapeHtml(r.dealTitle)}</div>
       </div>
       <div class="rt-date">${fmtDateTime(r.date)}</div>
@@ -773,13 +807,13 @@ function renderActivityFeed() {
       const canSync = a.type === 'meeting' || a.type === 'task';
       const syncBtn = canSync
         ? a.googleEventLink
-          ? `<a href="${a.googleEventLink}" target="_blank" class="gcal-sync-btn">📅 Ver no Calendar</a>`
-          : `<button class="gcal-sync-btn" data-sync-deal-activity="${a.id}">📅 Sincronizar</button>`
+          ? `<a href="${a.googleEventLink}" target="_blank" class="gcal-sync-btn">${svgIcon('calendar')} Ver no Calendar</a>`
+          : `<button class="gcal-sync-btn" data-sync-deal-activity="${a.id}">${svgIcon('calendar')} Sincronizar</button>`
         : '';
       return `
     <div class="activity-item">
       <button class="activity-check ${a.done ? 'done' : ''}" data-toggle-activity="${a.id}" title="${a.done ? 'Marcar como pendente' : 'Marcar como feito'}">${a.done ? '✓' : ''}</button>
-      <div class="activity-icon">${ACTIVITY_ICON[a.type] || '📝'}</div>
+      <div class="activity-icon">${ACTIVITY_ICON[a.type] || svgIcon('note')}</div>
       <div class="activity-content">
         <div class="type">${ACTIVITY_LABEL[a.type] || a.type}${a.done ? ' · concluída' : ' · pendente'}</div>
         <div class="text">${escapeHtml(a.text)}</div>
@@ -853,7 +887,7 @@ async function setDealStatus(status) {
   try {
     const updated = await Api.updateDeal(dealId, { status });
     Object.assign(deal, updated);
-    showToast(status === 'won' ? 'Negócio marcado como Ganho 🎉' : 'Negócio marcado como Perdido');
+    showToast(status === 'won' ? 'Negócio marcado como Ganho' : 'Negócio marcado como Perdido');
     closeModal('modal-deal-detail');
     renderKanban();
     renderDashboard();
@@ -937,8 +971,8 @@ function renderLeads() {
           <td>
             <div class="row-actions">
               <button class="btn-secondary" data-gerar-negocio="${c.id}" style="padding:5px 10px; font-size:11.5px;">+ Negócio</button>
-              <button class="icon-btn" data-edit-contact="${c.id}" title="Editar">✏️</button>
-              <button class="icon-btn danger" data-del-contact="${c.id}" title="Excluir">🗑️</button>
+              <button class="icon-btn" data-edit-contact="${c.id}" title="Editar">${svgIcon('edit')}</button>
+              <button class="icon-btn danger" data-del-contact="${c.id}" title="Excluir">${svgIcon('trash')}</button>
             </div>
           </td>
         </tr>
@@ -999,7 +1033,7 @@ function bindLeadDetailModal() {
     const leadId = state.currentLeadId;
     try {
       await Api.callLead(leadId, state.attendantId);
-      showToast('Ligação originada pela Vivo PABX 📞');
+      showToast('Ligação originada pela Vivo PABX');
     } catch (err) {
       showToast(err.message || 'Erro ao originar ligação');
     }
@@ -1064,13 +1098,13 @@ function renderLeadActivityFeed() {
       const canSync = a.type === 'meeting' || a.type === 'task';
       const syncBtn = canSync
         ? a.googleEventLink
-          ? `<a href="${a.googleEventLink}" target="_blank" class="gcal-sync-btn">📅 Ver no Calendar</a>`
-          : `<button class="gcal-sync-btn" data-sync-activity="${a.id}">📅 Sincronizar</button>`
+          ? `<a href="${a.googleEventLink}" target="_blank" class="gcal-sync-btn">${svgIcon('calendar')} Ver no Calendar</a>`
+          : `<button class="gcal-sync-btn" data-sync-activity="${a.id}">${svgIcon('calendar')} Sincronizar</button>`
         : '';
       return `
       <div class="activity-item">
         <button class="activity-check ${a.done ? 'done' : ''}" data-toggle-lead-activity="${a.id}" title="${a.done ? 'Marcar como pendente' : 'Marcar como feito'}">${a.done ? '✓' : ''}</button>
-        <div class="activity-icon">${ACTIVITY_ICON[a.type] || '📝'}</div>
+        <div class="activity-icon">${ACTIVITY_ICON[a.type] || svgIcon('note')}</div>
         <div class="activity-content">
           <div class="type">${ACTIVITY_LABEL[a.type] || a.type}${a.done ? ' · concluída' : ' · pendente'}</div>
           <div class="text">${escapeHtml(a.text)}</div>
@@ -1180,7 +1214,7 @@ function renderExtraInfoList(containerId, items, onDelete) {
       (item) => `
     <div class="extra-info-row">
       <span class="ei-label">${escapeHtml(item.label)}</span>
-      <span class="ei-value">${escapeHtml(item.value)} <button class="icon-btn danger" data-del-extra="${item.id}" title="Remover">🗑️</button></span>
+      <span class="ei-value">${escapeHtml(item.value)} <button class="icon-btn danger" data-del-extra="${item.id}" title="Remover">${svgIcon('trash')}</button></span>
     </div>
   `
     )
@@ -1220,10 +1254,10 @@ function openLeadDetail(leadId) {
 
   const ch = lead.channels || {};
   const channelRows = [];
-  if (ch.whatsapp) channelRows.push(`<div class="channel-row">📞 WhatsApp: ${escapeHtml(ch.whatsapp)}</div>`);
-  if (ch.facebookPsid) channelRows.push(`<div class="channel-row">📘 Facebook ID: ${escapeHtml(ch.facebookPsid)}</div>`);
-  if (ch.instagramId) channelRows.push(`<div class="channel-row">📷 Instagram ID: ${escapeHtml(ch.instagramId)}</div>`);
-  if (lead.email) channelRows.push(`<div class="channel-row">✉️ ${escapeHtml(lead.email)}</div>`);
+  if (ch.whatsapp) channelRows.push(`<div class="channel-row">${svgIcon('call')} WhatsApp: ${escapeHtml(ch.whatsapp)}</div>`);
+  if (ch.facebookPsid) channelRows.push(`<div class="channel-row">${svgIcon('facebook')} Facebook ID: ${escapeHtml(ch.facebookPsid)}</div>`);
+  if (ch.instagramId) channelRows.push(`<div class="channel-row">${svgIcon('instagram')} Instagram ID: ${escapeHtml(ch.instagramId)}</div>`);
+  if (lead.email) channelRows.push(`<div class="channel-row">${svgIcon('email')} ${escapeHtml(lead.email)}</div>`);
   document.getElementById('ld-channels').innerHTML = channelRows.join('') || '-';
 
   const sourceLabel = lead.source ? SOURCE_LABEL[lead.source.channel] || lead.source.channel : '-';
@@ -1297,7 +1331,7 @@ function renderEmailList(messages, leadName) {
       if (isOut) {
         if (m.deliveryStatus === 'simulated') statusBadge = '<span class="badge-simulated">Simulado</span>';
         else if (m.deliveryStatus === 'failed') statusBadge = '<span class="badge-simulated">Falhou</span>';
-        else if ((m.openCount || 0) > 0) statusBadge = `<span class="badge-opened">👁 Aberto ${m.openCount}x</span>`;
+        else if ((m.openCount || 0) > 0) statusBadge = `<span class="badge-opened">${svgIcon('eye')} Aberto ${m.openCount}x</span>`;
         else statusBadge = '<span class="badge-unopened">Não aberto</span>';
       }
       return `
@@ -1322,9 +1356,9 @@ function renderChatBubble(msg, leadName) {
   const sender = isOut ? msg.attendantName || 'Atendente' : leadName;
   let noteHtml = '';
   if (isOut && msg.deliveryStatus === 'simulated') {
-    noteHtml = `<div class="chat-delivery-note">⚠️ Simulado — ${escapeHtml(msg.deliveryNote || 'integração não configurada')}</div>`;
+    noteHtml = `<div class="chat-delivery-note">${svgIcon('warning')} Simulado — ${escapeHtml(msg.deliveryNote || 'integração não configurada')}</div>`;
   } else if (isOut && msg.deliveryStatus === 'failed') {
-    noteHtml = `<div class="chat-delivery-note">❌ Falha no envio — ${escapeHtml(msg.deliveryNote || '')}</div>`;
+    noteHtml = `<div class="chat-delivery-note">${svgIcon('errorX')} Falha no envio — ${escapeHtml(msg.deliveryNote || '')}</div>`;
   }
   return `
     <div class="chat-bubble-row ${isOut ? 'out' : 'in'}">
@@ -1403,8 +1437,8 @@ function renderOrgs() {
           <td>${linkedCount} lead${linkedCount === 1 ? '' : 's'}</td>
           <td>
             <div class="row-actions">
-              <button class="icon-btn" data-edit-org="${o.id}" title="Editar">✏️</button>
-              <button class="icon-btn danger" data-del-org="${o.id}" title="Excluir">🗑️</button>
+              <button class="icon-btn" data-edit-org="${o.id}" title="Editar">${svgIcon('edit')}</button>
+              <button class="icon-btn danger" data-del-org="${o.id}" title="Excluir">${svgIcon('trash')}</button>
             </div>
           </td>
         </tr>
@@ -1708,7 +1742,7 @@ function renderSettings() {
       <div class="row-actions">
         <button class="icon-btn" data-move-up="${s.id}" ${idx === 0 ? 'disabled' : ''} title="Mover para cima">↑</button>
         <button class="icon-btn" data-move-down="${s.id}" ${idx === sorted.length - 1 ? 'disabled' : ''} title="Mover para baixo">↓</button>
-        <button class="icon-btn danger" data-del-stage="${s.id}" title="Excluir">🗑️</button>
+        <button class="icon-btn danger" data-del-stage="${s.id}" title="Excluir">${svgIcon('trash')}</button>
       </div>
     </div>
   `
@@ -1744,8 +1778,8 @@ function renderSettings() {
       <span class="name">${escapeHtml(u.name)}${u.ramal ? ` <span style="color:#8a94a6; font-weight:400;">· ramal ${escapeHtml(u.ramal)}</span>` : ''}</span>
       <div class="row-actions">
         <input type="text" class="filter-input" style="max-width:110px; padding:5px 8px;" placeholder="ramal" value="${escapeHtml(u.ramal || '')}" data-ramal-for="${u.id}" />
-        <button class="icon-btn" data-edit-signature="${u.id}" title="Assinatura de e-mail">✍️</button>
-        <button class="icon-btn danger" data-del-user="${u.id}" title="Excluir">🗑️</button>
+        <button class="icon-btn" data-edit-signature="${u.id}" title="Assinatura de e-mail">${svgIcon('edit')}</button>
+        <button class="icon-btn danger" data-del-user="${u.id}" title="Excluir">${svgIcon('trash')}</button>
       </div>
     </div>
   `
@@ -1790,7 +1824,7 @@ function renderSettings() {
     <div class="list-row">
       <span class="name">${escapeHtml(f.name)}</span>
       <div class="row-actions">
-        <button class="icon-btn danger" data-del-field="${f.id}" title="Excluir">🗑️</button>
+        <button class="icon-btn danger" data-del-field="${f.id}" title="Excluir">${svgIcon('trash')}</button>
       </div>
     </div>
   `
@@ -1818,7 +1852,7 @@ function renderSettings() {
     <div class="list-row">
       <span class="tag-pill" style="background:${t.color}">${escapeHtml(t.name)}</span>
       <div class="row-actions">
-        <button class="icon-btn danger" data-del-tag="${t.id}" title="Excluir">🗑️</button>
+        <button class="icon-btn danger" data-del-tag="${t.id}" title="Excluir">${svgIcon('trash')}</button>
       </div>
     </div>
   `
@@ -2076,7 +2110,7 @@ function buildAiActionSuggestion(type, value) {
 
   return `
     <div class="ai-suggested-action">
-      💡 Sugestão: ${escapeHtml(label)}<br/>
+      ${svgIcon('sparkle')} Sugestão: ${escapeHtml(label)}<br/>
       <button class="btn-secondary" data-ai-action="${type}" data-ai-value="${escapeHtml(value || '')}">Aplicar sugestão</button>
     </div>
   `;
@@ -2140,7 +2174,7 @@ async function sendAiChatMessage() {
     document.getElementById(typingId).remove();
     thread.insertAdjacentHTML(
       'beforeend',
-      `<div class="chat-bubble-row in"><div class="chat-bubble">⚠️ ${escapeHtml(err.message || 'Erro ao consultar a IA')}</div></div>`
+      `<div class="chat-bubble-row in"><div class="chat-bubble">${svgIcon('warning')} ${escapeHtml(err.message || 'Erro ao consultar a IA')}</div></div>`
     );
   }
 }
@@ -2697,7 +2731,7 @@ function renderAttachmentChips() {
   container.innerHTML = state.emailAttachments
     .map(
       (a, idx) => `
-    <span class="gc-attachment-chip">📎 ${escapeHtml(a.filename)} <button data-remove-attachment="${idx}">&times;</button></span>
+    <span class="gc-attachment-chip">${svgIcon('attach')} ${escapeHtml(a.filename)} <button data-remove-attachment="${idx}">&times;</button></span>
   `
     )
     .join('');
@@ -2735,7 +2769,7 @@ async function sendComposedEmail() {
 }
 
 // ============ Roteiro do Dia ============
-const ROTEIRO_TYPE_ICON = { meeting: '📅', task: '✅', call: '📞' };
+const ROTEIRO_TYPE_ICON = { meeting: svgIcon('calendar'), task: svgIcon('check'), call: svgIcon('call') };
 const ROTEIRO_TYPE_LABEL = { meeting: 'Reunião', task: 'Tarefa', call: 'Chamada' };
 
 function bindRoteiro() {
@@ -2814,7 +2848,7 @@ async function renderRoteiro() {
     .sort((x, y) => new Date(x.date) - new Date(y.date));
 
   if (items.length === 0) {
-    container.innerHTML = '<div class="empty-state">Nenhum compromisso para hoje. 🎉</div>';
+    container.innerHTML = '<div class="empty-state">Nenhum compromisso para hoje.</div>';
     return;
   }
 
@@ -2825,7 +2859,7 @@ async function renderRoteiro() {
       return `
       <div class="roteiro-item ${it.done ? 'done' : ''}" data-roteiro-lead="${it.leadId || ''}" data-roteiro-deal="${it.dealId || ''}">
         <div class="ri-time">${fmtTimeOnly(it.date)}</div>
-        <div class="ri-icon">${ROTEIRO_TYPE_ICON[it.type] || '📝'}</div>
+        <div class="ri-icon">${ROTEIRO_TYPE_ICON[it.type] || svgIcon('note')}</div>
         <div>
           <div class="ri-title">${escapeHtml(who)}</div>
           ${sub ? `<div class="ri-sub">${escapeHtml(sub)}</div>` : ''}
@@ -2934,13 +2968,13 @@ function renderTeamChatAttachmentPreview() {
     box.innerHTML = '';
     return;
   }
-  const icon = att.kind === 'image' ? '🖼️' : att.kind === 'audio' ? '🎤' : '📎';
+  const icon = att.kind === 'image' ? svgIcon('image') : att.kind === 'audio' ? svgIcon('mic') : svgIcon('attach');
   const audioPreview = att.kind === 'audio' ? `<audio controls src="data:${att.mime};base64,${att.dataBase64}"></audio>` : '';
   box.style.display = 'flex';
   box.innerHTML = `
     <span>${icon} ${escapeHtml(att.filename)}</span>
     ${audioPreview}
-    <button id="tc-remove-attachment" type="button" title="Excluir">🗑️ Excluir</button>
+    <button id="tc-remove-attachment" type="button" title="Excluir">${svgIcon('trash')} Excluir</button>
   `;
   document.getElementById('tc-remove-attachment').addEventListener('click', () => {
     state.teamChatPendingAttachment = null;
@@ -3072,7 +3106,7 @@ function renderTeamChatContacts() {
   let html = `
     <div class="comms-thread-item ${state.teamChatTarget === null ? 'active' : ''}" data-tc-target="">
       <div>
-        <div class="ct-name">🌐 Geral ${geralUnread ? `<span class="notif-badge" style="display:inline-block;">${geralUnread}</span>` : ''}</div>
+        <div class="ct-name">${svgIcon('globe')} Geral ${geralUnread ? `<span class="notif-badge" style="display:inline-block;">${geralUnread}</span>` : ''}</div>
         <div class="ct-preview">Conversa com todo o time</div>
       </div>
     </div>
@@ -3083,7 +3117,7 @@ function renderTeamChatContacts() {
       return `
       <div class="comms-thread-item ${state.teamChatTarget === u.id ? 'active' : ''}" data-tc-target="${u.id}">
         <div>
-          <div class="ct-name">🔒 ${escapeHtml(u.name)} ${unread ? `<span class="notif-badge" style="display:inline-block;">${unread}</span>` : ''}</div>
+          <div class="ct-name">${svgIcon('lock')} ${escapeHtml(u.name)} ${unread ? `<span class="notif-badge" style="display:inline-block;">${unread}</span>` : ''}</div>
           <div class="ct-preview">Conversa privada</div>
         </div>
       </div>
@@ -3096,7 +3130,7 @@ function renderTeamChatContacts() {
     el.addEventListener('click', () => {
       state.teamChatTarget = el.dataset.tcTarget || null;
       const targetUser = state.users.find((u) => u.id === state.teamChatTarget);
-      document.getElementById('team-chat-target-name').textContent = targetUser ? `🔒 ${targetUser.name}` : '🌐 Geral';
+      document.getElementById('team-chat-target-name').innerHTML = targetUser ? `${svgIcon('lock')} ${escapeHtml(targetUser.name)}` : `${svgIcon('globe')} Geral`;
       renderTeamChatContacts();
       renderTeamChat();
     });
@@ -3113,7 +3147,7 @@ function renderTeamChatBubble(m) {
     } else if (m.attachment.kind === 'audio') {
       attachmentHtml = `<div class="tc-audio-bubble"><audio controls src="${src}"></audio></div>`;
     } else {
-      attachmentHtml = `<div class="tc-file-bubble"><a href="${src}" download="${escapeHtml(m.attachment.filename)}">📎 ${escapeHtml(m.attachment.filename)}</a></div>`;
+      attachmentHtml = `<div class="tc-file-bubble"><a href="${src}" download="${escapeHtml(m.attachment.filename)}">${svgIcon('attach')} ${escapeHtml(m.attachment.filename)}</a></div>`;
     }
   }
 
@@ -3122,12 +3156,12 @@ function renderTeamChatBubble(m) {
     const readBy = m.readBy || [];
     if (m.recipientId) {
       seenHtml = readBy.includes(m.recipientId)
-        ? '<div class="tc-seen-flash">👁️ Visualizado</div>'
+        ? `<div class="tc-seen-flash">${svgIcon('eye')} Visualizado</div>`
         : '<div class="tc-seen-flash pending">Enviado</div>';
     } else {
       const names = readBy.map((id) => userName(id)).filter(Boolean);
       seenHtml = names.length
-        ? `<div class="tc-seen-flash">👁️ Visualizado por ${escapeHtml(names.join(', '))}</div>`
+        ? `<div class="tc-seen-flash">${svgIcon('eye')} Visualizado por ${escapeHtml(names.join(', '))}</div>`
         : '<div class="tc-seen-flash pending">Enviado</div>';
     }
   }
