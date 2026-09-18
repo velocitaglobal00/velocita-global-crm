@@ -5,12 +5,15 @@ CRM comercial completo inspirado no Pipedrive, com backend em Node.js/Express e 
 ## Funcionalidades
 
 - Login por senha única (`Velocita1`), com sessão persistida no servidor
-- Dashboard com métricas de vendas, funil de conversão e meta do mês
-- Pipeline (Kanban) com drag-and-drop entre estágios
+- Dashboard com métricas de vendas, funil de conversão, meta do mês e lembretes a vencer
+- Pipeline (Kanban) com drag-and-drop entre estágios (Prospecção → Qualificação → Reunião → Proposta → Implantação) e dias por etapa
 - Gestão de negócios: criar, editar, marcar como Ganho/Perdido, excluir
 - Histórico de atividades por negócio (notas, e-mails, chamadas, reuniões, tarefas)
-- Contatos (pessoas) e Empresas com busca em tempo real
-- Configurações: estágios do funil, usuários e campos personalizados
+- Leads e Organizações em páginas separadas, com categorias, etiquetas e origem
+- Conversas por canal (WhatsApp/Facebook/Instagram/E-mail) em cada lead, com identificação do atendente
+- Assistente de IA: dicas automáticas (sem custo) + chat com IA (Ollama grátis local, Groq/Gemini grátis na nuvem, ou Claude pago)
+- Integrações prontas para conectar: WhatsApp, Facebook, Instagram, Google Ads, E-mail (SMTP), Vivo PABX e assinatura digital — veja [INTEGRACOES.md](INTEGRACOES.md)
+- Configurações: estágios do funil, usuários (com ramal), campos personalizados, etiquetas e integrações
 
 ## Como rodar localmente
 
