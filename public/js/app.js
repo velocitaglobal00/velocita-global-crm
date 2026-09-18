@@ -1694,7 +1694,7 @@ function bindSettingsPanel() {
 function updateAiProviderFieldVisibility() {
   const provider = document.getElementById('ai-provider').value;
   document.getElementById('ai-baseurl-group').style.display = provider === 'ollama' ? '' : 'none';
-  document.getElementById('ai-apikey-group').style.display = provider === 'ollama' ? 'none' : '';
+  document.getElementById('ai-apikey-group').style.display = provider === 'groq' || provider === 'gemini' || provider === 'anthropic' ? '' : 'none';
 }
 
 function renderSettings() {
@@ -1947,7 +1947,7 @@ async function saveIntegrations() {
 // ---- Assistente de IA (configurações) ----
 function loadAiSettingsForm() {
   const ai = (state.settings.integrations && state.settings.integrations.ai) || {};
-  document.getElementById('ai-provider').value = ai.provider || 'ollama';
+  document.getElementById('ai-provider').value = ai.provider || 'auto';
   document.getElementById('ai-baseurl').value = ai.baseUrl || 'http://localhost:11434';
   document.getElementById('ai-model').value = ai.model || 'llama3.1';
   document.getElementById('ai-apikey').value = ai.apiKey || '';

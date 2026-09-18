@@ -449,13 +449,16 @@
             <div class="panel">
               <h3>🤖 Assistente de IA</h3>
               <p class="empty-state" style="text-align:left; padding:0 0 12px;">
-                Escolha um provedor <strong>gratuito</strong>: <strong>Ollama</strong> roda um modelo aberto direto no seu computador
-                (sem chave, sem custo, precisa instalar o Ollama). <strong>Groq</strong> e <strong>Google Gemini</strong> têm planos
-                grátis na nuvem (só uma chave de API gratuita, sem cartão). O provedor <strong>Anthropic (Claude)</strong> é pago por uso.
+                <strong>Automático</strong> (recomendado) usa as IAs gratuitas já configuradas no servidor — as mesmas do
+                Gerador de Roteiros — sem precisar preencher nada aqui. Se preferir, escolha manualmente: <strong>Ollama</strong>
+                roda um modelo local no seu computador (sem chave, sem custo, precisa instalar o Ollama — só funciona rodando
+                localmente, não no Render). <strong>Groq</strong> e <strong>Google Gemini</strong> têm planos grátis na nuvem
+                (só uma chave de API gratuita, sem cartão). O provedor <strong>Anthropic (Claude)</strong> é pago por uso.
               </p>
               <div class="form-group">
                 <label>Provedor</label>
                 <select id="ai-provider">
+                  <option value="auto">Automático (gratuito, sem configurar nada)</option>
                   <option value="ollama">Ollama (local, 100% grátis)</option>
                   <option value="groq">Groq (nuvem, plano gratuito)</option>
                   <option value="gemini">Google Gemini (nuvem, plano gratuito)</option>

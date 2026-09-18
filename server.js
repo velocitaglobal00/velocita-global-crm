@@ -948,10 +948,108 @@ app.get('/api/leads/:id/messages/:messageId/opens', requireAuth, (req, res) => {
 // Suporta provedores gratuitos: Ollama (modelo local, sem custo, sem chave), Groq e
 // Google Gemini (planos gratuitos na nuvem, só uma API key grátis), além de
 // Anthropic Claude (pago). Escolha em Configurações > Assistente IA.
-async function callAiProvider(ai, systemPrompt, userMessage, history) {
-  const provider = ai.provider || 'ollama';
+//
+// "Automático" (padrão) não precisa de nenhuma configuração: ele reaproveita as
+// mesmas variáveis de ambiente gratuitas já usadas pelo Gerador de Roteiros
+// (GEMINI_API_KEY, GROQ_API_KEY, OPENROUTER_API_KEY, CEREBRAS_API_KEY,
+// MISTRAL_API_KEY), já que os dois rodam no mesmo serviço do Render, tentando cada
+// uma em ordem até uma responder. Sem nenhuma dessas variáveis configuradas no
+// servidor, ele explica isso no erro em vez de tentar falar com um Ollama local
+// que não existe em produção (essa era a causa do assistente "não funcionar" ao
+// vivo: o padrão antigo era sempre Ollama em localhost).
+function withAiTimeout(promise, ms, label) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} demorou demais para responder.`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+async function callOpenAiCompat(baseUrl, apiKey, model, systemPrompt, messages) {
+  const response = await fetch(baseUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({ model, messages: [{ role: 'system', content: systemPrompt }, ...messages] })
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error((result.error && result.error.message) || 'Erro na API');
+  return (result.choices && result.choices[0] && result.choices[0].message.content) || '';
+}
+
+async function callGeminiRaw(apiKey, model, systemPrompt, messages) {
+  const transcript = [systemPrompt, ...messages.map((m) => `${m.role === 'user' ? 'Usuário' : 'Assistente'}: ${m.content}`)].join('\n\n');
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ contents: [{ parts: [{ text: transcript }] }] })
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error((result.error && result.error.message) || 'Erro na API do Gemini');
+  return (result.candidates && result.candidates[0] && result.candidates[0].content.parts[0].text) || '';
+}
+
+async function callAutoFreeAi(systemPrompt, userMessage, history) {
   const messages = (history || []).map((h) => ({ role: h.role, content: h.content }));
   messages.push({ role: 'user', content: userMessage });
+
+  const providers = [];
+  if (process.env.GEMINI_API_KEY) {
+    providers.push({
+      name: 'Gemini',
+      fn: () => callGeminiRaw(process.env.GEMINI_API_KEY, process.env.GEMINI_MODEL || 'gemini-1.5-flash', systemPrompt, messages)
+    });
+  }
+  if (process.env.GROQ_API_KEY) {
+    providers.push({
+      name: 'Groq',
+      fn: () => callOpenAiCompat('https://api.groq.com/openai/v1/chat/completions', process.env.GROQ_API_KEY, process.env.GROQ_MODEL || 'llama-3.1-8b-instant', systemPrompt, messages)
+    });
+  }
+  if (process.env.OPENROUTER_API_KEY) {
+    providers.push({
+      name: 'OpenRouter',
+      fn: () => callOpenAiCompat('https://openrouter.ai/api/v1/chat/completions', process.env.OPENROUTER_API_KEY, process.env.OPENROUTER_MODEL || 'openrouter/free', systemPrompt, messages)
+    });
+  }
+  if (process.env.CEREBRAS_API_KEY) {
+    providers.push({
+      name: 'Cerebras',
+      fn: () => callOpenAiCompat('https://api.cerebras.ai/v1/chat/completions', process.env.CEREBRAS_API_KEY, process.env.CEREBRAS_MODEL || 'llama3.1-8b', systemPrompt, messages)
+    });
+  }
+  if (process.env.MISTRAL_API_KEY) {
+    providers.push({
+      name: 'Mistral',
+      fn: () => callOpenAiCompat('https://api.mistral.ai/v1/chat/completions', process.env.MISTRAL_API_KEY, process.env.MISTRAL_MODEL || 'mistral-small-latest', systemPrompt, messages)
+    });
+  }
+
+  if (!providers.length) {
+    throw new Error(
+      'Nenhuma IA gratuita configurada no servidor. Peça para definir GEMINI_API_KEY, GROQ_API_KEY, OPENROUTER_API_KEY, CEREBRAS_API_KEY ou MISTRAL_API_KEY nas variáveis de ambiente do Render (as mesmas do Gerador de Roteiros), ou escolha um provedor manualmente em Configurações > Assistente IA.'
+    );
+  }
+
+  let lastErr = null;
+  for (const provider of providers) {
+    try {
+      return await withAiTimeout(provider.fn(), 20000, provider.name);
+    } catch (e) {
+      console.log(`[Assistente IA do CRM] ${provider.name} falhou: ${e.message}`);
+      lastErr = e;
+    }
+  }
+  throw lastErr;
+}
+
+async function callAiProvider(ai, systemPrompt, userMessage, history) {
+  const provider = ai.provider || 'auto';
+  const messages = (history || []).map((h) => ({ role: h.role, content: h.content }));
+  messages.push({ role: 'user', content: userMessage });
+
+  if (provider === 'auto') {
+    return callAutoFreeAi(systemPrompt, userMessage, history);
+  }
 
   if (provider === 'ollama') {
     const baseUrl = ai.baseUrl || 'http://localhost:11434';

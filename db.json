@@ -792,7 +792,7 @@
         "apiKey": ""
       },
       "ai": {
-        "provider": "ollama",
+        "provider": "auto",
         "apiKey": "",
         "baseUrl": "http://localhost:11434",
         "model": "llama3.1"
