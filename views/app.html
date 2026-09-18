@@ -16,13 +16,26 @@
         <span id="brand-title">Velocita Global</span>
       </div>
       <div class="topbar-user">
+        <div class="notif-bell-wrap">
+          <button id="notif-bell-btn" title="Notificações">
+            🔔
+            <span id="notif-badge" class="notif-badge" style="display:none;">0</span>
+          </button>
+          <div id="notif-dropdown" class="notif-dropdown">
+            <div class="notif-dropdown-header">
+              <strong>Notificações</strong>
+              <button id="notif-mark-all" class="logout-link">Marcar todas como lidas</button>
+            </div>
+            <div id="notif-dropdown-list"></div>
+          </div>
+        </div>
         <span>Atendendo como <strong id="attendant-name">-</strong></span>
         <button class="logout-link" id="btn-switch-attendant">Trocar</button>
         <button class="logout-link" id="logout-btn">Sair</button>
       </div>
     </header>
 
-    <!-- Toolbar: hamburger, search, nav tabs -->
+    <!-- Toolbar: hamburger, search -->
     <div class="toolbar">
       <button class="hamburger" id="sidebar-toggle" title="Mostrar/ocultar menu">
         <span></span><span></span><span></span>
@@ -30,13 +43,6 @@
       <div class="search-box">
         <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
         <input type="text" id="global-search" placeholder="Buscar negócios, contatos, empresas..." />
-      </div>
-      <div class="nav-tabs">
-        <button class="nav-tab active" data-view="dashboard">📊 Dashboard</button>
-        <button class="nav-tab" data-view="pipeline">📋 Pipeline</button>
-        <button class="nav-tab" data-view="leads">🧲 Leads</button>
-        <button class="nav-tab" data-view="orgs">🏢 Organizações</button>
-        <button class="nav-tab" data-view="settings">⚙️ Configurações</button>
       </div>
     </div>
 
@@ -47,6 +53,8 @@
         <div class="sidebar-link" data-view="pipeline">📋 Pipeline</div>
         <div class="sidebar-link" data-view="leads">🧲 Leads</div>
         <div class="sidebar-link" data-view="orgs">🏢 Organizações</div>
+        <div class="sidebar-link" data-view="comunicacoes">💬 Comunicações</div>
+        <div class="sidebar-link" data-view="mensagens">✉️ Mensagens <span id="sidebar-msg-badge" class="notif-badge" style="display:none;">0</span></div>
         <div class="sidebar-link" data-view="settings">⚙️ Configurações</div>
       </aside>
 
@@ -150,6 +158,46 @@
             </thead>
             <tbody id="orgs-tbody"></tbody>
           </table>
+        </section>
+
+        <!-- ===== COMUNICAÇÕES ===== -->
+        <section class="view" id="view-comunicacoes">
+          <h2 style="color:var(--vg-navy); margin-top:0;">Comunicações</h2>
+          <div class="comms-layout">
+            <div class="comms-list-col">
+              <input type="text" class="filter-input" id="comms-filter" placeholder="Buscar conversa..." style="width:100%; margin-bottom:10px;" />
+              <div id="comms-thread-list"></div>
+            </div>
+            <div class="comms-chat-col">
+              <div id="comms-empty-state" class="empty-state" style="padding:60px 10px;">Selecione uma conversa à esquerda, ou escolha um lead e um canal para começar.</div>
+              <div id="comms-chat-panel" style="display:none;">
+                <div class="comms-chat-header">
+                  <strong id="comms-chat-lead-name">-</strong>
+                  <div class="activity-tabs" id="comms-channel-tabs">
+                    <button class="activity-tab" data-commschannel="whatsapp">📞 WhatsApp</button>
+                    <button class="activity-tab" data-commschannel="facebook">📘 Facebook</button>
+                    <button class="activity-tab" data-commschannel="instagram">📷 Instagram</button>
+                    <button class="activity-tab" data-commschannel="email">✉️ E-mail</button>
+                  </div>
+                </div>
+                <div class="chat-thread" id="comms-chat-thread"></div>
+                <div class="chat-input-row">
+                  <textarea id="comms-chat-input" placeholder="Digite uma mensagem..."></textarea>
+                  <button class="btn-primary" id="comms-chat-send">Enviar</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ===== MENSAGENS (notificações recebidas) ===== -->
+        <section class="view" id="view-mensagens">
+          <h2 style="color:var(--vg-navy); margin-top:0;">Mensagens</h2>
+          <div class="pipeline-header">
+            <p class="empty-state" style="text-align:left; padding:0;">Mensagens recebidas em todos os canais.</p>
+            <button class="btn-secondary" id="btn-mark-all-messages">Marcar todas como lidas</button>
+          </div>
+          <div id="mensagens-list"></div>
         </section>
 
         <!-- ===== SETTINGS ===== -->
@@ -423,6 +471,11 @@
             <div class="k">Tempo em cada etapa</div>
             <div id="dd-stage-durations"></div>
           </div>
+          <div class="dd-meta-item">
+            <div class="k">Informações adicionais</div>
+            <div id="dd-extra-info"></div>
+            <button class="btn-secondary" id="btn-add-deal-extra-info" style="width:100%; margin-top:6px;">+ Adicionar informação</button>
+          </div>
           <button class="btn-secondary" id="btn-delete-deal" style="width:100%; margin-top:10px;">Excluir negócio</button>
         </div>
 
@@ -522,6 +575,10 @@
           <input type="text" id="contact-source-campaign" placeholder="Ex: Leads - Setembro" />
         </div>
         <div class="form-group">
+          <label>Proprietário do Lead</label>
+          <select id="contact-owner"></select>
+        </div>
+        <div class="form-group">
           <label>Etiquetas</label>
           <div id="contact-tags-checks"></div>
         </div>
@@ -574,9 +631,19 @@
             <div class="k">Origem</div>
             <div class="v" id="ld-source">-</div>
           </div>
+          <div class="dd-meta-item">
+            <div class="k">Proprietário</div>
+            <div class="v" id="ld-owner">-</div>
+          </div>
           <button class="btn-primary" id="btn-gerar-negocio" style="width:100%; margin-top:8px;">+ Gerar Negócio</button>
           <button class="btn-secondary" id="btn-call-lead" style="width:100%; margin-top:8px;">📞 Ligar (Vivo PABX)</button>
           <button class="btn-secondary" id="btn-edit-lead-from-detail" style="width:100%; margin-top:8px;">Editar Lead</button>
+
+          <div class="dd-meta-item" style="margin-top:16px;">
+            <div class="k">Informações adicionais</div>
+            <div id="ld-extra-info"></div>
+            <button class="btn-secondary" id="btn-add-extra-info" style="width:100%; margin-top:6px;">+ Adicionar informação</button>
+          </div>
         </div>
         <div class="dd-col center">
           <div class="activity-tabs" id="lead-tabs">
@@ -585,6 +652,7 @@
             <button class="activity-tab" data-ldtab="facebook">📘 Facebook</button>
             <button class="activity-tab" data-ldtab="instagram">📷 Instagram</button>
             <button class="activity-tab" data-ldtab="email">✉️ E-mail</button>
+            <button class="activity-tab" data-ldtab="historico">🕓 Histórico</button>
           </div>
 
           <div id="ld-tab-deals">
@@ -597,6 +665,75 @@
               <textarea id="ld-chat-input" placeholder="Digite uma mensagem..."></textarea>
               <button class="btn-primary" id="ld-chat-send">Enviar</button>
             </div>
+          </div>
+
+          <div id="ld-tab-historico" style="display:none;">
+            <div id="ld-history-list"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== MODAL: Add extra info field ===== -->
+  <div class="modal-overlay" id="modal-extra-info">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Adicionar informação</h3>
+        <button class="modal-close" data-close="modal-extra-info">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Título</label>
+          <input type="text" id="extra-info-label" placeholder="Ex: CNPJ, Limite de crédito..." />
+        </div>
+        <div class="form-group">
+          <label>Valor</label>
+          <input type="text" id="extra-info-value" />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" data-close="modal-extra-info">Cancelar</button>
+        <button class="btn-primary" id="btn-save-extra-info">Adicionar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== MODAL: Organization Detail ===== -->
+  <div class="modal-overlay" id="modal-org-detail">
+    <div class="modal wide">
+      <div class="modal-header">
+        <h3 id="od-name">Empresa</h3>
+        <button class="modal-close" data-close="modal-org-detail">&times;</button>
+      </div>
+      <div class="deal-detail-grid" style="grid-template-columns: 260px 1fr;">
+        <div class="dd-col left">
+          <div class="dd-meta-item">
+            <div class="k">Endereço</div>
+            <div class="v" id="od-address">-</div>
+          </div>
+          <div class="dd-meta-item">
+            <div class="k">Proprietário</div>
+            <div class="v" id="od-owner">-</div>
+          </div>
+          <button class="btn-secondary" id="btn-edit-org-from-detail" style="width:100%; margin-top:8px;">Editar Empresa</button>
+
+          <div class="dd-meta-item" style="margin-top:16px;">
+            <div class="k">Informações adicionais</div>
+            <div id="od-extra-info"></div>
+            <button class="btn-secondary" id="btn-add-org-extra-info" style="width:100%; margin-top:6px;">+ Adicionar informação</button>
+          </div>
+        </div>
+        <div class="dd-col center">
+          <div class="activity-tabs" id="org-tabs">
+            <button class="activity-tab active" data-odtab="leads">Leads vinculados</button>
+            <button class="activity-tab" data-odtab="historico">🕓 Histórico</button>
+          </div>
+          <div id="od-tab-leads">
+            <div id="od-leads-list"></div>
+          </div>
+          <div id="od-tab-historico" style="display:none;">
+            <div id="od-history-list"></div>
           </div>
         </div>
       </div>
@@ -664,6 +801,10 @@
         <div class="form-group">
           <label>Endereço</label>
           <input type="text" id="org-address" />
+        </div>
+        <div class="form-group">
+          <label>Proprietário da Empresa</label>
+          <select id="org-owner"></select>
         </div>
       </div>
       <div class="modal-footer">

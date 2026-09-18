@@ -29,8 +29,18 @@
   "users": [
     {
       "id": "u-1",
-      "name": "Admin1",
+      "name": "Luis Dias",
       "ramal": "1001"
+    },
+    {
+      "id": "u-2",
+      "name": "Pedro Romanello",
+      "ramal": "1002"
+    },
+    {
+      "id": "u-3",
+      "name": "Diego Gianini",
+      "ramal": "1003"
     }
   ],
   "tags": [
@@ -54,22 +64,30 @@
     {
       "id": "org-1",
       "name": "Norte Logística Ltda",
-      "address": "São Paulo, SP"
+      "address": "São Paulo, SP",
+      "ownerId": "u-1",
+      "extraInfo": []
     },
     {
       "id": "org-2",
       "name": "Grupo Atlas Indústria",
-      "address": "Curitiba, PR"
+      "address": "Curitiba, PR",
+      "ownerId": "u-2",
+      "extraInfo": []
     },
     {
       "id": "org-3",
       "name": "Vetta Alimentos S.A.",
-      "address": "Belo Horizonte, MG"
+      "address": "Belo Horizonte, MG",
+      "ownerId": "u-1",
+      "extraInfo": []
     },
     {
       "id": "org-4",
       "name": "Prisma Tecnologia",
-      "address": "Porto Alegre, RS"
+      "address": "Porto Alegre, RS",
+      "ownerId": "u-3",
+      "extraInfo": []
     }
   ],
   "contacts": [
@@ -83,6 +101,19 @@
       "category": "ecommerce",
       "tags": [
         "tag-1"
+      ],
+      "ownerId": "u-1",
+      "extraInfo": [
+        {
+          "id": "ei-1789755075121",
+          "label": "CNPJ",
+          "value": "12.345.678/0001-90"
+        },
+        {
+          "id": "ei-1789755142214",
+          "label": "Limite de crédito",
+          "value": "R$ 50.000"
+        }
       ],
       "source": {
         "channel": "indicacao",
@@ -103,6 +134,8 @@
       "notes": "",
       "category": "ecommerce",
       "tags": [],
+      "ownerId": "u-2",
+      "extraInfo": [],
       "source": {
         "channel": "google_ads",
         "campaign": "Busca - Industrial B2B"
@@ -124,6 +157,8 @@
       "tags": [
         "tag-3"
       ],
+      "ownerId": "u-1",
+      "extraInfo": [],
       "source": {
         "channel": "facebook_ads",
         "campaign": "Leads - Alimentos Setembro"
@@ -146,6 +181,8 @@
         "tag-1",
         "tag-2"
       ],
+      "ownerId": "u-3",
+      "extraInfo": [],
       "source": {
         "channel": "instagram_ads",
         "campaign": "Stories - Tecnologia"
@@ -165,6 +202,8 @@
       "notes": "",
       "category": "ecommerce",
       "tags": [],
+      "ownerId": "u-2",
+      "extraInfo": [],
       "source": {
         "channel": "organico",
         "campaign": ""
@@ -186,6 +225,7 @@
       "orgId": "org-1",
       "stage": "st-1",
       "ownerId": "u-1",
+      "extraInfo": [],
       "closeDate": "2026-10-15",
       "status": "open",
       "createdAt": "2026-09-01T10:00:00.000Z",
@@ -205,7 +245,8 @@
       "personId": "c-4",
       "orgId": "org-4",
       "stage": "st-1",
-      "ownerId": "u-1",
+      "ownerId": "u-3",
+      "extraInfo": [],
       "closeDate": "2026-10-20",
       "status": "open",
       "createdAt": "2026-09-02T10:00:00.000Z",
@@ -226,6 +267,7 @@
       "orgId": "org-3",
       "stage": "st-2",
       "ownerId": "u-1",
+      "extraInfo": [],
       "closeDate": "2026-10-05",
       "status": "open",
       "createdAt": "2026-09-03T10:00:00.000Z",
@@ -250,7 +292,8 @@
       "personId": "c-2",
       "orgId": "org-2",
       "stage": "st-4",
-      "ownerId": "u-1",
+      "ownerId": "u-2",
+      "extraInfo": [],
       "closeDate": "2026-11-01",
       "status": "open",
       "createdAt": "2026-09-04T10:00:00.000Z",
@@ -285,7 +328,8 @@
       "personId": "c-5",
       "orgId": "org-1",
       "stage": "st-3",
-      "ownerId": "u-1",
+      "ownerId": "u-2",
+      "extraInfo": [],
       "closeDate": "2026-10-25",
       "status": "open",
       "createdAt": "2026-09-05T10:00:00.000Z",
@@ -316,6 +360,7 @@
       "orgId": "org-3",
       "stage": "st-4",
       "ownerId": "u-1",
+      "extraInfo": [],
       "closeDate": "2026-10-10",
       "status": "open",
       "createdAt": "2026-09-06T10:00:00.000Z",
@@ -350,7 +395,8 @@
       "personId": "c-4",
       "orgId": "org-4",
       "stage": "st-5",
-      "ownerId": "u-1",
+      "ownerId": "u-3",
+      "extraInfo": [],
       "closeDate": "2026-09-10",
       "status": "won",
       "createdAt": "2026-08-20T10:00:00.000Z",
@@ -391,6 +437,7 @@
       "orgId": "org-1",
       "stage": "st-2",
       "ownerId": "u-1",
+      "extraInfo": [],
       "closeDate": "2026-09-01",
       "status": "lost",
       "createdAt": "2026-08-15T10:00:00.000Z",
@@ -479,7 +526,7 @@
       "direction": "out",
       "text": "Olá Marcos! Claro, vou te enviar a proposta atualizada ainda hoje.",
       "attendantId": "u-1",
-      "attendantName": "Admin1",
+      "attendantName": "Luis Dias",
       "timestamp": "2026-09-10T14:05:00.000Z",
       "deliveryStatus": "simulated",
       "deliveryNote": "Integração do WhatsApp não configurada em Configurações > Integrações."
@@ -491,10 +538,65 @@
       "direction": "out",
       "text": "Olá Ricardo, segue a proposta de renovação para sua análise.",
       "attendantId": "u-1",
-      "attendantName": "Admin1",
+      "attendantName": "Luis Dias",
       "timestamp": "2026-09-11T09:00:00.000Z",
       "deliveryStatus": "simulated",
       "deliveryNote": "Integração de e-mail (SMTP) não configurada em Configurações > Integrações."
+    },
+    {
+      "id": "msg-4",
+      "leadId": "c-4",
+      "channel": "instagram",
+      "direction": "in",
+      "text": "Vi o anúncio de vocês, quanto custa o pacote completo?",
+      "attendantId": null,
+      "attendantName": null,
+      "timestamp": "2026-09-18T09:15:00.000Z",
+      "deliveryStatus": "received",
+      "deliveryNote": ""
+    }
+  ],
+  "notifications": [
+    {
+      "id": "notif-1",
+      "leadId": "c-4",
+      "leadName": "Juliana Prado",
+      "channel": "instagram",
+      "preview": "Vi o anúncio de vocês, quanto custa o pacote completo?",
+      "timestamp": "2026-09-18T09:15:00.000Z",
+      "read": true
+    }
+  ],
+  "history": [
+    {
+      "id": "h-045ea50e4847",
+      "entityType": "lead",
+      "entityId": "c-1",
+      "attendantId": "u-1",
+      "attendantName": "Luis Dias",
+      "action": "updated",
+      "summary": "Adicionou informação \"Limite de crédito\"",
+      "timestamp": "2026-09-18T18:12:22.224Z"
+    },
+    {
+      "id": "h-1",
+      "entityType": "lead",
+      "entityId": "c-1",
+      "attendantId": "u-1",
+      "attendantName": "Luis Dias",
+      "action": "created",
+      "summary": "Lead criado",
+      "timestamp": "2026-09-01T09:00:00.000Z"
+    },
+    {
+      "id": "h-2",
+      "entityType": "org",
+      "entityId": "org-1",
+      "attendantId": "u-1",
+      "attendantName": "Luis Dias",
+      "action": "created",
+      "summary": "Empresa criada",
+      "timestamp": "2026-09-01T09:00:00.000Z"
     }
   ],
   "settings": {

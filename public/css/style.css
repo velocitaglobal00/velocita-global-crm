@@ -1379,7 +1379,236 @@ table.data-table tr.clickable:hover {
   margin-top: 6px;
 }
 
+/* ---------- Notification bell ---------- */
+.notif-bell-wrap {
+  position: relative;
+}
+
+#notif-bell-btn {
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  position: relative;
+  padding: 4px;
+}
+
+.notif-badge {
+  position: absolute;
+  top: -2px;
+  right: -4px;
+  background: var(--vg-red);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 3px;
+}
+
+.sidebar-link .notif-badge {
+  position: static;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.notif-dropdown {
+  display: none;
+  position: absolute;
+  top: 36px;
+  right: -10px;
+  width: 320px;
+  max-height: 420px;
+  overflow-y: auto;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.3);
+  z-index: 120;
+}
+
+.notif-dropdown.show {
+  display: block;
+}
+
+.notif-dropdown-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--vg-border);
+}
+
+.notif-dropdown-header strong {
+  color: var(--vg-navy);
+  font-size: 13px;
+}
+
+.notif-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 14px;
+  border: none;
+  background: #fff;
+  border-bottom: 1px solid #eef0f3;
+  cursor: pointer;
+  font-size: 12.5px;
+}
+
+.notif-item:hover {
+  background: var(--vg-bg);
+}
+
+.notif-item.unread {
+  background: #fff7ee;
+}
+
+.notif-item .ni-lead {
+  font-weight: 700;
+  color: var(--vg-navy);
+}
+
+.notif-item .ni-preview {
+  color: #5b6472;
+  margin-top: 2px;
+}
+
+.notif-item .ni-time {
+  color: #8a94a6;
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+/* ---------- Comunicações page ---------- */
+.comms-layout {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 16px;
+  height: calc(100vh - 160px);
+}
+
+.comms-list-col {
+  background: #fff;
+  border: 1px solid var(--vg-border);
+  border-radius: 10px;
+  padding: 12px;
+  overflow-y: auto;
+}
+
+.comms-chat-col {
+  background: #fff;
+  border: 1px solid var(--vg-border);
+  border-radius: 10px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.comms-thread-item {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  margin-bottom: 4px;
+}
+
+.comms-thread-item:hover,
+.comms-thread-item.active {
+  background: var(--vg-bg);
+}
+
+.comms-thread-item .ct-name {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--vg-navy);
+}
+
+.comms-thread-item .ct-preview {
+  font-size: 11.5px;
+  color: #8a94a6;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+
+.comms-chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ---------- Mensagens page ---------- */
+.message-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px;
+  border: 1px solid var(--vg-border);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.message-row.unread {
+  border-left: 3px solid var(--vg-orange);
+  background: #fff7ee;
+}
+
+/* ---------- Extra info (informações adicionais) ---------- */
+.extra-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid #eef0f3;
+  font-size: 12.5px;
+}
+
+.extra-info-row .ei-label {
+  color: #8a94a6;
+}
+
+.extra-info-row .ei-value {
+  font-weight: 600;
+  color: var(--vg-text);
+}
+
+/* ---------- History (histórico) ---------- */
+.history-item {
+  padding: 10px 0;
+  border-bottom: 1px solid #eef0f3;
+  font-size: 12.5px;
+}
+
+.history-item .hi-who {
+  font-weight: 700;
+  color: var(--vg-navy);
+}
+
+.history-item .hi-time {
+  color: #8a94a6;
+  font-size: 11px;
+  margin-top: 2px;
+}
+
 @media (max-width: 900px) {
+  .comms-layout {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
   .deal-detail-grid {
     grid-template-columns: 1fr;
   }

@@ -64,6 +64,45 @@ function newId(prefix) {
   return `${prefix}-${crypto.randomBytes(6).toString('hex')}`;
 }
 
+// Registra quem (qual admin) fez uma alteração em um lead ou organização.
+function logHistory(data, entityType, entityId, attendantId, action, summary) {
+  if (!data.history) data.history = [];
+  const attendant = data.users.find((u) => u.id === attendantId);
+  data.history.unshift({
+    id: newId('h'),
+    entityType,
+    entityId,
+    attendantId: attendantId || null,
+    attendantName: attendant ? attendant.name : 'Alguém',
+    action,
+    summary,
+    timestamp: new Date().toISOString()
+  });
+}
+
+const FIELD_LABELS = {
+  name: 'nome', email: 'e-mail', phone: 'telefone', orgId: 'empresa', notes: 'notas',
+  category: 'categoria', ownerId: 'proprietário', address: 'endereço'
+};
+
+function diffSummary(before, after, fields) {
+  const parts = [];
+  const changed = fields.filter((f) => String(before[f] || '') !== String(after[f] || ''));
+  if (changed.length > 0) parts.push(`Atualizou ${changed.map((f) => FIELD_LABELS[f] || f).join(', ')}`);
+
+  const beforeExtra = before.extraInfo || [];
+  const afterExtra = after.extraInfo || [];
+  if (afterExtra.length > beforeExtra.length) {
+    const added = afterExtra.filter((i) => !beforeExtra.some((b) => b.id === i.id));
+    added.forEach((i) => parts.push(`Adicionou informação "${i.label}"`));
+  } else if (afterExtra.length < beforeExtra.length) {
+    const removed = beforeExtra.filter((i) => !afterExtra.some((a) => a.id === i.id));
+    removed.forEach((i) => parts.push(`Removeu informação "${i.label}"`));
+  }
+
+  return parts.length ? parts.join('; ') : null;
+}
+
 // ---------- Stages ----------
 app.get('/api/stages', requireAuth, (req, res) => {
   const data = db.read();
@@ -117,8 +156,15 @@ app.get('/api/organizations', requireAuth, (req, res) => {
 
 app.post('/api/organizations', requireAuth, (req, res) => {
   const data = db.read();
-  const org = { id: newId('org'), name: req.body.name || '', address: req.body.address || '' };
+  const org = {
+    id: newId('org'),
+    name: req.body.name || '',
+    address: req.body.address || '',
+    ownerId: req.body.ownerId || null,
+    extraInfo: []
+  };
   data.organizations.push(org);
+  logHistory(data, 'org', org.id, req.body.attendantId, 'created', 'Empresa criada');
   db.write(data);
   res.status(201).json(org);
 });
@@ -127,7 +173,11 @@ app.put('/api/organizations/:id', requireAuth, (req, res) => {
   const data = db.read();
   const org = data.organizations.find((o) => o.id === req.params.id);
   if (!org) return res.status(404).json({ error: 'Empresa não encontrada' });
-  Object.assign(org, req.body);
+  const before = { ...org };
+  const { attendantId, ...payload } = req.body;
+  Object.assign(org, payload);
+  const summary = diffSummary(before, org, ['name', 'address', 'ownerId']);
+  if (summary) logHistory(data, 'org', org.id, attendantId, 'updated', summary);
   db.write(data);
   res.json(org);
 });
@@ -137,6 +187,11 @@ app.delete('/api/organizations/:id', requireAuth, (req, res) => {
   data.organizations = data.organizations.filter((o) => o.id !== req.params.id);
   db.write(data);
   res.json({ ok: true });
+});
+
+app.get('/api/organizations/:id/history', requireAuth, (req, res) => {
+  const data = db.read();
+  res.json((data.history || []).filter((h) => h.entityType === 'org' && h.entityId === req.params.id));
 });
 
 // ---------- Contacts (people) ----------
@@ -155,10 +210,13 @@ app.post('/api/contacts', requireAuth, (req, res) => {
     notes: req.body.notes || '',
     category: req.body.category || null,
     tags: Array.isArray(req.body.tags) ? req.body.tags : [],
+    ownerId: req.body.ownerId || null,
+    extraInfo: [],
     source: req.body.source || { channel: 'organico', campaign: '' },
     channels: req.body.channels || { whatsapp: '', facebookPsid: '', instagramId: '' }
   };
   data.contacts.push(contact);
+  logHistory(data, 'lead', contact.id, req.body.attendantId, 'created', 'Lead criado');
   db.write(data);
   res.status(201).json(contact);
 });
@@ -167,7 +225,11 @@ app.put('/api/contacts/:id', requireAuth, (req, res) => {
   const data = db.read();
   const contact = data.contacts.find((c) => c.id === req.params.id);
   if (!contact) return res.status(404).json({ error: 'Contato não encontrado' });
-  Object.assign(contact, req.body);
+  const before = { ...contact };
+  const { attendantId, ...payload } = req.body;
+  Object.assign(contact, payload);
+  const summary = diffSummary(before, contact, ['name', 'email', 'phone', 'orgId', 'category', 'ownerId', 'notes']);
+  if (summary) logHistory(data, 'lead', contact.id, attendantId, 'updated', summary);
   db.write(data);
   res.json(contact);
 });
@@ -177,6 +239,11 @@ app.delete('/api/contacts/:id', requireAuth, (req, res) => {
   data.contacts = data.contacts.filter((c) => c.id !== req.params.id);
   db.write(data);
   res.json({ ok: true });
+});
+
+app.get('/api/leads/:id/history', requireAuth, (req, res) => {
+  const data = db.read();
+  res.json((data.history || []).filter((h) => h.entityType === 'lead' && h.entityId === req.params.id));
 });
 
 // ---------- Deals ----------
@@ -415,7 +482,7 @@ function logWebhookEvent(channel, req, res) {
 
 function pushMessage(data, msg) {
   if (!data.messages) data.messages = [];
-  data.messages.push({
+  const full = {
     id: newId('msg'),
     attendantId: null,
     attendantName: null,
@@ -423,7 +490,24 @@ function pushMessage(data, msg) {
     deliveryNote: '',
     timestamp: new Date().toISOString(),
     ...msg
-  });
+  };
+  data.messages.push(full);
+
+  if (full.direction === 'in') {
+    if (!data.notifications) data.notifications = [];
+    const lead = data.contacts.find((c) => c.id === full.leadId);
+    data.notifications.unshift({
+      id: newId('notif'),
+      leadId: full.leadId,
+      leadName: lead ? lead.name : 'Lead',
+      channel: full.channel,
+      preview: full.text,
+      timestamp: full.timestamp,
+      read: false
+    });
+    data.notifications = data.notifications.slice(0, 100);
+  }
+  return full;
 }
 
 // Faz o melhor esforço para interpretar payloads reais de webhook da Meta (WhatsApp/
@@ -500,6 +584,50 @@ app.get('/api/webhook-events', requireAuth, (req, res) => {
 // a escreveu. O envio real só acontece quando a integração correspondente estiver
 // configurada em Configurações > Integrações; caso contrário a mensagem fica
 // registrada apenas no CRM (deliveryStatus: "simulated"), de forma transparente.
+// Lista a conversa mais recente por lead+canal — alimenta a página Comunicações.
+app.get('/api/messages', requireAuth, (req, res) => {
+  const data = db.read();
+  const latestByThread = new Map();
+  (data.messages || [])
+    .slice()
+    .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+    .forEach((m) => {
+      latestByThread.set(`${m.leadId}::${m.channel}`, m);
+    });
+  const threads = Array.from(latestByThread.values())
+    .map((m) => {
+      const lead = data.contacts.find((c) => c.id === m.leadId);
+      return { leadId: m.leadId, leadName: lead ? lead.name : 'Lead removido', channel: m.channel, lastMessage: m };
+    })
+    .sort((a, b) => new Date(b.lastMessage.timestamp) - new Date(a.lastMessage.timestamp));
+  res.json(threads);
+});
+
+// ---------- Notificações ----------
+app.get('/api/notifications', requireAuth, (req, res) => {
+  res.json((db.read().notifications || []).slice(0, 50));
+});
+
+app.get('/api/notifications/unread-count', requireAuth, (req, res) => {
+  const count = (db.read().notifications || []).filter((n) => !n.read).length;
+  res.json({ count });
+});
+
+app.post('/api/notifications/:id/read', requireAuth, (req, res) => {
+  const data = db.read();
+  const notif = (data.notifications || []).find((n) => n.id === req.params.id);
+  if (notif) notif.read = true;
+  db.write(data);
+  res.json({ ok: true });
+});
+
+app.post('/api/notifications/read-all', requireAuth, (req, res) => {
+  const data = db.read();
+  (data.notifications || []).forEach((n) => (n.read = true));
+  db.write(data);
+  res.json({ ok: true });
+});
+
 app.get('/api/leads/:id/messages', requireAuth, (req, res) => {
   const data = db.read();
   let msgs = (data.messages || []).filter((m) => m.leadId === req.params.id);

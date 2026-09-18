@@ -11,12 +11,17 @@ const state = {
   activitiesCache: {}, // dealId -> activities[]
   currentDealId: null,
   currentLeadId: null,
+  currentOrgId: null,
   currentActivityFilter: 'all',
   showClosedDeals: false,
   attendantId: null,
   leadChatChannel: 'whatsapp',
   aiChatDealId: null,
-  aiChatHistory: []
+  aiChatHistory: [],
+  notifications: [],
+  shownNotificationIds: new Set(),
+  commsLeadId: null,
+  commsChannel: 'whatsapp'
 };
 
 const ATTENDANT_KEY = 'vg_attendant_id';
@@ -131,7 +136,14 @@ const Api = {
     api(`/api/leads/${leadId}/messages`, { method: 'POST', body: JSON.stringify({ channel, text, attendantId }) }),
   callLead: (leadId, attendantId) => api(`/api/leads/${leadId}/call`, { method: 'POST', body: JSON.stringify({ attendantId }) }),
   aiTips: () => api('/api/ai/tips'),
-  aiChat: (dealId, message, history) => api('/api/ai/chat', { method: 'POST', body: JSON.stringify({ dealId, message, history }) })
+  aiChat: (dealId, message, history) => api('/api/ai/chat', { method: 'POST', body: JSON.stringify({ dealId, message, history }) }),
+  leadHistory: (leadId) => api(`/api/leads/${leadId}/history`),
+  orgHistory: (orgId) => api(`/api/organizations/${orgId}/history`),
+  allMessages: () => api('/api/messages'),
+  notifications: () => api('/api/notifications'),
+  unreadCount: () => api('/api/notifications/unread-count'),
+  markNotifRead: (id) => api(`/api/notifications/${id}/read`, { method: 'POST' }),
+  markAllNotifRead: () => api('/api/notifications/read-all', { method: 'POST' })
 };
 
 // ============ Init ============
@@ -169,8 +181,14 @@ async function init() {
   bindAttendant();
   bindLeadChat();
   bindAiAssistant();
+  bindOrgDetailModal();
+  bindExtraInfo();
+  bindNotifications();
+  bindComms();
 
   ensureAttendant();
+  pollNotifications();
+  setInterval(pollNotifications, 25000);
 }
 
 async function loadAllData() {
@@ -198,19 +216,17 @@ async function loadAllData() {
 function switchView(viewName) {
   document.querySelectorAll('.view').forEach((v) => v.classList.remove('active'));
   document.getElementById(`view-${viewName}`).classList.add('active');
-  document.querySelectorAll('.nav-tab').forEach((t) => t.classList.toggle('active', t.dataset.view === viewName));
   document.querySelectorAll('.sidebar-link').forEach((t) => t.classList.toggle('active', t.dataset.view === viewName));
 
   if (viewName === 'dashboard') renderDashboard();
   if (viewName === 'pipeline') renderKanban();
   if (viewName === 'leads') renderLeads();
   if (viewName === 'orgs') renderOrgs();
+  if (viewName === 'comunicacoes') renderComms();
+  if (viewName === 'mensagens') renderMensagens();
 }
 
 function bindNav() {
-  document.querySelectorAll('.nav-tab').forEach((tab) => {
-    tab.addEventListener('click', () => switchView(tab.dataset.view));
-  });
   document.querySelectorAll('.sidebar-link').forEach((link) => {
     link.addEventListener('click', () => switchView(link.dataset.view));
   });
@@ -637,6 +653,7 @@ async function openDealDetail(dealId) {
   document.getElementById('dd-close-date').textContent = fmtDate(deal.closeDate);
   document.getElementById('dd-owner').textContent = userName(deal.ownerId);
   renderStageDurations(deal);
+  renderExtraInfoList('dd-extra-info', deal.extraInfo, (itemId) => deleteExtraInfo('deal', dealId, itemId));
 
   const statusLabel = deal.status === 'won' ? 'Ganho' : deal.status === 'lost' ? 'Perdido' : 'Em aberto';
   document.getElementById('dd-status-badge').innerHTML = `<span class="status-badge ${deal.status}">${statusLabel}</span>`;
@@ -880,16 +897,62 @@ function bindLeadDetailModal() {
       document.querySelectorAll('#lead-tabs [data-ldtab]').forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
       const tab = btn.dataset.ldtab;
-      if (tab === 'deals') {
-        document.getElementById('ld-tab-deals').style.display = '';
-        document.getElementById('ld-tab-chat').style.display = 'none';
-      } else {
-        document.getElementById('ld-tab-deals').style.display = 'none';
-        document.getElementById('ld-tab-chat').style.display = '';
+      document.getElementById('ld-tab-deals').style.display = tab === 'deals' ? '' : 'none';
+      document.getElementById('ld-tab-chat').style.display = tab !== 'deals' && tab !== 'historico' ? '' : 'none';
+      document.getElementById('ld-tab-historico').style.display = tab === 'historico' ? '' : 'none';
+      if (tab !== 'deals' && tab !== 'historico') {
         state.leadChatChannel = tab;
         loadLeadChat();
+      } else if (tab === 'historico') {
+        loadLeadHistory();
       }
     });
+  });
+}
+
+async function loadLeadHistory() {
+  const container = document.getElementById('ld-history-list');
+  container.innerHTML = '<div class="empty-state">Carregando...</div>';
+  try {
+    const history = await Api.leadHistory(state.currentLeadId);
+    if (history.length === 0) {
+      container.innerHTML = '<div class="empty-state">Nenhuma alteração registrada ainda.</div>';
+      return;
+    }
+    container.innerHTML = history
+      .map(
+        (h) => `
+      <div class="history-item">
+        <div class="hi-who">${escapeHtml(h.attendantName)}</div>
+        <div>${escapeHtml(h.summary)}</div>
+        <div class="hi-time">${fmtDateTime(h.timestamp)}</div>
+      </div>
+    `
+      )
+      .join('');
+  } catch (err) {
+    container.innerHTML = '<div class="empty-state">Erro ao carregar histórico.</div>';
+  }
+}
+
+function renderExtraInfoList(containerId, items, onDelete) {
+  const container = document.getElementById(containerId);
+  if (!items || items.length === 0) {
+    container.innerHTML = '<div class="empty-state" style="padding:6px 0;">Nenhuma informação adicional.</div>';
+    return;
+  }
+  container.innerHTML = items
+    .map(
+      (item) => `
+    <div class="extra-info-row">
+      <span class="ei-label">${escapeHtml(item.label)}</span>
+      <span class="ei-value">${escapeHtml(item.value)} <button class="icon-btn danger" data-del-extra="${item.id}" title="Remover">🗑️</button></span>
+    </div>
+  `
+    )
+    .join('');
+  container.querySelectorAll('[data-del-extra]').forEach((btn) => {
+    btn.addEventListener('click', () => onDelete(btn.dataset.delExtra));
   });
 }
 
@@ -930,6 +993,9 @@ function openLeadDetail(leadId) {
   const sourceLabel = lead.source ? SOURCE_LABEL[lead.source.channel] || lead.source.channel : '-';
   const campaign = lead.source && lead.source.campaign ? ` — ${escapeHtml(lead.source.campaign)}` : '';
   document.getElementById('ld-source').textContent = sourceLabel === '-' ? '-' : `${sourceLabel}${campaign}`;
+
+  document.getElementById('ld-owner').textContent = lead.ownerId ? userName(lead.ownerId) : '-';
+  renderExtraInfoList('ld-extra-info', lead.extraInfo, (itemId) => deleteExtraInfo('lead', leadId, itemId));
 
   const linkedDeals = state.deals.filter((d) => d.personId === leadId);
   const dealsContainer = document.getElementById('ld-deals-list');
@@ -1055,7 +1121,7 @@ function renderOrgs() {
       .map((o) => {
         const linkedCount = state.contacts.filter((c) => c.orgId === o.id).length;
         return `
-        <tr>
+        <tr class="clickable" data-org-id="${o.id}">
           <td>${escapeHtml(o.name)}</td>
           <td>${escapeHtml(o.address || '-')}</td>
           <td>${linkedCount} lead${linkedCount === 1 ? '' : 's'}</td>
@@ -1071,6 +1137,9 @@ function renderOrgs() {
       .join('');
   }
 
+  document.querySelectorAll('#orgs-tbody tr[data-org-id]').forEach((row) => {
+    row.addEventListener('click', () => openOrgDetail(row.dataset.orgId));
+  });
   document.querySelectorAll('[data-edit-org]').forEach((btn) => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -1107,6 +1176,18 @@ function populateOrgSelect(selectId, selectedId) {
     opt.value = o.id;
     opt.textContent = o.name;
     if (o.id === selectedId) opt.selected = true;
+    select.appendChild(opt);
+  });
+}
+
+function populateUserSelect(selectId, selectedId) {
+  const select = document.getElementById(selectId);
+  select.innerHTML = '<option value="">Sem proprietário</option>';
+  state.users.forEach((u) => {
+    const opt = document.createElement('option');
+    opt.value = u.id;
+    opt.textContent = u.name;
+    if (u.id === selectedId) opt.selected = true;
     select.appendChild(opt);
   });
 }
@@ -1154,6 +1235,7 @@ function openContactModal(contact) {
   populateOrgSelect('contact-org', contact ? contact.orgId : null);
   populateCategorySelect(contact ? contact.category : null);
   populateTagChecks(contact ? contact.tags : []);
+  populateUserSelect('contact-owner', contact ? contact.ownerId : state.attendantId);
   openModal('modal-contact');
 }
 
@@ -1174,6 +1256,8 @@ async function saveContact() {
     notes: document.getElementById('contact-notes').value.trim(),
     category: document.getElementById('contact-category').value || null,
     tags: checkedTags,
+    ownerId: document.getElementById('contact-owner').value || null,
+    attendantId: state.attendantId,
     source: {
       channel: document.getElementById('contact-source-channel').value,
       campaign: document.getElementById('contact-source-campaign').value.trim()
@@ -1210,6 +1294,7 @@ function openOrgModal(org) {
   document.getElementById('org-id').value = org ? org.id : '';
   document.getElementById('org-name').value = org ? org.name : '';
   document.getElementById('org-address').value = org ? org.address : '';
+  populateUserSelect('org-owner', org ? org.ownerId : state.attendantId);
   openModal('modal-org');
 }
 
@@ -1220,7 +1305,12 @@ async function saveOrg() {
     showToast('Informe o nome da empresa');
     return;
   }
-  const payload = { name, address: document.getElementById('org-address').value.trim() };
+  const payload = {
+    name,
+    address: document.getElementById('org-address').value.trim(),
+    ownerId: document.getElementById('org-owner').value || null,
+    attendantId: state.attendantId
+  };
   try {
     if (id) {
       const updated = await Api.updateOrg(id, payload);
@@ -1234,6 +1324,9 @@ async function saveOrg() {
     }
     closeModal('modal-org');
     renderOrgs();
+    if (document.getElementById('modal-org-detail').classList.contains('show') && state.currentOrgId) {
+      openOrgDetail(state.currentOrgId);
+    }
   } catch (err) {
     showToast('Erro ao salvar empresa');
   }
@@ -1770,6 +1863,441 @@ async function sendAiChatMessage() {
       `<div class="chat-bubble-row in"><div class="chat-bubble">⚠️ ${escapeHtml(err.message || 'Erro ao consultar a IA')}</div></div>`
     );
   }
+}
+
+// ============ Informações adicionais (Lead / Empresa / Negócio) ============
+state.extraInfoTarget = null; // { type: 'lead'|'org'|'deal', id }
+
+function bindExtraInfo() {
+  document.getElementById('btn-add-extra-info').addEventListener('click', () => {
+    state.extraInfoTarget = { type: 'lead', id: state.currentLeadId };
+    openExtraInfoModal();
+  });
+  document.getElementById('btn-add-org-extra-info').addEventListener('click', () => {
+    state.extraInfoTarget = { type: 'org', id: state.currentOrgId };
+    openExtraInfoModal();
+  });
+  document.getElementById('btn-add-deal-extra-info').addEventListener('click', () => {
+    state.extraInfoTarget = { type: 'deal', id: state.currentDealId };
+    openExtraInfoModal();
+  });
+  document.getElementById('btn-save-extra-info').addEventListener('click', saveExtraInfo);
+}
+
+function openExtraInfoModal() {
+  document.getElementById('extra-info-label').value = '';
+  document.getElementById('extra-info-value').value = '';
+  openModal('modal-extra-info');
+}
+
+function getEntityExtraInfo(type, id) {
+  if (type === 'lead') return state.contacts.find((c) => c.id === id);
+  if (type === 'org') return state.organizations.find((o) => o.id === id);
+  if (type === 'deal') return state.deals.find((d) => d.id === id);
+  return null;
+}
+
+async function saveExtraInfo() {
+  const label = document.getElementById('extra-info-label').value.trim();
+  const value = document.getElementById('extra-info-value').value.trim();
+  if (!label || !value) {
+    showToast('Preencha título e valor');
+    return;
+  }
+  const { type, id } = state.extraInfoTarget;
+  const entity = getEntityExtraInfo(type, id);
+  if (!entity) return;
+  const newItem = { id: 'ei-' + Date.now(), label, value };
+  const extraInfo = [...(entity.extraInfo || []), newItem];
+
+  try {
+    if (type === 'lead') {
+      const updated = await Api.updateContact(id, { extraInfo, attendantId: state.attendantId });
+      Object.assign(entity, updated);
+      renderExtraInfoList('ld-extra-info', entity.extraInfo, (itemId) => deleteExtraInfo('lead', id, itemId));
+    } else if (type === 'org') {
+      const updated = await Api.updateOrg(id, { extraInfo, attendantId: state.attendantId });
+      Object.assign(entity, updated);
+      renderExtraInfoList('od-extra-info', entity.extraInfo, (itemId) => deleteExtraInfo('org', id, itemId));
+    } else if (type === 'deal') {
+      const updated = await Api.updateDeal(id, { extraInfo });
+      Object.assign(entity, updated);
+      renderExtraInfoList('dd-extra-info', entity.extraInfo, (itemId) => deleteExtraInfo('deal', id, itemId));
+    }
+    closeModal('modal-extra-info');
+    showToast('Informação adicionada');
+  } catch (err) {
+    showToast('Erro ao adicionar informação');
+  }
+}
+
+async function deleteExtraInfo(type, id, itemId) {
+  const entity = getEntityExtraInfo(type, id);
+  if (!entity) return;
+  const extraInfo = (entity.extraInfo || []).filter((i) => i.id !== itemId);
+  try {
+    if (type === 'lead') {
+      const updated = await Api.updateContact(id, { extraInfo, attendantId: state.attendantId });
+      Object.assign(entity, updated);
+      renderExtraInfoList('ld-extra-info', entity.extraInfo, (iid) => deleteExtraInfo('lead', id, iid));
+    } else if (type === 'org') {
+      const updated = await Api.updateOrg(id, { extraInfo, attendantId: state.attendantId });
+      Object.assign(entity, updated);
+      renderExtraInfoList('od-extra-info', entity.extraInfo, (iid) => deleteExtraInfo('org', id, iid));
+    } else if (type === 'deal') {
+      const updated = await Api.updateDeal(id, { extraInfo });
+      Object.assign(entity, updated);
+      renderExtraInfoList('dd-extra-info', entity.extraInfo, (iid) => deleteExtraInfo('deal', id, iid));
+    }
+    showToast('Informação removida');
+  } catch (err) {
+    showToast('Erro ao remover informação');
+  }
+}
+
+// ============ Organization Detail modal ============
+function bindOrgDetailModal() {
+  document.getElementById('btn-edit-org-from-detail').addEventListener('click', () => {
+    const org = state.organizations.find((o) => o.id === state.currentOrgId);
+    closeModal('modal-org-detail');
+    openOrgModal(org);
+  });
+
+  document.querySelectorAll('#org-tabs [data-odtab]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#org-tabs [data-odtab]').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      const tab = btn.dataset.odtab;
+      document.getElementById('od-tab-leads').style.display = tab === 'leads' ? '' : 'none';
+      document.getElementById('od-tab-historico').style.display = tab === 'historico' ? '' : 'none';
+      if (tab === 'historico') loadOrgHistory();
+    });
+  });
+}
+
+async function loadOrgHistory() {
+  const container = document.getElementById('od-history-list');
+  container.innerHTML = '<div class="empty-state">Carregando...</div>';
+  try {
+    const history = await Api.orgHistory(state.currentOrgId);
+    if (history.length === 0) {
+      container.innerHTML = '<div class="empty-state">Nenhuma alteração registrada ainda.</div>';
+      return;
+    }
+    container.innerHTML = history
+      .map(
+        (h) => `
+      <div class="history-item">
+        <div class="hi-who">${escapeHtml(h.attendantName)}</div>
+        <div>${escapeHtml(h.summary)}</div>
+        <div class="hi-time">${fmtDateTime(h.timestamp)}</div>
+      </div>
+    `
+      )
+      .join('');
+  } catch (err) {
+    container.innerHTML = '<div class="empty-state">Erro ao carregar histórico.</div>';
+  }
+}
+
+function openOrgDetail(orgId) {
+  const org = state.organizations.find((o) => o.id === orgId);
+  if (!org) return;
+  state.currentOrgId = orgId;
+
+  document.querySelectorAll('#org-tabs [data-odtab]').forEach((b) => b.classList.toggle('active', b.dataset.odtab === 'leads'));
+  document.getElementById('od-tab-leads').style.display = '';
+  document.getElementById('od-tab-historico').style.display = 'none';
+
+  document.getElementById('od-name').textContent = org.name;
+  document.getElementById('od-address').textContent = org.address || '-';
+  document.getElementById('od-owner').textContent = org.ownerId ? userName(org.ownerId) : '-';
+  renderExtraInfoList('od-extra-info', org.extraInfo, (itemId) => deleteExtraInfo('org', orgId, itemId));
+
+  const linkedLeads = state.contacts.filter((c) => c.orgId === orgId);
+  const container = document.getElementById('od-leads-list');
+  container.innerHTML = linkedLeads.length
+    ? linkedLeads
+        .map(
+          (lead) => `
+      <div class="list-row" data-goto-lead="${lead.id}" style="cursor:pointer;">
+        <span class="name">${escapeHtml(lead.name)}</span>
+        <span style="color:#8a94a6; font-size:12px;">${escapeHtml(lead.email || '')}</span>
+      </div>
+    `
+        )
+        .join('')
+    : '<div class="empty-state">Nenhum lead vinculado a esta empresa ainda.</div>';
+  container.querySelectorAll('[data-goto-lead]').forEach((row) => {
+    row.addEventListener('click', () => {
+      closeModal('modal-org-detail');
+      openLeadDetail(row.dataset.gotoLead);
+    });
+  });
+
+  openModal('modal-org-detail');
+}
+
+// ============ Comunicações (hub central de conversas) ============
+function bindComms() {
+  document.getElementById('comms-filter').addEventListener('input', renderComms);
+  document.querySelectorAll('#comms-channel-tabs [data-commschannel]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#comms-channel-tabs [data-commschannel]').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.commsChannel = btn.dataset.commschannel;
+      loadCommsChat();
+    });
+  });
+  document.getElementById('comms-chat-send').addEventListener('click', sendCommsMessage);
+  document.getElementById('comms-chat-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendCommsMessage();
+    }
+  });
+}
+
+async function renderComms() {
+  const container = document.getElementById('comms-thread-list');
+  container.innerHTML = '<div class="empty-state">Carregando conversas...</div>';
+  try {
+    const threads = await Api.allMessages();
+    const filter = (document.getElementById('comms-filter').value || '').toLowerCase();
+    const filtered = threads.filter((t) => t.leadName.toLowerCase().includes(filter));
+
+    if (filtered.length === 0) {
+      container.innerHTML = '<div class="empty-state">Nenhuma conversa ainda.</div>';
+      return;
+    }
+
+    container.innerHTML = filtered
+      .map(
+        (t) => `
+      <div class="comms-thread-item" data-thread-lead="${t.leadId}" data-thread-channel="${t.channel}">
+        <div class="owner-avatar">${initials(t.leadName)}</div>
+        <div style="min-width:0;">
+          <div class="ct-name">${escapeHtml(t.leadName)} <span style="font-weight:400; color:#8a94a6;">· ${CHANNEL_LABEL[t.channel] || t.channel}</span></div>
+          <div class="ct-preview">${escapeHtml(t.lastMessage.text)}</div>
+        </div>
+      </div>
+    `
+      )
+      .join('');
+
+    container.querySelectorAll('[data-thread-lead]').forEach((el) => {
+      el.addEventListener('click', () => {
+        container.querySelectorAll('.comms-thread-item').forEach((i) => i.classList.remove('active'));
+        el.classList.add('active');
+        openCommsThread(el.dataset.threadLead, el.dataset.threadChannel);
+      });
+    });
+  } catch (err) {
+    container.innerHTML = '<div class="empty-state">Erro ao carregar conversas.</div>';
+  }
+}
+
+function openCommsThread(leadId, channel) {
+  const lead = state.contacts.find((c) => c.id === leadId);
+  if (!lead) return;
+  state.commsLeadId = leadId;
+  state.commsChannel = channel;
+
+  document.getElementById('comms-empty-state').style.display = 'none';
+  document.getElementById('comms-chat-panel').style.display = 'flex';
+  document.getElementById('comms-chat-panel').style.flexDirection = 'column';
+  document.getElementById('comms-chat-panel').style.flex = '1';
+  document.getElementById('comms-chat-panel').style.minHeight = '0';
+  document.getElementById('comms-chat-lead-name').textContent = lead.name;
+  document.querySelectorAll('#comms-channel-tabs [data-commschannel]').forEach((b) =>
+    b.classList.toggle('active', b.dataset.commschannel === channel)
+  );
+
+  loadCommsChat();
+}
+
+async function loadCommsChat() {
+  if (!state.commsLeadId) return;
+  const lead = state.contacts.find((c) => c.id === state.commsLeadId);
+  const thread = document.getElementById('comms-chat-thread');
+  thread.innerHTML = '<div class="empty-state">Carregando...</div>';
+  try {
+    const messages = await Api.leadMessages(state.commsLeadId, state.commsChannel);
+    if (messages.length === 0) {
+      thread.innerHTML = `<div class="empty-state">Nenhuma mensagem em ${CHANNEL_LABEL[state.commsChannel]} ainda.</div>`;
+    } else {
+      thread.innerHTML = messages.map((m) => renderChatBubble(m, lead.name)).join('');
+      thread.scrollTop = thread.scrollHeight;
+    }
+  } catch (err) {
+    thread.innerHTML = '<div class="empty-state">Erro ao carregar conversa.</div>';
+  }
+}
+
+async function sendCommsMessage() {
+  const input = document.getElementById('comms-chat-input');
+  const text = input.value.trim();
+  if (!text || !state.commsLeadId) return;
+  if (!state.attendantId) {
+    showToast('Selecione seu nome de atendente primeiro');
+    openAttendantPicker();
+    return;
+  }
+  try {
+    await Api.sendLeadMessage(state.commsLeadId, state.commsChannel, text, state.attendantId);
+    input.value = '';
+    await loadCommsChat();
+    renderComms();
+  } catch (err) {
+    showToast(err.message || 'Erro ao enviar mensagem');
+  }
+}
+
+// ============ Notificações e Mensagens ============
+function bindNotifications() {
+  document.getElementById('notif-bell-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const dropdown = document.getElementById('notif-dropdown');
+    const opening = !dropdown.classList.contains('show');
+    dropdown.classList.toggle('show');
+    if (opening) loadNotifDropdown();
+  });
+  document.addEventListener('click', (e) => {
+    const wrap = document.querySelector('.notif-bell-wrap');
+    if (wrap && !wrap.contains(e.target)) {
+      document.getElementById('notif-dropdown').classList.remove('show');
+    }
+  });
+  document.getElementById('notif-mark-all').addEventListener('click', async () => {
+    await Api.markAllNotifRead();
+    state.notifications.forEach((n) => (n.read = true));
+    loadNotifDropdown();
+    updateNotifBadges();
+  });
+  document.getElementById('btn-mark-all-messages').addEventListener('click', async () => {
+    await Api.markAllNotifRead();
+    state.notifications.forEach((n) => (n.read = true));
+    renderMensagens();
+    updateNotifBadges();
+  });
+
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+}
+
+function updateNotifBadges() {
+  const unread = state.notifications.filter((n) => !n.read).length;
+  const bellBadge = document.getElementById('notif-badge');
+  const sidebarBadge = document.getElementById('sidebar-msg-badge');
+  [bellBadge, sidebarBadge].forEach((el) => {
+    if (unread > 0) {
+      el.textContent = unread > 99 ? '99+' : unread;
+      el.style.display = '';
+    } else {
+      el.style.display = 'none';
+    }
+  });
+}
+
+async function loadNotifDropdown() {
+  const list = document.getElementById('notif-dropdown-list');
+  if (state.notifications.length === 0) {
+    list.innerHTML = '<div class="empty-state" style="padding:20px;">Nenhuma notificação ainda.</div>';
+    return;
+  }
+  list.innerHTML = state.notifications
+    .slice(0, 15)
+    .map(
+      (n) => `
+    <button class="notif-item ${n.read ? '' : 'unread'}" data-notif-id="${n.id}" data-notif-lead="${n.leadId}" data-notif-channel="${n.channel}">
+      <div class="ni-lead">${escapeHtml(n.leadName)} · ${CHANNEL_LABEL[n.channel] || n.channel}</div>
+      <div class="ni-preview">${escapeHtml(n.preview)}</div>
+      <div class="ni-time">${fmtDateTime(n.timestamp)}</div>
+    </button>
+  `
+    )
+    .join('');
+
+  list.querySelectorAll('[data-notif-id]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      await Api.markNotifRead(btn.dataset.notifId);
+      const n = state.notifications.find((n) => n.id === btn.dataset.notifId);
+      if (n) n.read = true;
+      updateNotifBadges();
+      document.getElementById('notif-dropdown').classList.remove('show');
+      switchView('comunicacoes');
+      setTimeout(() => openCommsThread(btn.dataset.notifLead, btn.dataset.notifChannel), 50);
+    });
+  });
+}
+
+function renderMensagens() {
+  const container = document.getElementById('mensagens-list');
+  if (state.notifications.length === 0) {
+    container.innerHTML = '<div class="empty-state">Nenhuma mensagem recebida ainda.</div>';
+    return;
+  }
+  container.innerHTML = state.notifications
+    .map(
+      (n) => `
+    <div class="message-row ${n.read ? '' : 'unread'}" data-msg-id="${n.id}" data-msg-lead="${n.leadId}" data-msg-channel="${n.channel}">
+      <div>
+        <div class="ni-lead">${escapeHtml(n.leadName)} · ${CHANNEL_LABEL[n.channel] || n.channel}</div>
+        <div class="ni-preview">${escapeHtml(n.preview)}</div>
+      </div>
+      <div class="ni-time">${fmtDateTime(n.timestamp)}</div>
+    </div>
+  `
+    )
+    .join('');
+
+  container.querySelectorAll('[data-msg-id]').forEach((row) => {
+    row.addEventListener('click', async () => {
+      await Api.markNotifRead(row.dataset.msgId);
+      const n = state.notifications.find((n) => n.id === row.dataset.msgId);
+      if (n) n.read = true;
+      updateNotifBadges();
+      renderMensagens();
+      switchView('comunicacoes');
+      setTimeout(() => openCommsThread(row.dataset.msgLead, row.dataset.msgChannel), 50);
+    });
+  });
+}
+
+async function pollNotifications() {
+  try {
+    const notifications = await Api.notifications();
+    const isFirstLoad = state.shownNotificationIds.size === 0 && state.notifications.length === 0;
+    state.notifications = notifications;
+    updateNotifBadges();
+
+    notifications
+      .filter((n) => !n.read && !state.shownNotificationIds.has(n.id))
+      .forEach((n) => {
+        state.shownNotificationIds.add(n.id);
+        if (!isFirstLoad) showBrowserNotification(n);
+      });
+
+    if (isFirstLoad) {
+      notifications.forEach((n) => state.shownNotificationIds.add(n.id));
+    }
+  } catch (err) {
+    // silencioso — próxima verificação tenta de novo
+  }
+}
+
+function showBrowserNotification(n) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  const notif = new Notification(`Nova mensagem de ${n.leadName}`, {
+    body: `${CHANNEL_LABEL[n.channel] || n.channel}: ${n.preview}`,
+    icon: '/img/logo.webp'
+  });
+  notif.onclick = () => {
+    window.focus();
+    switchView('comunicacoes');
+    openCommsThread(n.leadId, n.channel);
+  };
 }
 
 // ============ Boot ============
