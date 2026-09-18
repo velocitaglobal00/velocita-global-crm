@@ -971,8 +971,17 @@ async function callOpenAiCompat(baseUrl, apiKey, model, systemPrompt, messages) 
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({ model, messages: [{ role: 'system', content: systemPrompt }, ...messages] })
   });
-  const result = await response.json();
-  if (!response.ok) throw new Error((result.error && result.error.message) || 'Erro na API');
+  const raw = await response.text();
+  let result = {};
+  try {
+    result = JSON.parse(raw);
+  } catch (e) {
+    // corpo não é JSON (ex: página de erro HTML) — mantém result vazio e usa o raw abaixo
+  }
+  if (!response.ok) {
+    const detail = (result.error && (result.error.message || result.error)) || raw.slice(0, 200) || 'sem detalhes';
+    throw new Error(`HTTP ${response.status} (modelo "${model}"): ${detail}`);
+  }
   return (result.choices && result.choices[0] && result.choices[0].message.content) || '';
 }
 
@@ -983,8 +992,17 @@ async function callGeminiRaw(apiKey, model, systemPrompt, messages) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ contents: [{ parts: [{ text: transcript }] }] })
   });
-  const result = await response.json();
-  if (!response.ok) throw new Error((result.error && result.error.message) || 'Erro na API do Gemini');
+  const raw = await response.text();
+  let result = {};
+  try {
+    result = JSON.parse(raw);
+  } catch (e) {
+    // corpo não é JSON — mantém result vazio e usa o raw abaixo
+  }
+  if (!response.ok) {
+    const detail = (result.error && (result.error.message || result.error)) || raw.slice(0, 200) || 'sem detalhes';
+    throw new Error(`HTTP ${response.status} (modelo "${model}"): ${detail}`);
+  }
   return (result.candidates && result.candidates[0] && result.candidates[0].content.parts[0].text) || '';
 }
 
@@ -1030,16 +1048,16 @@ async function callAutoFreeAi(systemPrompt, userMessage, history) {
     );
   }
 
-  let lastErr = null;
+  const failures = [];
   for (const provider of providers) {
     try {
       return await withAiTimeout(provider.fn(), 20000, provider.name);
     } catch (e) {
       console.log(`[Assistente IA do CRM] ${provider.name} falhou: ${e.message}`);
-      lastErr = e;
+      failures.push(`${provider.name}: ${e.message}`);
     }
   }
-  throw lastErr;
+  throw new Error(`Todas as IAs gratuitas configuradas falharam — ${failures.join(' | ')}`);
 }
 
 async function callAiProvider(ai, systemPrompt, userMessage, history) {
