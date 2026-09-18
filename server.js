@@ -1212,6 +1212,12 @@ app.use('/roteiro-do-dia', roteiroDoDia.app);
 
 (async () => {
   try {
+    await db.init();
+  } catch (e) {
+    console.error('Falha ao iniciar o banco de dados do CRM (voltando ao db.json local):', e);
+  }
+
+  try {
     await roteiroDoDia.init();
   } catch (e) {
     console.error('Falha ao iniciar o Roteiro do Dia:', e);
