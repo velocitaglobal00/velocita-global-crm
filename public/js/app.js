@@ -33,7 +33,9 @@ const state = {
   teamChatPendingAttachment: null,
   teamChatRecorder: null,
   teamChatRecordedChunks: [],
-  teamChatTarget: null // null = Geral; caso contrário, id do usuário do chat privado
+  teamChatTarget: null, // null = Geral; caso contrário, id do usuário do chat privado
+  biTab: 'geral',
+  biPollHandle: null
 };
 
 const ATTENDANT_KEY = 'vg_attendant_id';
@@ -78,10 +80,13 @@ const SOURCE_LABEL = {
   facebook_ads: 'Facebook Ads',
   instagram_ads: 'Instagram Ads',
   google_ads: 'Google Ads',
+  tiktok_ads: 'TikTok Ads / Spark Ads',
   whatsapp: 'WhatsApp',
   indicacao: 'Indicação',
   organico: 'Orgânico / Site'
 };
+const TRAFEGO_PAGO_CHANNELS = ['facebook_ads', 'instagram_ads', 'google_ads', 'tiktok_ads'];
+const MARKETPLACE_PLATFORMS = ['Mercado Livre', 'Shopee', 'Amazon', 'TikTok Shop'];
 const CHANNEL_LABEL = { whatsapp: 'WhatsApp', facebook: 'Facebook', instagram: 'Instagram', email: 'E-mail', site: 'Site' };
 
 function fmtMoney(value, currency = 'BRL') {
@@ -245,6 +250,7 @@ async function init() {
   bindUserSignatureModal();
   bindRoteiro();
   bindTeamChat();
+  bindBiTabs();
 
   ensureAttendant();
   pollNotifications();
@@ -286,7 +292,12 @@ function switchView(viewName) {
   if (viewName === 'orgs') renderOrgs();
   if (viewName === 'comunicacoes') renderComms();
   if (viewName === 'mensagens') renderMensagens();
-  if (viewName === 'bi') renderBI();
+  if (viewName === 'bi') {
+    renderBiActiveTab();
+    startBiPolling();
+  } else {
+    stopBiPolling();
+  }
   if (viewName === 'roteiro') renderRoteiro();
   if (viewName === 'chatequipe') {
     renderTeamChat();
@@ -3330,7 +3341,167 @@ async function renderTeamChat() {
   }
 }
 
-// ============ BI — faturamento por categoria ============
+// ============ BI — visão geral, tráfego pago e marketplaces ============
+function bindBiTabs() {
+  document.querySelectorAll('#view-bi .settings-tab').forEach((tab) => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('#view-bi .settings-tab').forEach((t) => t.classList.remove('active'));
+      tab.classList.add('active');
+      state.biTab = tab.dataset.bitab;
+      document.getElementById('bi-tab-geral').style.display = state.biTab === 'geral' ? '' : 'none';
+      document.getElementById('bi-tab-trafego').style.display = state.biTab === 'trafego' ? '' : 'none';
+      document.getElementById('bi-tab-marketplaces').style.display = state.biTab === 'marketplaces' ? '' : 'none';
+      renderBiActiveTab();
+    });
+  });
+}
+
+function renderBiActiveTab() {
+  if (state.biTab === 'trafego') renderBiTrafegoPago();
+  else if (state.biTab === 'marketplaces') renderBiMarketplaces();
+  else renderBI();
+  document.getElementById('bi-updated-at').textContent = `Atualizado às ${new Date().toLocaleTimeString('pt-BR')}`;
+}
+
+function startBiPolling() {
+  stopBiPolling();
+  state.biPollHandle = setInterval(async () => {
+    try {
+      const [deals, contacts] = await Promise.all([Api.deals(), Api.contacts()]);
+      state.deals = deals;
+      state.contacts = contacts;
+      renderBiActiveTab();
+    } catch (err) {
+      // silencioso — próxima verificação tenta de novo
+    }
+  }, 20000);
+}
+
+function stopBiPolling() {
+  if (state.biPollHandle) {
+    clearInterval(state.biPollHandle);
+    state.biPollHandle = null;
+  }
+}
+
+// Métricas de leads/negócios ligados a um canal de tráfego pago (Facebook Ads,
+// Instagram Ads, Google Ads, TikTok Ads) — cruza contact.source.channel com os
+// negócios do respectivo lead.
+function biMetricsForChannel(channel) {
+  const leadIds = state.contacts.filter((c) => c.source && c.source.channel === channel).map((c) => c.id);
+  const deals = state.deals.filter((d) => leadIds.includes(d.personId));
+  const openDeals = deals.filter((d) => d.status === 'open');
+  const wonDeals = deals.filter((d) => d.status === 'won');
+  const lostDeals = deals.filter((d) => d.status === 'lost');
+  const openValue = openDeals.reduce((s, d) => s + Number(d.value), 0);
+  const wonValue = wonDeals.reduce((s, d) => s + Number(d.value), 0);
+  const closedCount = wonDeals.length + lostDeals.length;
+  const conversion = closedCount === 0 ? 0 : Math.round((wonDeals.length / closedCount) * 100);
+  return { leadCount: leadIds.length, openCount: openDeals.length, openValue, wonValue, conversion };
+}
+
+function renderBiTrafegoPago() {
+  const container = document.getElementById('bi-trafego-container');
+  const metrics = TRAFEGO_PAGO_CHANNELS.map((ch) => ({ channel: ch, label: SOURCE_LABEL[ch], ...biMetricsForChannel(ch) }));
+  const totalWon = metrics.reduce((s, m) => s + m.wonValue, 0);
+  const maxWon = Math.max(1, ...metrics.map((m) => m.wonValue || m.openValue));
+
+  const comparisonRows = metrics
+    .map(
+      (m) => `
+    <div class="funnel-row">
+      <div class="funnel-label">${escapeHtml(m.label)}</div>
+      <div class="funnel-bar-track"><div class="funnel-bar-fill" style="width:${Math.round(((m.wonValue || m.openValue) / maxWon) * 100)}%; background:var(--vg-orange)"></div></div>
+      <div class="funnel-count wide">${fmtMoney(m.wonValue)}${m.openValue ? ` <span style="font-weight:400; color:var(--vg-text-muted);">(+${fmtMoney(m.openValue)} aberto)</span>` : ''}</div>
+    </div>
+  `
+    )
+    .join('');
+
+  const cards = metrics
+    .map(
+      (m) => `
+    <div class="panel">
+      <h3>${escapeHtml(m.label)}</h3>
+      <div class="stat-grid">
+        <div class="stat-card"><div class="label">Leads</div><div class="value">${m.leadCount}</div></div>
+        <div class="stat-card"><div class="label">Negócios em aberto</div><div class="value">${m.openCount}</div></div>
+        <div class="stat-card"><div class="label">Valor em aberto</div><div class="value orange">${fmtMoney(m.openValue)}</div></div>
+        <div class="stat-card"><div class="label">Faturamento (Ganho)</div><div class="value green">${fmtMoney(m.wonValue)}</div></div>
+        <div class="stat-card"><div class="label">Taxa de conversão</div><div class="value">${m.conversion}%</div></div>
+      </div>
+    </div>
+  `
+    )
+    .join('');
+
+  container.innerHTML = `
+    <div class="panel">
+      <h3>Faturamento por Canal de Tráfego Pago</h3>
+      <div class="stat-grid" style="margin-bottom:16px;">
+        <div class="stat-card"><div class="label">Faturamento total (Ganho)</div><div class="value green">${fmtMoney(totalWon)}</div></div>
+      </div>
+      ${comparisonRows || '<div class="empty-state">Nenhum lead vinculado a tráfego pago ainda.</div>'}
+    </div>
+    ${cards}
+  `;
+}
+
+function biMetricsForPlatform(platform) {
+  const deals = state.deals.filter((d) => d.platform === platform);
+  const openDeals = deals.filter((d) => d.status === 'open');
+  const wonDeals = deals.filter((d) => d.status === 'won');
+  const openValue = openDeals.reduce((s, d) => s + Number(d.value), 0);
+  const wonValue = wonDeals.reduce((s, d) => s + Number(d.value), 0);
+  return { dealCount: deals.length, openCount: openDeals.length, openValue, wonValue };
+}
+
+function renderBiMarketplaces() {
+  const container = document.getElementById('bi-marketplaces-container');
+  const metrics = MARKETPLACE_PLATFORMS.map((p) => ({ platform: p, ...biMetricsForPlatform(p) }));
+  const totalWon = metrics.reduce((s, m) => s + m.wonValue, 0);
+  const maxWon = Math.max(1, ...metrics.map((m) => m.wonValue || m.openValue));
+
+  const comparisonRows = metrics
+    .map(
+      (m) => `
+    <div class="funnel-row">
+      <div class="funnel-label">${escapeHtml(m.platform)}</div>
+      <div class="funnel-bar-track"><div class="funnel-bar-fill" style="width:${Math.round(((m.wonValue || m.openValue) / maxWon) * 100)}%; background:var(--vg-navy)"></div></div>
+      <div class="funnel-count wide">${fmtMoney(m.wonValue)}${m.openValue ? ` <span style="font-weight:400; color:var(--vg-text-muted);">(+${fmtMoney(m.openValue)} aberto)</span>` : ''}</div>
+    </div>
+  `
+    )
+    .join('');
+
+  const cards = metrics
+    .map(
+      (m) => `
+    <div class="panel">
+      <h3>${escapeHtml(m.platform)}</h3>
+      <div class="stat-grid">
+        <div class="stat-card"><div class="label">Negócios</div><div class="value">${m.dealCount}</div></div>
+        <div class="stat-card"><div class="label">Em aberto</div><div class="value">${m.openCount}</div></div>
+        <div class="stat-card"><div class="label">Valor em aberto</div><div class="value orange">${fmtMoney(m.openValue)}</div></div>
+        <div class="stat-card"><div class="label">Faturamento (Ganho)</div><div class="value green">${fmtMoney(m.wonValue)}</div></div>
+      </div>
+    </div>
+  `
+    )
+    .join('');
+
+  container.innerHTML = `
+    <div class="panel">
+      <h3>Faturamento por Marketplace</h3>
+      <div class="stat-grid" style="margin-bottom:16px;">
+        <div class="stat-card"><div class="label">Faturamento total (Ganho)</div><div class="value green">${fmtMoney(totalWon)}</div></div>
+      </div>
+      ${comparisonRows || '<div class="empty-state">Nenhum negócio vinculado a um marketplace ainda.</div>'}
+    </div>
+    ${cards}
+  `;
+}
+
 function renderBI() {
   const container = document.getElementById('bi-container');
   const categories = state.settings.categories || [];

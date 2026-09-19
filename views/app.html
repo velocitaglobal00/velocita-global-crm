@@ -262,10 +262,26 @@
           <div id="mensagens-list"></div>
         </section>
 
-        <!-- ===== BI (faturamento por categoria) ===== -->
+        <!-- ===== BI (visão geral, tráfego pago, marketplaces) ===== -->
         <section class="view" id="view-bi">
-          <h2 style="color:var(--vg-navy); margin-top:0;">BI — Faturamento por Categoria</h2>
-          <div id="bi-container"></div>
+          <div class="pipeline-header">
+            <h2 style="margin:0;">BI — Análises em Tempo Real</h2>
+            <span class="k" id="bi-updated-at" style="font-size:11px; color:var(--vg-text-muted);"></span>
+          </div>
+          <div class="settings-tabs">
+            <button class="settings-tab active" data-bitab="geral">Visão Geral</button>
+            <button class="settings-tab" data-bitab="trafego">Tráfego Pago</button>
+            <button class="settings-tab" data-bitab="marketplaces">Marketplaces</button>
+          </div>
+          <div id="bi-tab-geral" class="bi-tab-panel">
+            <div id="bi-container"></div>
+          </div>
+          <div id="bi-tab-trafego" class="bi-tab-panel" style="display:none;">
+            <div id="bi-trafego-container"></div>
+          </div>
+          <div id="bi-tab-marketplaces" class="bi-tab-panel" style="display:none;">
+            <div id="bi-marketplaces-container"></div>
+          </div>
         </section>
 
         <!-- ===== CHAT DA EQUIPE (interno, somente entre admins/atendentes) ===== -->
@@ -544,9 +560,9 @@
           <select id="deal-platform">
             <option value="">Nenhuma / não se aplica</option>
             <option value="Mercado Livre">Mercado Livre</option>
-            <option value="Shopify">Shopify</option>
+            <option value="Shopee">Shopee</option>
             <option value="Amazon">Amazon</option>
-            <option value="Magazine Luiza">Magazine Luiza</option>
+            <option value="TikTok Shop">TikTok Shop</option>
             <option value="Site Próprio">Site Próprio</option>
             <option value="Outro">Outro</option>
           </select>
@@ -689,6 +705,7 @@
               <option value="facebook_ads">Facebook Ads</option>
               <option value="instagram_ads">Instagram Ads</option>
               <option value="google_ads">Google Ads</option>
+              <option value="tiktok_ads">TikTok Ads / Spark Ads</option>
               <option value="whatsapp">WhatsApp</option>
               <option value="indicacao">Indicação</option>
               <option value="organico">Orgânico / Site</option>
