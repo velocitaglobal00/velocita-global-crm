@@ -1009,42 +1009,56 @@ async function callGeminiRaw(apiKey, model, systemPrompt, messages) {
   return (result.candidates && result.candidates[0] && result.candidates[0].content.parts[0].text) || '';
 }
 
-async function callAutoFreeAi(systemPrompt, userMessage, history) {
-  const messages = (history || []).map((h) => ({ role: h.role, content: h.content }));
-  messages.push({ role: 'user', content: userMessage });
-
+// Provedores gratuitos configurados via variáveis de ambiente, cada um com uma
+// função call(systemPrompt, messages) genérica — usada tanto para o rascunho
+// inicial (com histórico da conversa) quanto para os passos de revisão
+// (uma única mensagem com o rascunho a melhorar).
+function buildFreeAiProviders() {
   const providers = [];
   if (process.env.GEMINI_API_KEY) {
     providers.push({
       name: 'Gemini',
-      fn: () => callGeminiRaw(process.env.GEMINI_API_KEY, process.env.GEMINI_MODEL || 'gemini-1.5-flash', systemPrompt, messages)
+      call: (sys, msgs) => callGeminiRaw(process.env.GEMINI_API_KEY, process.env.GEMINI_MODEL || 'gemini-1.5-flash', sys, msgs)
     });
   }
   if (process.env.GROQ_API_KEY) {
     providers.push({
       name: 'Groq',
-      fn: () => callOpenAiCompat('https://api.groq.com/openai/v1/chat/completions', process.env.GROQ_API_KEY, process.env.GROQ_MODEL || 'llama-3.1-8b-instant', systemPrompt, messages)
+      call: (sys, msgs) => callOpenAiCompat('https://api.groq.com/openai/v1/chat/completions', process.env.GROQ_API_KEY, process.env.GROQ_MODEL || 'llama-3.1-8b-instant', sys, msgs)
     });
   }
   if (process.env.OPENROUTER_API_KEY) {
     providers.push({
       name: 'OpenRouter',
-      fn: () => callOpenAiCompat('https://openrouter.ai/api/v1/chat/completions', process.env.OPENROUTER_API_KEY, process.env.OPENROUTER_MODEL || 'openrouter/free', systemPrompt, messages)
+      call: (sys, msgs) => callOpenAiCompat('https://openrouter.ai/api/v1/chat/completions', process.env.OPENROUTER_API_KEY, process.env.OPENROUTER_MODEL || 'openrouter/free', sys, msgs)
     });
   }
   if (process.env.CEREBRAS_API_KEY) {
     providers.push({
       name: 'Cerebras',
-      fn: () => callOpenAiCompat('https://api.cerebras.ai/v1/chat/completions', process.env.CEREBRAS_API_KEY, process.env.CEREBRAS_MODEL || 'llama3.1-8b', systemPrompt, messages)
+      call: (sys, msgs) => callOpenAiCompat('https://api.cerebras.ai/v1/chat/completions', process.env.CEREBRAS_API_KEY, process.env.CEREBRAS_MODEL || 'llama3.1-8b', sys, msgs)
     });
   }
   if (process.env.MISTRAL_API_KEY) {
     providers.push({
       name: 'Mistral',
-      fn: () => callOpenAiCompat('https://api.mistral.ai/v1/chat/completions', process.env.MISTRAL_API_KEY, process.env.MISTRAL_MODEL || 'mistral-small-latest', systemPrompt, messages)
+      call: (sys, msgs) => callOpenAiCompat('https://api.mistral.ai/v1/chat/completions', process.env.MISTRAL_API_KEY, process.env.MISTRAL_MODEL || 'mistral-small-latest', sys, msgs)
     });
   }
+  return providers;
+}
 
+// Loop de refinamento com até 3 IAs gratuitas: a primeira que responder faz o
+// rascunho, e as próximas (até 2) revisam e melhoram o texto em sequência —
+// entrega uma resposta mais elaborada do que uma única IA sozinha. Se algum
+// provedor falhar no rascunho, tenta o próximo (mantém a resiliência de antes);
+// se falhar numa revisão, simplesmente mantém a versão anterior em vez de
+// derrubar a resposta já obtida.
+async function callAutoFreeAi(systemPrompt, userMessage, history) {
+  const messages = (history || []).map((h) => ({ role: h.role, content: h.content }));
+  messages.push({ role: 'user', content: userMessage });
+
+  const providers = buildFreeAiProviders();
   if (!providers.length) {
     throw new Error(
       'Nenhuma IA gratuita configurada no servidor. Peça para definir GEMINI_API_KEY, GROQ_API_KEY, OPENROUTER_API_KEY, CEREBRAS_API_KEY ou MISTRAL_API_KEY nas variáveis de ambiente do Render (as mesmas do Gerador de Roteiros), ou escolha um provedor manualmente em Configurações > Assistente IA.'
@@ -1052,15 +1066,48 @@ async function callAutoFreeAi(systemPrompt, userMessage, history) {
   }
 
   const failures = [];
-  for (const provider of providers) {
+  let draft = null;
+  let draftIndex = -1;
+  for (let i = 0; i < providers.length; i++) {
     try {
-      return await withAiTimeout(provider.fn(), 20000, provider.name);
+      draft = await withAiTimeout(providers[i].call(systemPrompt, messages), 20000, providers[i].name);
+      draftIndex = i;
+      break;
     } catch (e) {
-      console.log(`[Assistente IA do CRM] ${provider.name} falhou: ${e.message}`);
-      failures.push(`${provider.name}: ${e.message}`);
+      console.log(`[Assistente IA do CRM] ${providers[i].name} (rascunho) falhou: ${e.message}`);
+      failures.push(`${providers[i].name}: ${e.message}`);
     }
   }
-  throw new Error(`Todas as IAs gratuitas configuradas falharam — ${failures.join(' | ')}`);
+  if (draft === null) {
+    throw new Error(`Todas as IAs gratuitas configuradas falharam — ${failures.join(' | ')}`);
+  }
+
+  let current = draft;
+  const reviewers = providers.filter((_, i) => i !== draftIndex).slice(0, 2);
+  for (const provider of reviewers) {
+    const refineSystem = `Você é um revisor especialista. Melhore a resposta abaixo para a pergunta do usuário, corrigindo eventuais erros e deixando-a mais completa e útil, SEM inventar informação nova que não esteja no contexto original. Mantenha o mesmo idioma. Se a resposta tiver uma linha no formato exato [ACAO:...], preserve essa linha sem nenhuma alteração. Responda apenas com a versão final melhorada, sem comentar o que foi mudado.
+
+CONTEXTO ORIGINAL:
+${systemPrompt}
+
+PERGUNTA DO USUÁRIO:
+${userMessage}
+
+RESPOSTA A MELHORAR:
+${current}`;
+    try {
+      const improved = await withAiTimeout(
+        provider.call(refineSystem, [{ role: 'user', content: 'Melhore a resposta conforme as instruções acima.' }]),
+        20000,
+        provider.name
+      );
+      if (improved && improved.trim()) current = improved;
+    } catch (e) {
+      console.log(`[Assistente IA do CRM] ${provider.name} (revisão) falhou, mantendo a versão anterior: ${e.message}`);
+    }
+  }
+
+  return current;
 }
 
 async function callAiProvider(ai, systemPrompt, userMessage, history) {
