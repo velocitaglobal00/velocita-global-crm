@@ -222,6 +222,7 @@ async function init() {
 
   bindNav();
   bindSidebarToggle();
+  bindThemeToggle();
   bindDealModal();
   bindDealDetailModal();
   bindContactModal();
@@ -296,15 +297,66 @@ function switchView(viewName) {
 
 function bindNav() {
   document.querySelectorAll('.sidebar-link[data-view]').forEach((link) => {
-    link.addEventListener('click', () => switchView(link.dataset.view));
+    link.addEventListener('click', () => {
+      switchView(link.dataset.view);
+      if (isMobileViewport()) setSidebarOpen(false);
+    });
   });
 }
 
+const MOBILE_BREAKPOINT = 900;
+
+function isMobileViewport() {
+  return window.innerWidth <= MOBILE_BREAKPOINT;
+}
+
+function setSidebarOpen(open) {
+  document.getElementById('sidebar').classList.toggle('collapsed', !open);
+  document.getElementById('sidebar-backdrop').classList.toggle('show', open && isMobileViewport());
+}
+
 function bindSidebarToggle() {
+  if (isMobileViewport()) setSidebarOpen(false);
+
   document.getElementById('sidebar-toggle').addEventListener('click', () => {
-    document.getElementById('sidebar').classList.toggle('collapsed');
+    const isOpen = !document.getElementById('sidebar').classList.contains('collapsed');
+    setSidebarOpen(!isOpen);
+  });
+
+  document.getElementById('sidebar-backdrop').addEventListener('click', () => setSidebarOpen(false));
+}
+
+// Tema claro/escuro — chave compartilhada com o Gerador de Roteiros (mesmo site).
+const THEME_KEY = 'vg_theme';
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme === 'dark' ? 'dark' : 'light');
+}
+
+function initTheme() {
+  let saved = 'light';
+  try {
+    saved = localStorage.getItem(THEME_KEY) || 'light';
+  } catch (e) {
+    // localStorage indisponível — segue com o tema claro padrão
+  }
+  applyTheme(saved);
+}
+
+function bindThemeToggle() {
+  document.getElementById('theme-toggle-btn').addEventListener('click', () => {
+    const current = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+    const next = current === 'dark' ? 'light' : 'dark';
+    applyTheme(next);
+    try {
+      localStorage.setItem(THEME_KEY, next);
+    } catch (e) {
+      // sem localStorage, a escolha só vale para esta sessão
+    }
   });
 }
+
+initTheme();
 
 function bindLogout() {
   document.getElementById('logout-btn').addEventListener('click', async () => {
@@ -2945,7 +2997,13 @@ function bindTeamChatRecordButton() {
   btn.addEventListener('touchend', onPressEnd);
 }
 
+const TEAM_CHAT_MAX_FILE_BYTES = 14 * 1024 * 1024; // margem abaixo do limite de 20mb do servidor (o base64 infla ~33%)
+
 function handleTeamChatFile(file) {
+  if (file.size > TEAM_CHAT_MAX_FILE_BYTES) {
+    showToast('Arquivo muito grande (máx. 14MB). Escolha um arquivo menor.');
+    return;
+  }
   const reader = new FileReader();
   reader.onload = () => {
     const base64 = reader.result.split(',')[1];
@@ -2982,11 +3040,28 @@ function renderTeamChatAttachmentPreview() {
   });
 }
 
+// Safari/iOS geralmente não suporta audio/webm — detecta o primeiro formato
+// que o navegador realmente aceita em vez de fixar um só (isso fazia o áudio
+// gravar só na aparência: o blob ficava marcado como webm mas o conteúdo real
+// era outro formato, e o player não conseguia tocar).
+function pickSupportedAudioMime() {
+  const candidates = ['audio/webm', 'audio/mp4', 'audio/ogg', 'audio/aac'];
+  if (typeof MediaRecorder === 'undefined' || !MediaRecorder.isTypeSupported) return '';
+  return candidates.find((type) => MediaRecorder.isTypeSupported(type)) || '';
+}
+
 async function startTeamChatRecording() {
   const btn = document.getElementById('tc-btn-record');
+  if (typeof MediaRecorder === 'undefined' || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    showToast('Este navegador não suporta gravação de áudio.');
+    return;
+  }
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    const recorder = new MediaRecorder(stream);
+    const mimeType = pickSupportedAudioMime();
+    const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+    const actualMime = recorder.mimeType || mimeType || 'audio/webm';
+    const extension = actualMime.includes('mp4') ? 'm4a' : actualMime.includes('ogg') ? 'ogg' : actualMime.includes('aac') ? 'aac' : 'webm';
     state.teamChatRecordedChunks = [];
     recorder.ondataavailable = (e) => {
       if (e.data.size > 0) state.teamChatRecordedChunks.push(e.data);
@@ -2994,14 +3069,14 @@ async function startTeamChatRecording() {
     recorder.onstop = () => {
       stream.getTracks().forEach((t) => t.stop());
       btn.classList.remove('recording');
-      const blob = new Blob(state.teamChatRecordedChunks, { type: 'audio/webm' });
+      const blob = new Blob(state.teamChatRecordedChunks, { type: actualMime });
       const reader = new FileReader();
       reader.onload = () => {
         const base64 = reader.result.split(',')[1];
         state.teamChatPendingAttachment = {
           kind: 'audio',
-          filename: `audio-${Date.now()}.webm`,
-          mime: 'audio/webm',
+          filename: `audio-${Date.now()}.${extension}`,
+          mime: actualMime,
           dataBase64: base64
         };
         renderTeamChatAttachmentPreview();

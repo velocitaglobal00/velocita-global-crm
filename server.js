@@ -9,7 +9,10 @@ const APP_PASSWORD = 'Velocita1';
 const PORT = process.env.PORT || 3000;
 
 const app = express();
-app.use(express.json());
+// Limite maior que o padrão (100kb) porque fotos/áudios do Chat da Equipe e
+// anexos de e-mail chegam em base64 dentro do corpo JSON — uma foto de celular
+// sozinha já passa de 1-5MB antes mesmo da inflação de ~33% do base64.
+app.use(express.json({ limit: '20mb' }));
 app.use(
   session({
     secret: 'velocita-global-crm-secret',
