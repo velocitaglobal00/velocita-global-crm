@@ -183,6 +183,7 @@ const Api = {
   sendEmail: (leadId, payload) => api(`/api/leads/${leadId}/messages`, { method: 'POST', body: JSON.stringify({ channel: 'email', ...payload }) }),
   callLead: (leadId, attendantId) => api(`/api/leads/${leadId}/call`, { method: 'POST', body: JSON.stringify({ attendantId }) }),
   aiTips: () => api('/api/ai/tips'),
+  aiSmartTips: () => api('/api/ai/smart-tips', { method: 'POST' }),
   aiChat: (dealId, message, history) => api('/api/ai/chat', { method: 'POST', body: JSON.stringify({ dealId, message, history }) }),
   leadHistory: (leadId) => api(`/api/leads/${leadId}/history`),
   orgHistory: (orgId) => api(`/api/organizations/${orgId}/history`),
@@ -2088,6 +2089,8 @@ function bindAiAssistant() {
     document.getElementById('ai-chat-thread').innerHTML = '';
   });
 
+  document.getElementById('btn-ai-smart-tips').addEventListener('click', loadAiSmartTips);
+
   document.getElementById('ai-chat-send').addEventListener('click', sendAiChatMessage);
   document.getElementById('ai-chat-input').addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -2121,6 +2124,26 @@ async function loadAiTips() {
     });
   } catch (err) {
     container.innerHTML = '<div class="empty-state">Erro ao carregar dicas.</div>';
+  }
+}
+
+async function loadAiSmartTips() {
+  const container = document.getElementById('ai-smart-tips-result');
+  const btn = document.getElementById('btn-ai-smart-tips');
+  btn.disabled = true;
+  btn.textContent = 'Analisando com IA...';
+  container.innerHTML = '<div class="empty-state">Lendo os negócios em aberto e as anotações de cada um...</div>';
+  try {
+    const { reply } = await Api.aiSmartTips();
+    const html = escapeHtml(reply)
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\n/g, '<br>');
+    container.innerHTML = `<div class="ai-smart-tips-text">${html}</div>`;
+  } catch (err) {
+    container.innerHTML = `<div class="empty-state">${svgIcon('warning')} ${escapeHtml(err.message || 'Erro ao analisar os negócios')}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Analisar meus negócios com IA';
   }
 }
 
@@ -2158,6 +2181,10 @@ function buildAiActionSuggestion(type, value) {
   else if (type === 'MARCAR_GANHO') label = 'Marcar como Ganho';
   else if (type === 'MARCAR_PERDIDO') label = 'Marcar como Perdido';
   else if (type === 'ADICIONAR_TAREFA') label = `Criar tarefa: "${value}"`;
+  else if (type === 'AGENDAR_REUNIAO') {
+    const [isoDate, titulo] = (value || '').split('|');
+    label = `Agendar reunião "${titulo || 'Reunião'}" em ${fmtDateTime(isoDate)} (cria no Google Calendar)`;
+  } else if (type === 'LIGAR') label = 'Ligar para o contato (Vivo PABX)';
   else return '';
 
   return `
@@ -2187,6 +2214,23 @@ async function applyAiAction(type, value) {
       if (!state.activitiesCache[dealId]) state.activitiesCache[dealId] = [];
       state.activitiesCache[dealId].push(activity);
       state.reminders = await Api.reminders();
+    } else if (type === 'AGENDAR_REUNIAO') {
+      const [isoDate, titulo] = (value || '').split('|');
+      const activity = await Api.addActivity(dealId, {
+        type: 'meeting',
+        text: titulo || 'Reunião',
+        date: isoDate || new Date().toISOString(),
+        attendantId: state.attendantId,
+        done: false
+      });
+      if (!state.activitiesCache[dealId]) state.activitiesCache[dealId] = [];
+      state.activitiesCache[dealId].push(activity);
+      state.reminders = await Api.reminders();
+      await syncActivityToCalendar(activity.id);
+    } else if (type === 'LIGAR') {
+      const lead = state.contacts.find((c) => c.id === deal.personId);
+      if (!lead) throw new Error('Este negócio não tem um contato vinculado.');
+      await Api.callLead(lead.id, state.attendantId);
     }
     renderKanban();
     renderDashboard();

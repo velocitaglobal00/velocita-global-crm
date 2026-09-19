@@ -1157,19 +1157,23 @@ app.post('/api/ai/chat', requireAuth, async (req, res) => {
   if (deal) {
     const stage = data.stages.find((s) => s.id === deal.stage);
     context = `Negócio: "${deal.title}", valor ${deal.currency} ${deal.value}, estágio atual: ${stage ? stage.name : '-'}, status: ${deal.status}, data de fechamento esperada: ${deal.closeDate || 'não definida'}.
-Contato: ${contact ? contact.name : 'não vinculado'}.
+Contato: ${contact ? contact.name : 'não vinculado'}${contact && contact.phone ? ` (telefone: ${contact.phone})` : ''}.
 Atividades recentes: ${activities.slice(-5).map((a) => `[${a.type}] ${a.text}`).join(' | ') || 'nenhuma'}.
 Etapas disponíveis no funil (id=nome): ${stageNames}.`;
   }
 
+  const now = new Date();
   const systemPrompt = `Você é o assistente de vendas do CRM Velocita Global. Ajude o vendedor com dicas objetivas e práticas sobre o negócio abaixo. Responda em português, em até 4 frases. Não invente dados que não foram informados.
+Data e hora atuais: ${now.toISOString()} (use isso para calcular datas relativas como "amanhã" ou "sexta-feira").
 ${context}
 Se fizer sentido sugerir UMA ação concreta, adicione ao final da resposta, em uma linha própria, exatamente um destes formatos:
 [ACAO:MOVER_ETAPA:<id_da_etapa>]
 [ACAO:MARCAR_GANHO]
 [ACAO:MARCAR_PERDIDO]
 [ACAO:ADICIONAR_TAREFA:<texto da tarefa>]
-Só inclua essa linha se realmente fizer sentido. Caso contrário, não inclua nenhuma tag.`;
+[ACAO:AGENDAR_REUNIAO:<data e hora em ISO 8601>|<título curto da reunião>]
+[ACAO:LIGAR]
+Use AGENDAR_REUNIAO quando o vendedor pedir para marcar/agendar uma reunião ou call — isso cria a atividade E manda para o Google Calendar. Use LIGAR quando ele pedir para ligar para o contato — isso origina a chamada pela Vivo PABX. Só inclua a linha de ação se realmente fizer sentido pelo que foi pedido. Caso contrário, não inclua nenhuma tag.`;
 
   try {
     const reply = await callAiProvider(ai, systemPrompt, message, history);
@@ -1221,6 +1225,49 @@ app.get('/api/ai/tips', requireAuth, (req, res) => {
   }
 
   res.json(tips.slice(0, 10));
+});
+
+// ---------- Dicas de IA sob demanda: analisa os negócios em aberto e suas
+// anotações (notas do lead, informações adicionais, atividades) e sugere como
+// abordar cada um para avançar a venda. Diferente de /api/ai/tips (regras
+// locais, grátis, sempre instantâneo), esta rota chama a IA de verdade —
+// por isso só roda quando o vendedor pede, não a cada abertura do painel.
+app.post('/api/ai/smart-tips', requireAuth, async (req, res) => {
+  const data = db.read();
+  const ai = data.settings.integrations.ai || {};
+
+  const openDeals = data.deals.filter((d) => d.status === 'open');
+  if (openDeals.length === 0) {
+    return res.json({ reply: 'Nenhum negócio em aberto no momento para analisar.' });
+  }
+
+  const stageName = (id) => (data.stages.find((s) => s.id === id) || {}).name || '-';
+
+  const dealsContext = openDeals
+    .slice(0, 15)
+    .map((deal) => {
+      const contact = data.contacts.find((c) => c.id === deal.personId);
+      const activities = data.activities
+        .filter((a) => a.dealId === deal.id)
+        .slice(-4)
+        .map((a) => `${a.type}: ${a.text}`)
+        .join(' | ');
+      const extra = (deal.extraInfo || []).map((i) => `${i.label}: ${i.value}`).join(' | ');
+      return `- "${deal.title}" (valor ${deal.currency} ${deal.value}, etapa: ${stageName(deal.stage)})
+  Contato: ${contact ? contact.name : 'sem contato'}. Notas do lead: ${(contact && contact.notes) || 'nenhuma'}.
+  Informações adicionais do negócio: ${extra || 'nenhuma'}.
+  Últimas atividades: ${activities || 'nenhuma'}.`;
+    })
+    .join('\n');
+
+  const systemPrompt = `Você é um vendedor sênior analisando a carteira de negócios em aberto do CRM Velocita Global. Para CADA negócio listado abaixo, escreva uma dica curta (1-2 frases) e concreta de como abordar o contato para avançar/fechar a venda, baseada especificamente nas notas e atividades registradas — não invente informação que não está nos dados. Se um negócio não tiver nenhuma nota ou atividade útil, diga isso e sugira o próximo passo básico (ex: fazer o primeiro contato). Formate como uma lista, um item por negócio, começando pelo nome do negócio em negrito. Responda em português, direto ao ponto, sem introdução nem conclusão genérica.`;
+
+  try {
+    const reply = await callAiProvider(ai, systemPrompt, dealsContext, []);
+    res.json({ reply });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 // ---------- Vivo PABX: originar ligação (click-to-call) ----------

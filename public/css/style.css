@@ -1622,6 +1622,16 @@ table.data-table tr.clickable:hover {
   padding-top: 8px;
 }
 
+.ai-smart-tips-text {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--vg-border);
+  border-radius: 8px;
+  background: var(--vg-surface-2);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
 .ai-tip-item {
   display: flex;
   gap: 8px;
