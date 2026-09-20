@@ -25,6 +25,7 @@ const state = {
   leadActivitiesCache: {},
   leadActivityFilter: 'all',
   emailComposeLeadId: null,
+  emailInboxLeadId: null,
   emailAttachments: [],
   emailSignatureInserted: false,
   teamChatMessages: [],
@@ -246,6 +247,7 @@ async function init() {
   bindExtraInfo();
   bindNotifications();
   bindComms();
+  bindEmailInbox();
   bindEmailCompose();
   bindUserSignatureModal();
   bindRoteiro();
@@ -291,6 +293,7 @@ function switchView(viewName) {
   if (viewName === 'leads') renderLeads();
   if (viewName === 'orgs') renderOrgs();
   if (viewName === 'comunicacoes') renderComms();
+  if (viewName === 'email') renderEmailInbox();
   if (viewName === 'mensagens') renderMensagens();
   if (viewName === 'bi') {
     renderBiActiveTab();
@@ -852,9 +855,27 @@ async function openDealDetail(dealId) {
   openModal('modal-deal-detail');
 }
 
-function renderActivityFeed() {
+async function renderActivityFeed() {
   const dealId = state.currentDealId;
   const feed = document.getElementById('activity-feed');
+
+  if (state.currentActivityFilter === 'email') {
+    const deal = state.deals.find((d) => d.id === dealId);
+    const contact = deal ? state.contacts.find((c) => c.id === deal.personId) : null;
+    if (!contact) {
+      feed.innerHTML = '<div class="empty-state">Este negócio não tem um contato vinculado.</div>';
+      return;
+    }
+    feed.innerHTML = '<div class="empty-state">Carregando e-mails...</div>';
+    try {
+      const messages = await Api.leadMessages(contact.id, 'email');
+      feed.innerHTML = renderEmailList(messages, contact.name);
+    } catch (err) {
+      feed.innerHTML = '<div class="empty-state">Erro ao carregar e-mails.</div>';
+    }
+    return;
+  }
+
   let activities = (state.activitiesCache[dealId] || []).slice();
   if (state.currentActivityFilter !== 'all') {
     activities = activities.filter((a) => a.type === state.currentActivityFilter);
@@ -1392,11 +1413,17 @@ function renderEmailList(messages, leadName) {
       const isOut = m.direction === 'out';
       const sender = isOut ? m.attendantName || 'Atendente' : leadName;
       let statusBadge = '';
+      let opensDetail = '';
       if (isOut) {
         if (m.deliveryStatus === 'simulated') statusBadge = '<span class="badge-simulated">Simulado</span>';
         else if (m.deliveryStatus === 'failed') statusBadge = '<span class="badge-simulated">Falhou</span>';
-        else if ((m.openCount || 0) > 0) statusBadge = `<span class="badge-opened">${svgIcon('eye')} Aberto ${m.openCount}x</span>`;
-        else statusBadge = '<span class="badge-unopened">Não aberto</span>';
+        else if ((m.openCount || 0) > 0) {
+          statusBadge = `<span class="badge-opened">${svgIcon('eye')} Aberto ${m.openCount}x</span>`;
+          const opens = Array.isArray(m.opens) ? m.opens : [];
+          if (opens.length) {
+            opensDetail = `<div class="eli-opens">${opens.map((o) => `Visto em ${fmtDateTime(o.timestamp)}`).join('<br>')}</div>`;
+          }
+        } else statusBadge = '<span class="badge-unopened">Não aberto</span>';
       }
       return `
       <div class="email-list-item">
@@ -1409,6 +1436,7 @@ function renderEmailList(messages, leadName) {
           <span class="eli-sender">De: ${escapeHtml(sender)}</span>
           ${statusBadge}
         </div>
+        ${opensDetail}
       </div>
     `;
     })
@@ -2072,12 +2100,59 @@ async function saveAiSettings() {
 }
 
 // ============ Assistente de IA (widget flutuante) ============
+// ---- Mascote Velo-Cito ----
+const MASCOT_POSES = {
+  neutro: '/img/mascot/01_neutro.png',
+  aceno: '/img/mascot/02_aceno.png',
+  apontando: '/img/mascot/03_apontando.png',
+  comemorando: '/img/mascot/04_comemorando.png',
+  pensando: '/img/mascot/05_pensando.png',
+  positivo: '/img/mascot/06_positivo.png',
+  duvida: '/img/mascot/07_duvida.png',
+  triste: '/img/mascot/08_triste.png',
+  escrevendo: '/img/mascot/09_escrevendo.png',
+  pesquisando: '/img/mascot/10_pesquisando.png',
+  apontando_nuvem: '/img/mascot/11_apontando_nuvem.png',
+  pulando: '/img/mascot/12_pulando.png'
+};
+
+function setMascotPose(pose, revertMs) {
+  const img = document.getElementById('mascot-fab-img');
+  if (!img || !MASCOT_POSES[pose]) return;
+  img.src = MASCOT_POSES[pose];
+  clearTimeout(setMascotPose._t);
+  if (revertMs) {
+    setMascotPose._t = setTimeout(() => {
+      img.src = MASCOT_POSES.neutro;
+    }, revertMs);
+  }
+}
+
+function showMascotBubble(text, durationMs) {
+  const bubble = document.getElementById('mascot-bubble');
+  bubble.textContent = text;
+  bubble.classList.add('show');
+  clearTimeout(showMascotBubble._t);
+  showMascotBubble._t = setTimeout(() => {
+    bubble.classList.remove('show');
+  }, durationMs || 5000);
+}
+
+const MASCOT_INTRO =
+  'Oi! Eu sou o Velo-Cito 👋 Te ajudo com dicas de venda, posso agendar reuniões no Google Calendar, ligar pro cliente pela Vivo PABX e analisar seus negócios em aberto. É só me chamar!';
+
 function bindAiAssistant() {
   document.getElementById('ai-fab').addEventListener('click', () => {
     const panel = document.getElementById('ai-panel');
     const opening = !panel.classList.contains('show');
     panel.classList.toggle('show');
-    if (opening) loadAiTips();
+    if (opening) {
+      setMascotPose('aceno', 2500);
+      showMascotBubble(MASCOT_INTRO, 6000);
+      loadAiTips();
+    } else {
+      document.getElementById('mascot-bubble').classList.remove('show');
+    }
   });
   document.getElementById('ai-panel-close').addEventListener('click', () => {
     document.getElementById('ai-panel').classList.remove('show');
@@ -2109,6 +2184,11 @@ function bindAiAssistant() {
       sendAiChatMessage();
     }
   });
+  const aiChatInput = document.getElementById('ai-chat-input');
+  aiChatInput.addEventListener('input', () => {
+    setMascotPose(aiChatInput.value.trim() ? 'escrevendo' : 'neutro');
+  });
+  aiChatInput.addEventListener('blur', () => setMascotPose('neutro'));
 }
 
 async function loadAiTips() {
@@ -2144,14 +2224,17 @@ async function loadAiSmartTips() {
   btn.disabled = true;
   btn.textContent = 'Analisando com IA...';
   container.innerHTML = '<div class="empty-state">Lendo os negócios em aberto e as anotações de cada um...</div>';
+  setMascotPose('pesquisando');
   try {
     const { reply } = await Api.aiSmartTips();
     const html = escapeHtml(reply)
       .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
       .replace(/\n/g, '<br>');
     container.innerHTML = `<div class="ai-smart-tips-text">${html}</div>`;
+    setMascotPose('positivo', 2500);
   } catch (err) {
     container.innerHTML = `<div class="empty-state">${svgIcon('warning')} ${escapeHtml(err.message || 'Erro ao analisar os negócios')}</div>`;
+    setMascotPose('duvida', 2500);
   } finally {
     btn.disabled = false;
     btn.textContent = 'Analisar meus negócios com IA';
@@ -2246,8 +2329,10 @@ async function applyAiAction(type, value) {
     renderKanban();
     renderDashboard();
     showToast('Sugestão aplicada!');
+    setMascotPose('comemorando', 3000);
   } catch (err) {
     showToast(err.message || 'Erro ao aplicar sugestão');
+    setMascotPose('triste', 2500);
   }
 }
 
@@ -2266,6 +2351,7 @@ async function sendAiChatMessage() {
     `<div class="chat-bubble-row in" id="${typingId}"><div class="chat-bubble">Pensando...</div></div>`
   );
   thread.scrollTop = thread.scrollHeight;
+  setMascotPose('pensando');
 
   try {
     const res = await Api.aiChat(state.aiChatDealId, text, state.aiChatHistory);
@@ -2277,12 +2363,14 @@ async function sendAiChatMessage() {
       btn.addEventListener('click', () => applyAiAction(btn.dataset.aiAction, btn.dataset.aiValue));
     });
     thread.scrollTop = thread.scrollHeight;
+    setMascotPose('positivo', 2500);
   } catch (err) {
     document.getElementById(typingId).remove();
     thread.insertAdjacentHTML(
       'beforeend',
       `<div class="chat-bubble-row in"><div class="chat-bubble">${svgIcon('warning')} ${escapeHtml(err.message || 'Erro ao consultar a IA')}</div></div>`
     );
+    setMascotPose('duvida', 2500);
   }
 }
 
@@ -2477,7 +2565,6 @@ function bindComms() {
       sendCommsMessage();
     }
   });
-  document.getElementById('comms-btn-new-email').addEventListener('click', () => openEmailCompose(state.commsLeadId));
 }
 
 async function renderComms() {
@@ -2486,7 +2573,7 @@ async function renderComms() {
   try {
     const threads = await Api.allMessages();
     const filter = (document.getElementById('comms-filter').value || '').toLowerCase();
-    const filtered = threads.filter((t) => t.leadName.toLowerCase().includes(filter));
+    const filtered = threads.filter((t) => t.channel !== 'email' && t.leadName.toLowerCase().includes(filter));
 
     if (filtered.length === 0) {
       container.innerHTML = '<div class="empty-state">Nenhuma conversa ainda.</div>';
@@ -2542,15 +2629,11 @@ async function loadCommsChat() {
   if (!state.commsLeadId) return;
   const lead = state.contacts.find((c) => c.id === state.commsLeadId);
   const thread = document.getElementById('comms-chat-thread');
-  const isEmail = state.commsChannel === 'email';
-  document.getElementById('comms-btn-new-email').style.display = isEmail ? '' : 'none';
-  document.getElementById('comms-chat-input-row').style.display = isEmail ? 'none' : '';
+  document.getElementById('comms-chat-input-row').style.display = '';
   thread.innerHTML = '<div class="empty-state">Carregando...</div>';
   try {
     const messages = await Api.leadMessages(state.commsLeadId, state.commsChannel);
-    if (isEmail) {
-      thread.innerHTML = renderEmailList(messages, lead.name);
-    } else if (messages.length === 0) {
+    if (messages.length === 0) {
       thread.innerHTML = `<div class="empty-state">Nenhuma mensagem em ${CHANNEL_LABEL[state.commsChannel]} ainda.</div>`;
     } else {
       thread.innerHTML = messages.map((m) => renderChatBubble(m, lead.name)).join('');
@@ -2580,6 +2663,81 @@ async function sendCommsMessage() {
   }
 }
 
+// ============ E-mail (caixa de entrada dedicada) ============
+function bindEmailInbox() {
+  document.getElementById('email-inbox-filter').addEventListener('input', renderEmailInbox);
+  document.getElementById('btn-new-email-inbox').addEventListener('click', () => {
+    if (state.emailInboxLeadId) openEmailCompose(state.emailInboxLeadId);
+  });
+}
+
+async function renderEmailInbox() {
+  const container = document.getElementById('email-inbox-list');
+  container.innerHTML = '<div class="empty-state">Carregando conversas...</div>';
+  try {
+    const threads = await Api.allMessages();
+    const filter = (document.getElementById('email-inbox-filter').value || '').toLowerCase();
+    const filtered = threads.filter((t) => t.channel === 'email' && t.leadName.toLowerCase().includes(filter));
+
+    if (filtered.length === 0) {
+      container.innerHTML = '<div class="empty-state">Nenhum e-mail ainda.</div>';
+      return;
+    }
+
+    container.innerHTML = filtered
+      .map(
+        (t) => `
+      <div class="comms-thread-item ${state.emailInboxLeadId === t.leadId ? 'active' : ''}" data-email-thread-lead="${t.leadId}">
+        <div class="owner-avatar">${initials(t.leadName)}</div>
+        <div style="min-width:0;">
+          <div class="ct-name">${escapeHtml(t.leadName)}</div>
+          <div class="ct-preview">${escapeHtml(t.lastMessage.subject || t.lastMessage.text || '')}</div>
+        </div>
+      </div>
+    `
+      )
+      .join('');
+
+    container.querySelectorAll('[data-email-thread-lead]').forEach((el) => {
+      el.addEventListener('click', () => {
+        container.querySelectorAll('.comms-thread-item').forEach((i) => i.classList.remove('active'));
+        el.classList.add('active');
+        openEmailThread(el.dataset.emailThreadLead);
+      });
+    });
+  } catch (err) {
+    container.innerHTML = '<div class="empty-state">Erro ao carregar conversas.</div>';
+  }
+}
+
+function openEmailThread(leadId) {
+  const lead = state.contacts.find((c) => c.id === leadId);
+  if (!lead) return;
+  state.emailInboxLeadId = leadId;
+
+  document.getElementById('email-empty-state').style.display = 'none';
+  document.getElementById('email-thread-panel').style.display = 'flex';
+  document.getElementById('email-thread-panel').style.flexDirection = 'column';
+  document.getElementById('email-thread-panel').style.flex = '1';
+  document.getElementById('email-thread-panel').style.minHeight = '0';
+  document.getElementById('email-thread-lead-name').textContent = lead.name;
+
+  loadEmailThread();
+}
+
+async function loadEmailThread() {
+  if (!state.emailInboxLeadId) return;
+  const lead = state.contacts.find((c) => c.id === state.emailInboxLeadId);
+  const thread = document.getElementById('email-thread-list');
+  thread.innerHTML = '<div class="empty-state">Carregando...</div>';
+  try {
+    const messages = await Api.leadMessages(state.emailInboxLeadId, 'email');
+    thread.innerHTML = renderEmailList(messages, lead.name);
+  } catch (err) {
+    thread.innerHTML = '<div class="empty-state">Erro ao carregar e-mails.</div>';
+  }
+}
+
 // ============ Notificações e Mensagens ============
 function bindNotifications() {
   document.getElementById('notif-bell-btn').addEventListener('click', (e) => {
@@ -2600,6 +2758,10 @@ function bindNotifications() {
     state.notifications.forEach((n) => (n.read = true));
     loadNotifDropdown();
     updateNotifBadges();
+  });
+  document.getElementById('notif-see-all').addEventListener('click', () => {
+    document.getElementById('notif-dropdown').classList.remove('show');
+    switchView('mensagens');
   });
   document.getElementById('btn-mark-all-messages').addEventListener('click', async () => {
     await Api.markAllNotifRead();
@@ -2868,8 +3030,10 @@ async function sendComposedEmail() {
     closeEmailCompose();
     showToast(msg.deliveryStatus === 'sent' ? 'E-mail enviado!' : 'E-mail registrado no CRM (integração não configurada)');
     if (state.currentLeadId === leadId && state.leadChatChannel === 'email') loadLeadChat();
-    if (state.commsLeadId === leadId && state.commsChannel === 'email') loadCommsChat();
-    renderComms();
+    if (state.emailInboxLeadId === leadId) loadEmailThread();
+    const openDeal = state.deals.find((d) => d.id === state.currentDealId);
+    if (openDeal && openDeal.personId === leadId && state.currentActivityFilter === 'email') renderActivityFeed();
+    renderEmailInbox();
   } catch (err) {
     showToast(err.message || 'Erro ao enviar e-mail');
   }
