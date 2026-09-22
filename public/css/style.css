@@ -831,6 +831,13 @@ body {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
+#gc-mode-reply.active,
+#gc-mode-new.active {
+  background: var(--vg-orange);
+  color: #fff;
+  border-color: var(--vg-orange);
+}
+
 table.data-table {
   width: 100%;
   border-collapse: collapse;

@@ -3212,7 +3212,7 @@ function bindEmailCompose() {
   });
 }
 
-function openEmailCompose(leadId) {
+async function openEmailCompose(leadId) {
   const lead = state.contacts.find((c) => c.id === leadId);
   if (!lead) return;
   if (!state.attendantId) {
@@ -3233,6 +3233,41 @@ function openEmailCompose(leadId) {
   panel.classList.remove('minimized');
   panel.style.display = 'flex';
   panel.style.flexDirection = 'column';
+
+  const modeRow = document.getElementById('gc-reply-mode-row');
+  modeRow.style.display = 'none';
+  try {
+    const thread = await Api.leadMessages(leadId, 'email');
+    if (thread.length) {
+      const last = thread[thread.length - 1];
+      modeRow.style.display = 'flex';
+      document.getElementById('gc-mode-reply').onclick = () => applyEmailReplyMode(last);
+      document.getElementById('gc-mode-new').onclick = () => applyEmailNewMode();
+      applyEmailReplyMode(last);
+    }
+  } catch (err) {
+    // sem e-mails anteriores ou erro ao buscar — segue como composição nova, sem o toggle
+  }
+}
+
+function applyEmailReplyMode(lastMessage) {
+  const subject = lastMessage.subject || '';
+  document.getElementById('gc-subject').value = /^re:/i.test(subject) ? subject : `Re: ${subject}`;
+  const who = lastMessage.direction === 'in' ? 'O lead escreveu' : `${lastMessage.attendantName || 'Você'} escreveu`;
+  const quoted = (lastMessage.text || '')
+    .split('\n')
+    .map((line) => `> ${line}`)
+    .join('\n');
+  document.getElementById('gc-textarea').value = `\n\n--- ${who} ---\n${quoted}`;
+  document.getElementById('gc-mode-reply').classList.add('active');
+  document.getElementById('gc-mode-new').classList.remove('active');
+}
+
+function applyEmailNewMode() {
+  document.getElementById('gc-subject').value = '';
+  document.getElementById('gc-textarea').value = '';
+  document.getElementById('gc-mode-new').classList.add('active');
+  document.getElementById('gc-mode-reply').classList.remove('active');
 }
 
 function closeEmailCompose() {
