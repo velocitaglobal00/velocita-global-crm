@@ -1523,7 +1523,7 @@ function renderOrgs() {
   const orgsBody = document.getElementById('orgs-tbody');
   const filteredOrgs = state.organizations.filter((o) => o.name.toLowerCase().includes(filter));
   if (filteredOrgs.length === 0) {
-    orgsBody.innerHTML = '<tr><td colspan="4"><div class="empty-state">Nenhuma empresa encontrada.</div></td></tr>';
+    orgsBody.innerHTML = '<tr><td colspan="5"><div class="empty-state">Nenhuma empresa encontrada.</div></td></tr>';
   } else {
     orgsBody.innerHTML = filteredOrgs
       .map((o) => {
@@ -1531,7 +1531,8 @@ function renderOrgs() {
         return `
         <tr class="clickable" data-org-id="${o.id}">
           <td>${escapeHtml(o.name)}</td>
-          <td>${escapeHtml(o.address || '-')}</td>
+          <td>${escapeHtml(o.cnpj || '-')}</td>
+          <td>${escapeHtml(o.setor || '-')}</td>
           <td>${linkedCount} lead${linkedCount === 1 ? '' : 's'}</td>
           <td>
             <div class="row-actions">
@@ -1574,6 +1575,7 @@ function renderOrgs() {
 // ---- Contact (Lead) modal ----
 function bindContactModal() {
   document.getElementById('btn-save-contact').addEventListener('click', saveContact);
+  document.getElementById('btn-contact-create-org').addEventListener('click', openOrgModalForContact);
 }
 
 function populateOrgSelect(selectId, selectedId) {
@@ -1697,13 +1699,24 @@ function bindOrgModal() {
   document.getElementById('btn-save-org').addEventListener('click', saveOrg);
 }
 
+state.orgModalReturnToContact = false;
+
 function openOrgModal(org) {
+  state.orgModalReturnToContact = false;
   document.getElementById('org-modal-title').textContent = org ? 'Editar Empresa' : 'Adicionar Empresa';
   document.getElementById('org-id').value = org ? org.id : '';
   document.getElementById('org-name').value = org ? org.name : '';
+  document.getElementById('org-cnpj').value = org ? org.cnpj || '' : '';
+  document.getElementById('org-razaosocial').value = org ? org.razaoSocial || '' : '';
+  document.getElementById('org-setor').value = org ? org.setor || '' : '';
   document.getElementById('org-address').value = org ? org.address : '';
   populateUserSelect('org-owner', org ? org.ownerId : state.attendantId);
   openModal('modal-org');
+}
+
+function openOrgModalForContact() {
+  openOrgModal(null);
+  state.orgModalReturnToContact = true;
 }
 
 async function saveOrg() {
@@ -1715,19 +1728,23 @@ async function saveOrg() {
   }
   const payload = {
     name,
+    cnpj: document.getElementById('org-cnpj').value.trim(),
+    razaoSocial: document.getElementById('org-razaosocial').value.trim(),
+    setor: document.getElementById('org-setor').value.trim(),
     address: document.getElementById('org-address').value.trim(),
     ownerId: document.getElementById('org-owner').value || null,
     attendantId: state.attendantId
   };
   try {
+    let savedOrg;
     if (id) {
-      const updated = await Api.updateOrg(id, payload);
+      savedOrg = await Api.updateOrg(id, payload);
       const idx = state.organizations.findIndex((o) => o.id === id);
-      state.organizations[idx] = updated;
+      state.organizations[idx] = savedOrg;
       showToast('Empresa atualizada');
     } else {
-      const created = await Api.addOrg(payload);
-      state.organizations.push(created);
+      savedOrg = await Api.addOrg(payload);
+      state.organizations.push(savedOrg);
       showToast('Empresa adicionada');
     }
     closeModal('modal-org');
@@ -1735,6 +1752,10 @@ async function saveOrg() {
     if (document.getElementById('modal-org-detail').classList.contains('show') && state.currentOrgId) {
       openOrgDetail(state.currentOrgId);
     }
+    if (state.orgModalReturnToContact && document.getElementById('modal-contact').classList.contains('show')) {
+      populateOrgSelect('contact-org', savedOrg.id);
+    }
+    state.orgModalReturnToContact = false;
   } catch (err) {
     showToast('Erro ao salvar empresa');
   }
@@ -3879,6 +3900,76 @@ function renderBiMarketplaces() {
   `;
 }
 
+// Gráfico de barras simples em SVG, sem dependências externas.
+function buildBarChartSvg(items, opts) {
+  opts = opts || {};
+  const width = opts.width || 640;
+  const height = opts.height || 200;
+  const padding = 30;
+  const max = Math.max(1, ...items.map((i) => Number(i.value) || 0));
+  const barWidth = items.length ? (width - padding * 2) / items.length : 0;
+
+  const bars = items
+    .map((item, i) => {
+      const value = Number(item.value) || 0;
+      const barHeight = Math.max(2, (value / max) * (height - padding * 2));
+      const x = padding + i * barWidth + barWidth * 0.15;
+      const w = Math.max(4, barWidth * 0.7);
+      const y = height - padding - barHeight;
+      const valueLabel = opts.valueFmt ? opts.valueFmt(value) : String(value);
+      return `
+        <rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${barHeight.toFixed(1)}" rx="4" fill="${item.color || '#ff7a1a'}"></rect>
+        <text x="${(x + w / 2).toFixed(1)}" y="${(y - 6).toFixed(1)}" text-anchor="middle" font-size="11" fill="#8a94a6">${escapeHtml(valueLabel)}</text>
+        <text x="${(x + w / 2).toFixed(1)}" y="${(height - padding + 16).toFixed(1)}" text-anchor="middle" font-size="11" fill="#8a94a6">${escapeHtml(item.label)}</text>
+      `;
+    })
+    .join('');
+
+  return `<svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}" style="overflow:visible;">${bars}</svg>`;
+}
+
+function biMonthlyRevenueChart() {
+  const months = [];
+  const now = new Date();
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push({ key: `${d.getFullYear()}-${d.getMonth()}`, label: d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', ''), value: 0 });
+  }
+  state.deals
+    .filter((d) => d.status === 'won')
+    .forEach((d) => {
+      const refDate = new Date(d.closeDate || d.createdAt);
+      const key = `${refDate.getFullYear()}-${refDate.getMonth()}`;
+      const bucket = months.find((m) => m.key === key);
+      if (bucket) bucket.value += Number(d.value) || 0;
+    });
+  return buildBarChartSvg(months, { valueFmt: (v) => (v ? fmtMoney(v).replace('R$', '').trim() : '') });
+}
+
+function biLeadsByChannelChart() {
+  const counts = {};
+  state.contacts.forEach((c) => {
+    const channel = (c.source && c.source.channel) || 'outro';
+    counts[channel] = (counts[channel] || 0) + 1;
+  });
+  const labels = {
+    facebook_ads: 'Facebook',
+    instagram_ads: 'Instagram',
+    google_ads: 'Google',
+    tiktok_ads: 'TikTok',
+    whatsapp: 'WhatsApp',
+    indicacao: 'Indicação',
+    organico: 'Orgânico',
+    outro: 'Outro'
+  };
+  const items = Object.entries(counts).map(([channel, count]) => ({
+    label: labels[channel] || channel,
+    value: count,
+    color: '#1a2b4c'
+  }));
+  return buildBarChartSvg(items, { valueFmt: (v) => String(v), width: 640, height: 180 });
+}
+
 function renderBI() {
   const container = document.getElementById('bi-container');
   const categories = state.settings.categories || [];
@@ -3887,7 +3978,18 @@ function renderBI() {
     return;
   }
 
-  container.innerHTML = categories
+  const chartsPanel = `
+    <div class="panel">
+      <h3>Faturamento por mês (últimos 6 meses)</h3>
+      ${biMonthlyRevenueChart()}
+    </div>
+    <div class="panel">
+      <h3>Leads por canal de origem</h3>
+      ${state.contacts.length ? biLeadsByChannelChart() : '<div class="empty-state">Nenhum lead cadastrado ainda.</div>'}
+    </div>
+  `;
+
+  container.innerHTML = chartsPanel + categories
     .map((cat) => {
       const leadIds = state.contacts.filter((c) => c.category === cat.id).map((c) => c.id);
       const deals = state.deals.filter((d) => leadIds.includes(d.personId));

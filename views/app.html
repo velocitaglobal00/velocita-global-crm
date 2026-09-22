@@ -77,12 +77,9 @@
         </div>
         <div class="sidebar-link" data-view="orgs">
           <svg class="si" viewBox="0 0 24 24"><rect x="4" y="3" width="12" height="18" rx="1"></rect><path d="M8 7h1M8 11h1M8 15h1M13 7h1M13 11h1M13 15h1"></path><path d="M16 10h4v11h-4"></path></svg>
-          Organizações
+          Empresas
         </div>
-        <div class="sidebar-link" data-view="comunicacoes">
-          <svg class="si" viewBox="0 0 24 24"><path d="M4 4h16v12H8l-4 4V4z"></path></svg>
-          Comunicações
-        </div>
+        <!-- Comunicações removida do menu por enquanto (a pedido) — view/rotas continuam existindo. -->
         <div class="sidebar-link" data-view="email">
           <svg class="si" viewBox="0 0 24 24"><path d="M22 6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2z"></path><path d="M22 6l-10 7L2 6"></path></svg>
           E-mail
@@ -210,7 +207,7 @@
         <!-- ===== ORGANIZATIONS ===== -->
         <section class="view" id="view-orgs">
           <div class="pipeline-header">
-            <h2>Organizações</h2>
+            <h2>Empresas</h2>
             <button class="btn-primary" id="btn-add-org">+ Adicionar Empresa</button>
           </div>
           <div class="table-toolbar">
@@ -220,7 +217,8 @@
             <thead>
               <tr>
                 <th>Empresa</th>
-                <th>Endereço</th>
+                <th>CNPJ</th>
+                <th>Setor</th>
                 <th>Leads vinculados</th>
                 <th></th>
               </tr>
@@ -637,7 +635,7 @@
           </div>
         </div>
         <div class="form-group">
-          <label>Organização / Pessoa</label>
+          <label>Empresa / Pessoa</label>
           <select id="deal-person"></select>
         </div>
         <div class="form-row">
@@ -787,7 +785,10 @@
         </div>
         <div class="form-group">
           <label>Empresa</label>
-          <select id="contact-org"></select>
+          <div style="display:flex; gap:8px;">
+            <select id="contact-org" style="flex:1;"></select>
+            <button class="btn-secondary" id="btn-contact-create-org" type="button" style="white-space:nowrap;">+ Criar Empresa</button>
+          </div>
         </div>
         <div class="form-row">
           <div class="form-group">
@@ -1064,6 +1065,20 @@
         <div class="form-group">
           <label>Nome da Empresa</label>
           <input type="text" id="org-name" />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>CNPJ</label>
+            <input type="text" id="org-cnpj" placeholder="00.000.000/0000-00" />
+          </div>
+          <div class="form-group">
+            <label>Razão Social</label>
+            <input type="text" id="org-razaosocial" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Setor</label>
+          <input type="text" id="org-setor" placeholder="Ex: Varejo, Indústria, Serviços..." />
         </div>
         <div class="form-group">
           <label>Endereço</label>

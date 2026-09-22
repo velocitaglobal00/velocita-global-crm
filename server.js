@@ -165,6 +165,9 @@ app.post('/api/organizations', requireAuth, (req, res) => {
   const org = {
     id: newId('org'),
     name: req.body.name || '',
+    cnpj: req.body.cnpj || '',
+    razaoSocial: req.body.razaoSocial || '',
+    setor: req.body.setor || '',
     address: req.body.address || '',
     ownerId: req.body.ownerId || null,
     extraInfo: []
