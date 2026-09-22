@@ -2936,9 +2936,13 @@ async function loadGenericGmailMessage(opts, id) {
         <div style="font-size:12px; color:var(--vg-text-muted); margin-bottom:14px;">
           De: ${escapeHtml(msg.from)}<br/>Para: ${escapeHtml(msg.to)}<br/>${escapeHtml(msg.date)}
         </div>
-        <iframe sandbox="" style="width:100%; min-height:400px; border:1px solid var(--vg-border); border-radius:8px; background:#fff;" srcdoc="${escapeHtml(msg.body || '(sem conteúdo)')}"></iframe>
+        <iframe id="gmail-msg-frame" sandbox="" style="width:100%; min-height:400px; border:1px solid var(--vg-border); border-radius:8px; background:#fff;"></iframe>
       </div>
     `;
+    // srcdoc vai via propriedade JS, não como atributo HTML interpolado: o corpo do
+    // e-mail quase sempre tem aspas (atributos HTML), e escapeHtml não escapa aspas
+    // (só é seguro para texto solto), o que cortava o atributo srcdoc="..." no meio.
+    document.getElementById('gmail-msg-frame').srcdoc = msg.body || '(sem conteúdo)';
   } catch (err) {
     view.innerHTML = `<div class="empty-state">${escapeHtml(err.message || 'Erro ao carregar mensagem')}</div>`;
   }
