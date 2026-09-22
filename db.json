@@ -32,21 +32,24 @@
       "name": "Luis Dias",
       "ramal": "1001",
       "signature": "<br><br>--<br><b>Luis Dias</b><br>Velocita Global<br>(11) 98765-4321",
-      "phone": "16991675326"
+      "phone": "16991675326",
+      "email": "dluis4096@gmail.com"
     },
     {
       "id": "u-2",
       "name": "Pedro Romanello",
       "ramal": "1002",
       "signature": "<br><br>--<br><b>Pedro Romanello</b><br>Velocita Global<br>(11) 98765-4322",
-      "phone": "16994069971"
+      "phone": "16994069971",
+      "email": "Pedro.romanello1305@gmail.com"
     },
     {
       "id": "u-3",
       "name": "Diego Gianini",
       "ramal": "1003",
       "signature": "<br><br>--<br><b>Diego Gianini</b><br>Velocita Global<br>(11) 98765-4323",
-      "phone": "16993017472"
+      "phone": "16993017472",
+      "email": "gianini.barross@gmail.com"
     }
   ],
   "tags": [
