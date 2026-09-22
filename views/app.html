@@ -260,19 +260,39 @@
         <!-- ===== E-MAIL (caixa de entrada dedicada) ===== -->
         <section class="view" id="view-email">
           <h2 style="color:var(--vg-navy); margin-top:0;">E-mail</h2>
-          <div class="comms-layout">
-            <div class="comms-list-col">
-              <input type="text" class="filter-input" id="email-inbox-filter" placeholder="Buscar conversa..." style="width:100%; margin-bottom:10px;" />
-              <div id="email-inbox-list"></div>
-            </div>
-            <div class="comms-chat-col">
-              <div id="email-empty-state" class="empty-state" style="padding:60px 10px;">Selecione uma conversa à esquerda, ou escreva um e-mail para um lead.</div>
-              <div id="email-thread-panel" style="display:none;">
-                <div class="comms-chat-header">
-                  <strong id="email-thread-lead-name">-</strong>
+          <div class="settings-tabs">
+            <button class="settings-tab active" data-emailtab="leads">Por Lead</button>
+            <button class="settings-tab" data-emailtab="gmail">Caixa de Entrada (Gmail)</button>
+          </div>
+
+          <div id="email-tab-leads" class="settings-panel">
+            <div class="comms-layout">
+              <div class="comms-list-col">
+                <select id="email-inbox-new-select" style="width:100%; margin-bottom:6px; padding:9px 8px; border-radius:7px; border:1.5px solid var(--vg-border);"></select>
+                <button class="btn-primary" id="btn-new-email-inbox" style="width:100%; margin-bottom:10px;"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg> Novo E-mail</button>
+                <input type="text" class="filter-input" id="email-inbox-filter" placeholder="Buscar conversa..." style="width:100%; margin-bottom:10px;" />
+                <div id="email-inbox-list"></div>
+              </div>
+              <div class="comms-chat-col">
+                <div id="email-empty-state" class="empty-state" style="padding:60px 10px;">Selecione uma conversa à esquerda, ou escreva um e-mail para um lead.</div>
+                <div id="email-thread-panel" style="display:none;">
+                  <div class="comms-chat-header">
+                    <strong id="email-thread-lead-name">-</strong>
+                  </div>
+                  <div class="chat-thread" id="email-thread-list"></div>
                 </div>
-                <div class="chat-thread" id="email-thread-list"></div>
-                <button class="btn-primary" id="btn-new-email-inbox" style="margin-top:12px;"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg> Novo E-mail</button>
+              </div>
+            </div>
+          </div>
+
+          <div id="email-tab-gmail" class="settings-panel" style="display:none;">
+            <div class="comms-layout">
+              <div class="comms-list-col">
+                <div id="gmail-inbox-status" class="empty-state" style="text-align:left; padding:0 0 12px;"></div>
+                <div id="gmail-inbox-list"></div>
+              </div>
+              <div class="comms-chat-col">
+                <div id="gmail-message-view" class="empty-state" style="padding:60px 10px;">Selecione uma mensagem à esquerda.</div>
               </div>
             </div>
           </div>
@@ -446,9 +466,20 @@
           <div id="stab-tags" class="settings-panel" style="display:none;">
             <div class="panel">
               <h3>Etiquetas de Leads</h3>
-              <div id="tags-list"></div>
+              <div id="tags-list-lead" class="tag-chip-group"></div>
+            </div>
+            <div class="panel">
+              <h3>Etiquetas de Empresas</h3>
+              <div id="tags-list-org" class="tag-chip-group"></div>
+            </div>
+            <div class="panel">
+              <h3>Nova etiqueta</h3>
               <div class="inline-add">
                 <input type="text" id="new-tag-name" placeholder="Nome da etiqueta" />
+                <select id="new-tag-type" style="width:130px; padding:9px 8px; border-radius:7px; border:1.5px solid var(--vg-border);">
+                  <option value="lead">Lead</option>
+                  <option value="org">Empresa</option>
+                </select>
                 <select id="new-tag-color" style="width:120px; padding:9px 8px; border-radius:7px; border:1.5px solid var(--vg-border);">
                   <option value="#f4821f">Laranja</option>
                   <option value="#d64545">Vermelho</option>
@@ -512,6 +543,10 @@
               <div class="form-row">
                 <div class="form-group"><label>Usuário</label><input type="text" id="int-smtp-user" /></div>
                 <div class="form-group"><label>Senha</label><input type="password" id="int-smtp-pass" /></div>
+              </div>
+              <div class="form-group" style="margin-top:6px;">
+                <label>Caixa de entrada real (Gmail) — aba E-mail &gt; Caixa de Entrada (Gmail)</label>
+                <div id="int-gmail-inbox-status"></div>
               </div>
             </div>
 
@@ -792,8 +827,8 @@
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label>Categoria de Cliente</label>
-            <select id="contact-category"></select>
+            <label>Categoria de Cliente (múltipla escolha)</label>
+            <div id="contact-category-checks" class="tag-chip-group"></div>
           </div>
           <div class="form-group">
             <label>Canal de Origem</label>
@@ -818,7 +853,7 @@
         </div>
         <div class="form-group">
           <label>Etiquetas</label>
-          <div id="contact-tags-checks"></div>
+          <div id="contact-tags-checks" class="tag-chip-group"></div>
         </div>
         <div class="form-group">
           <label>Notas</label>
@@ -1080,6 +1115,16 @@
           <label>Setor</label>
           <input type="text" id="org-setor" placeholder="Ex: Varejo, Indústria, Serviços..." />
         </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Telefone</label>
+            <input type="text" id="org-phone" />
+          </div>
+          <div class="form-group">
+            <label>Celular</label>
+            <input type="text" id="org-mobile" />
+          </div>
+        </div>
         <div class="form-group">
           <label>Endereço</label>
           <input type="text" id="org-address" />
@@ -1087,6 +1132,14 @@
         <div class="form-group">
           <label>Proprietário da Empresa</label>
           <select id="org-owner"></select>
+        </div>
+        <div class="form-group">
+          <label>Etiquetas</label>
+          <div id="org-tags-checks" class="tag-chip-group"></div>
+        </div>
+        <div class="form-group">
+          <label>Notas</label>
+          <textarea id="org-notes" rows="3"></textarea>
         </div>
       </div>
       <div class="modal-footer">

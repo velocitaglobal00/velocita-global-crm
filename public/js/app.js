@@ -173,7 +173,7 @@ const Api = {
   updateUser: (id, payload) => api(`/api/users/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
   deleteUser: (id) => api(`/api/users/${id}`, { method: 'DELETE' }),
   tags: () => api('/api/tags'),
-  addTag: (name, color) => api('/api/tags', { method: 'POST', body: JSON.stringify({ name, color }) }),
+  addTag: (name, color, type) => api('/api/tags', { method: 'POST', body: JSON.stringify({ name, color, type }) }),
   deleteTag: (id) => api(`/api/tags/${id}`, { method: 'DELETE' }),
   reminders: () => api('/api/reminders'),
   settings: () => api('/api/settings'),
@@ -207,7 +207,10 @@ const Api = {
   markTeamChatRead: (id, attendantId) => api(`/api/team-chat/${id}/read`, { method: 'POST', body: JSON.stringify({ attendantId }) }),
   calendarEvents: () => api('/api/calendar/events'),
   addCalendarEvent: (payload) => api('/api/activities', { method: 'POST', body: JSON.stringify(payload) }),
-  googleDisconnect: (userId) => api(`/api/users/${userId}/google-disconnect`, { method: 'POST' })
+  googleDisconnect: (userId) => api(`/api/users/${userId}/google-disconnect`, { method: 'POST' }),
+  gmailInboxMessages: () => api('/api/email-inbox/gmail/messages'),
+  gmailInboxMessage: (id) => api(`/api/email-inbox/gmail/messages/${id}`),
+  gmailInboxDisconnect: () => api('/api/settings/gmail-inbox-disconnect', { method: 'POST' })
 };
 
 // ============ Init ============
@@ -634,6 +637,11 @@ function buildDealCard(deal) {
   const pending = dealHasPendingActivity(deal.id);
   const days = currentStageDays(deal);
   const daysWarn = days >= 6;
+  const contact = state.contacts.find((c) => c.id === deal.personId);
+  const dealCategories = contact ? contactCategoryObjects(contact) : [];
+  const categoryBadges = dealCategories
+    .map((cat) => `<span class="category-badge" style="background:${cat.color}">${escapeHtml(cat.name)}</span>`)
+    .join('');
 
   card.innerHTML = `
     <div class="deal-title">${escapeHtml(deal.title)}</div>
@@ -648,6 +656,7 @@ function buildDealCard(deal) {
     <div class="deal-meta" style="margin-top:6px;">
       <span class="days-badge ${daysWarn ? 'warn' : ''}">${days} dia${days === 1 ? '' : 's'} nesta etapa</span>
     </div>
+    ${categoryBadges ? `<div class="deal-badges">${categoryBadges}</div>` : ''}
   `;
 
   card.addEventListener('dragstart', (e) => {
@@ -797,12 +806,13 @@ function renderDealTagChecks(deal) {
     container.innerHTML = '<div class="empty-state" style="padding:4px 0;">Nenhuma etiqueta cadastrada. Crie em Configurações > Etiquetas.</div>';
     return;
   }
+  container.className = 'tag-chip-group';
   container.innerHTML = state.tags
     .map(
       (t) => `
-    <label class="tag-check-row">
+    <label class="tag-chip" style="--chip-color:${t.color}">
       <input type="checkbox" value="${t.id}" data-deal-tag-check ${selected.includes(t.id) ? 'checked' : ''} />
-      <span class="tag-pill" style="background:${t.color}">${escapeHtml(t.name)}</span>
+      <span class="tag-chip-label">${escapeHtml(t.name)}</span>
     </label>
   `
     )
@@ -1034,7 +1044,7 @@ function renderLeads() {
       c.name.toLowerCase().includes(filter) ||
       (c.email || '').toLowerCase().includes(filter) ||
       org.toLowerCase().includes(filter);
-    const matchesCategory = !categoryFilter || c.category === categoryFilter;
+    const matchesCategory = !categoryFilter || contactCategoryIds(c).includes(categoryFilter);
     return matchesText && matchesCategory;
   });
 
@@ -1044,8 +1054,9 @@ function renderLeads() {
   } else {
     tbody.innerHTML = filtered
       .map((c) => {
-        const cat = categoryById(c.category);
-        const catBadge = cat ? `<span class="category-badge" style="background:${cat.color}">${escapeHtml(cat.name)}</span>` : '-';
+        const cats = contactCategoryObjects(c);
+        const catBadge =
+          cats.map((cat) => `<span class="category-badge" style="background:${cat.color}">${escapeHtml(cat.name)}</span>`).join(' ') || '-';
         const tagsHtml = (c.tags || [])
           .map((tid) => tagById(tid))
           .filter(Boolean)
@@ -1331,10 +1342,9 @@ function openLeadDetail(leadId) {
   document.getElementById('ld-phone').textContent = lead.phone || '-';
   document.getElementById('ld-org').textContent = lead.orgId ? orgName(lead.orgId) : '-';
 
-  const cat = categoryById(lead.category);
-  document.getElementById('ld-category').innerHTML = cat
-    ? `<span class="category-badge" style="background:${cat.color}">${escapeHtml(cat.name)}</span>`
-    : '-';
+  const leadCats = contactCategoryObjects(lead);
+  document.getElementById('ld-category').innerHTML =
+    leadCats.map((cat) => `<span class="category-badge" style="background:${cat.color}">${escapeHtml(cat.name)}</span>`).join(' ') || '-';
 
   const tagsHtml = (lead.tags || [])
     .map((tid) => tagById(tid))
@@ -1602,35 +1612,61 @@ function populateUserSelect(selectId, selectedId) {
   });
 }
 
-function populateCategorySelect(selectedId) {
-  const select = document.getElementById('contact-category');
-  select.innerHTML = '<option value="">Selecionar...</option>';
-  (state.settings.categories || []).forEach((cat) => {
-    const opt = document.createElement('option');
-    opt.value = cat.id;
-    opt.textContent = cat.name;
-    if (cat.id === selectedId) opt.selected = true;
-    select.appendChild(opt);
-  });
-}
-
-function populateTagChecks(selectedIds) {
-  const container = document.getElementById('contact-tags-checks');
+// Chip multi-select genérico, usado por categorias, etiquetas de lead e etiquetas de empresa.
+function renderChipChecks(containerId, items, selectedIds, emptyMessage) {
+  const container = document.getElementById(containerId);
   const selected = selectedIds || [];
-  if (state.tags.length === 0) {
-    container.innerHTML = '<div class="empty-state" style="padding:4px 0;">Nenhuma etiqueta cadastrada. Crie em Configurações > Etiquetas.</div>';
+  if (!items.length) {
+    container.innerHTML = `<div class="empty-state" style="padding:4px 0;">${emptyMessage}</div>`;
     return;
   }
-  container.innerHTML = state.tags
+  container.innerHTML = items
     .map(
-      (t) => `
-    <label class="tag-check-row">
-      <input type="checkbox" value="${t.id}" ${selected.includes(t.id) ? 'checked' : ''} />
-      <span class="tag-pill" style="background:${t.color}">${escapeHtml(t.name)}</span>
+      (item) => `
+    <label class="tag-chip" style="--chip-color:${item.color}">
+      <input type="checkbox" value="${item.id}" ${selected.includes(item.id) ? 'checked' : ''} />
+      <span class="tag-chip-label">${escapeHtml(item.name)}</span>
     </label>
   `
     )
     .join('');
+}
+
+function checkedChipValues(containerId) {
+  return Array.from(document.querySelectorAll(`#${containerId} input:checked`)).map((el) => el.value);
+}
+
+function populateCategoryChecks(selectedIds) {
+  renderChipChecks(
+    'contact-category-checks',
+    state.settings.categories || [],
+    contactCategoryIds({ categories: selectedIds }),
+    'Nenhuma categoria cadastrada em Configurações.'
+  );
+}
+
+// Compatível com leads antigos que ainda têm só `category` (string) em vez de `categories` (array).
+function contactCategoryIds(contact) {
+  if (!contact) return [];
+  if (Array.isArray(contact.categories)) return contact.categories;
+  if (contact.category) return [contact.category];
+  return [];
+}
+
+function contactCategoryObjects(contact) {
+  return contactCategoryIds(contact)
+    .map((id) => categoryById(id))
+    .filter(Boolean);
+}
+
+function populateTagChecks(selectedIds) {
+  const leadTags = state.tags.filter((t) => (t.type || 'lead') === 'lead');
+  renderChipChecks('contact-tags-checks', leadTags, selectedIds, 'Nenhuma etiqueta de lead cadastrada. Crie em Configurações > Etiquetas.');
+}
+
+function populateOrgTagChecks(selectedIds) {
+  const orgTags = state.tags.filter((t) => t.type === 'org');
+  renderChipChecks('org-tags-checks', orgTags, selectedIds, 'Nenhuma etiqueta de empresa cadastrada. Crie em Configurações > Etiquetas.');
 }
 
 function openContactModal(contact) {
@@ -1643,7 +1679,7 @@ function openContactModal(contact) {
   document.getElementById('contact-source-campaign').value = contact && contact.source ? contact.source.campaign || '' : '';
   if (contact && contact.source) document.getElementById('contact-source-channel').value = contact.source.channel;
   populateOrgSelect('contact-org', contact ? contact.orgId : null);
-  populateCategorySelect(contact ? contact.category : null);
+  populateCategoryChecks(contact ? contactCategoryIds(contact) : []);
   populateTagChecks(contact ? contact.tags : []);
   populateUserSelect('contact-owner', contact ? contact.ownerId : state.attendantId);
   openModal('modal-contact');
@@ -1656,7 +1692,8 @@ async function saveContact() {
     showToast('Informe o nome do lead');
     return;
   }
-  const checkedTags = Array.from(document.querySelectorAll('#contact-tags-checks input:checked')).map((el) => el.value);
+  const checkedTags = checkedChipValues('contact-tags-checks');
+  const checkedCategories = checkedChipValues('contact-category-checks');
   const existing = state.contacts.find((c) => c.id === id);
   const payload = {
     name,
@@ -1664,7 +1701,7 @@ async function saveContact() {
     phone: document.getElementById('contact-phone').value.trim(),
     orgId: document.getElementById('contact-org').value || null,
     notes: document.getElementById('contact-notes').value.trim(),
-    category: document.getElementById('contact-category').value || null,
+    categories: checkedCategories,
     tags: checkedTags,
     ownerId: document.getElementById('contact-owner').value || null,
     attendantId: state.attendantId,
@@ -1709,8 +1746,12 @@ function openOrgModal(org) {
   document.getElementById('org-cnpj').value = org ? org.cnpj || '' : '';
   document.getElementById('org-razaosocial').value = org ? org.razaoSocial || '' : '';
   document.getElementById('org-setor').value = org ? org.setor || '' : '';
+  document.getElementById('org-phone').value = org ? org.phone || '' : '';
+  document.getElementById('org-mobile').value = org ? org.mobile || '' : '';
   document.getElementById('org-address').value = org ? org.address : '';
+  document.getElementById('org-notes').value = org ? org.notes || '' : '';
   populateUserSelect('org-owner', org ? org.ownerId : state.attendantId);
+  populateOrgTagChecks(org ? org.tags : []);
   openModal('modal-org');
 }
 
@@ -1731,7 +1772,11 @@ async function saveOrg() {
     cnpj: document.getElementById('org-cnpj').value.trim(),
     razaoSocial: document.getElementById('org-razaosocial').value.trim(),
     setor: document.getElementById('org-setor').value.trim(),
+    phone: document.getElementById('org-phone').value.trim(),
+    mobile: document.getElementById('org-mobile').value.trim(),
     address: document.getElementById('org-address').value.trim(),
+    notes: document.getElementById('org-notes').value.trim(),
+    tags: checkedChipValues('org-tags-checks'),
     ownerId: document.getElementById('org-owner').value || null,
     attendantId: state.attendantId
   };
@@ -1825,10 +1870,11 @@ function bindSettingsPanel() {
   document.getElementById('btn-add-tag').addEventListener('click', async () => {
     const nameInput = document.getElementById('new-tag-name');
     const colorInput = document.getElementById('new-tag-color');
+    const typeInput = document.getElementById('new-tag-type');
     const name = nameInput.value.trim();
     if (!name) return;
     try {
-      const tag = await Api.addTag(name, colorInput.value);
+      const tag = await Api.addTag(name, colorInput.value, typeInput.value);
       state.tags.push(tag);
       nameInput.value = '';
       renderSettings();
@@ -2002,22 +2048,25 @@ function renderSettings() {
     });
   });
 
-  const tagsList = document.getElementById('tags-list');
-  tagsList.innerHTML = state.tags.length
-    ? state.tags
+  renderTagsSettingsList('tags-list-lead', state.tags.filter((t) => (t.type || 'lead') === 'lead'), 'Nenhuma etiqueta de lead cadastrada.');
+  renderTagsSettingsList('tags-list-org', state.tags.filter((t) => t.type === 'org'), 'Nenhuma etiqueta de empresa cadastrada.');
+}
+
+function renderTagsSettingsList(containerId, tags, emptyMessage) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = tags.length
+    ? tags
         .map(
           (t) => `
-    <div class="list-row">
-      <span class="tag-pill" style="background:${t.color}">${escapeHtml(t.name)}</span>
-      <div class="row-actions">
-        <button class="icon-btn danger" data-del-tag="${t.id}" title="Excluir">${svgIcon('trash')}</button>
-      </div>
-    </div>
+    <span class="tag-pill" style="background:${t.color}; display:inline-flex; align-items:center; gap:6px; padding:6px 8px 6px 12px;">
+      ${escapeHtml(t.name)}
+      <button class="tag-pill-delete" data-del-tag="${t.id}" title="Excluir" style="background:none; border:none; color:#fff; opacity:0.75; cursor:pointer; font-size:14px; line-height:1; padding:0 2px;">&times;</button>
+    </span>
   `
         )
         .join('')
-    : '<div class="empty-state">Nenhuma etiqueta cadastrada.</div>';
-  tagsList.querySelectorAll('[data-del-tag]').forEach((btn) => {
+    : `<div class="empty-state" style="padding:4px 0;">${emptyMessage}</div>`;
+  container.querySelectorAll('[data-del-tag]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       try {
         await Api.deleteTag(btn.dataset.delTag);
@@ -2092,6 +2141,23 @@ function loadIntegrationsForm() {
   document.getElementById('gcal-redirect-uri').value = window.location.origin + '/api/google/oauth-callback';
 
   document.getElementById('wa-webhook-url').textContent = window.location.origin + '/api/webhooks/whatsapp';
+
+  const gmailInbox = i.gmailInbox || {};
+  const gmailStatus = document.getElementById('int-gmail-inbox-status');
+  if (gmailInbox.email) {
+    gmailStatus.innerHTML = `${svgIcon('calendar')} Conectado: <strong>${escapeHtml(gmailInbox.email)}</strong> <button class="btn-secondary" id="btn-gmail-inbox-disconnect" type="button" style="margin-left:8px; padding:5px 10px; font-size:12px;">Desconectar</button>`;
+    document.getElementById('btn-gmail-inbox-disconnect').addEventListener('click', async () => {
+      if (!confirm('Desconectar a caixa de entrada do Gmail?')) return;
+      await Api.gmailInboxDisconnect();
+      loadIntegrationsForm();
+      showToast('Caixa de entrada do Gmail desconectada');
+    });
+  } else {
+    gmailStatus.innerHTML = `<button class="btn-secondary" id="btn-gmail-inbox-connect" type="button">${svgIcon('calendar')} Conectar caixa de entrada do Gmail</button>`;
+    document.getElementById('btn-gmail-inbox-connect').addEventListener('click', () => {
+      window.open('/api/google/gmail-oauth-start', 'gmail-connect', 'width=520,height=650');
+    });
+  }
 }
 
 async function saveIntegrations() {
@@ -2744,11 +2810,103 @@ async function sendCommsMessage() {
 function bindEmailInbox() {
   document.getElementById('email-inbox-filter').addEventListener('input', renderEmailInbox);
   document.getElementById('btn-new-email-inbox').addEventListener('click', () => {
-    if (state.emailInboxLeadId) openEmailCompose(state.emailInboxLeadId);
+    const selected = document.getElementById('email-inbox-new-select').value || state.emailInboxLeadId;
+    if (selected) openEmailCompose(selected);
+    else showToast('Cadastre um lead com e-mail primeiro');
+  });
+  bindEmailTabs();
+}
+
+function populateEmailNewSelect() {
+  const select = document.getElementById('email-inbox-new-select');
+  const withEmail = state.contacts.filter((c) => c.email);
+  select.innerHTML = withEmail.length
+    ? withEmail.map((c) => `<option value="${c.id}">${escapeHtml(c.name)} — ${escapeHtml(c.email)}</option>`).join('')
+    : '<option value="">Nenhum lead com e-mail cadastrado</option>';
+}
+
+function bindEmailTabs() {
+  document.querySelectorAll('#view-email .settings-tab').forEach((tab) => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('#view-email .settings-tab').forEach((t) => t.classList.remove('active'));
+      tab.classList.add('active');
+      const emailTab = tab.dataset.emailtab;
+      document.getElementById('email-tab-leads').style.display = emailTab === 'leads' ? '' : 'none';
+      document.getElementById('email-tab-gmail').style.display = emailTab === 'gmail' ? '' : 'none';
+      if (emailTab === 'gmail') renderGmailInbox();
+    });
   });
 }
 
+async function renderGmailInbox() {
+  const status = document.getElementById('gmail-inbox-status');
+  const list = document.getElementById('gmail-inbox-list');
+  status.innerHTML = '';
+  list.innerHTML = '<div class="empty-state">Carregando...</div>';
+  try {
+    const { email, messages } = await Api.gmailInboxMessages();
+    status.innerHTML = `${svgIcon('calendar')} Conectado: <strong>${escapeHtml(email)}</strong> <button class="icon-btn danger" id="btn-gmail-disconnect" title="Desconectar" style="margin-left:6px;">${svgIcon('trash')}</button>`;
+    document.getElementById('btn-gmail-disconnect').addEventListener('click', async () => {
+      if (!confirm('Desconectar a caixa de entrada do Gmail?')) return;
+      await Api.gmailInboxDisconnect();
+      renderGmailInbox();
+    });
+
+    if (!messages.length) {
+      list.innerHTML = '<div class="empty-state">Nenhuma mensagem na caixa de entrada.</div>';
+      return;
+    }
+    list.innerHTML = messages
+      .map(
+        (m) => `
+      <div class="list-row clickable" data-gmail-msg="${m.id}" style="align-items:flex-start; ${m.unread ? 'font-weight:700;' : ''}">
+        <div>
+          <div class="name">${escapeHtml(m.from)}</div>
+          <div style="font-size:12px;">${escapeHtml(m.subject)}</div>
+          <div style="font-size:11px; color:var(--vg-text-muted); font-weight:400;">${escapeHtml(m.snippet)}</div>
+        </div>
+      </div>
+    `
+      )
+      .join('');
+    list.querySelectorAll('[data-gmail-msg]').forEach((row) => {
+      row.addEventListener('click', () => loadGmailMessage(row.dataset.gmailMsg));
+    });
+  } catch (err) {
+    status.innerHTML = '';
+    list.innerHTML = `
+      <div class="empty-state" style="text-align:left;">
+        ${escapeHtml(err.message || 'Caixa de entrada do Gmail não conectada.')}
+      </div>
+      <button class="btn-primary" id="btn-gmail-connect" style="width:100%; margin-top:10px;">Conectar Gmail</button>
+    `;
+    document.getElementById('btn-gmail-connect').addEventListener('click', () => {
+      window.open('/api/google/gmail-oauth-start', 'gmail-connect', 'width=520,height=650');
+    });
+  }
+}
+
+async function loadGmailMessage(id) {
+  const view = document.getElementById('gmail-message-view');
+  view.innerHTML = '<div class="empty-state">Carregando...</div>';
+  try {
+    const msg = await Api.gmailInboxMessage(id);
+    view.innerHTML = `
+      <div style="padding:16px;">
+        <h3 style="margin:0 0 6px;">${escapeHtml(msg.subject)}</h3>
+        <div style="font-size:12px; color:var(--vg-text-muted); margin-bottom:14px;">
+          De: ${escapeHtml(msg.from)}<br/>Para: ${escapeHtml(msg.to)}<br/>${escapeHtml(msg.date)}
+        </div>
+        <iframe sandbox="" style="width:100%; min-height:400px; border:1px solid var(--vg-border); border-radius:8px; background:#fff;" srcdoc="${escapeHtml(msg.body || '(sem conteúdo)')}"></iframe>
+      </div>
+    `;
+  } catch (err) {
+    view.innerHTML = `<div class="empty-state">${escapeHtml(err.message || 'Erro ao carregar mensagem')}</div>`;
+  }
+}
+
 async function renderEmailInbox() {
+  populateEmailNewSelect();
   const container = document.getElementById('email-inbox-list');
   container.innerHTML = '<div class="empty-state">Carregando conversas...</div>';
   try {
@@ -3633,8 +3791,11 @@ function bindGoogleCalendarPopup() {
       state.users = await Api.users();
       renderSettings();
       showToast(`Google Calendar conectado (${ev.data.email})`);
+    } else if (ev.data.gmailInboxConnected) {
+      showToast(`Caixa de entrada do Gmail conectada (${ev.data.email})`);
+      if (document.getElementById('view-email').classList.contains('active')) renderGmailInbox();
     } else if (ev.data.googleCalendarError) {
-      showToast('Erro ao conectar Google Calendar: ' + ev.data.googleCalendarError);
+      showToast('Erro ao conectar Google: ' + ev.data.googleCalendarError);
     }
   });
 }
@@ -3991,7 +4152,7 @@ function renderBI() {
 
   container.innerHTML = chartsPanel + categories
     .map((cat) => {
-      const leadIds = state.contacts.filter((c) => c.category === cat.id).map((c) => c.id);
+      const leadIds = state.contacts.filter((c) => contactCategoryIds(c).includes(cat.id)).map((c) => c.id);
       const deals = state.deals.filter((d) => leadIds.includes(d.personId));
       const openDeals = deals.filter((d) => d.status === 'open');
       const wonDeals = deals.filter((d) => d.status === 'won');

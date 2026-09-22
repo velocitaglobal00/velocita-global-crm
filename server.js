@@ -109,6 +109,30 @@ function diffSummary(before, after, fields) {
   return parts.length ? parts.join('; ') : null;
 }
 
+// Notifica o celular de um sócio via WhatsApp (usa o número pessoal cadastrado
+// em Configurações > Usuários) quando algo importante/individual acontece com
+// ele: reunião marcada, tarefa atribuída, negócio ganho/perdido. Não bloqueia
+// a resposta da rota que chamou — falha silenciosamente (só loga) se o
+// WhatsApp Business não estiver configurado ou o usuário não tiver telefone.
+function maybeNotifyActivity(data, activity) {
+  if (!activity.attendantId || (activity.type !== 'meeting' && activity.type !== 'task')) return;
+  const typeLabel = activity.type === 'meeting' ? 'Reunião' : 'Tarefa';
+  const when = activity.date ? new Date(activity.date).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '';
+  notifyUserWhatsApp(data, activity.attendantId, `Velocita Global: ${typeLabel} atribuída a você — "${activity.text}"${when ? ` em ${when}` : ''}.`);
+}
+
+function notifyUserWhatsApp(data, userId, text) {
+  const user = data.users.find((u) => u.id === userId);
+  const wa = data.settings.integrations.whatsapp || {};
+  if (!user || !user.phone || !wa.phoneNumberId || !wa.accessToken) return;
+  const to = user.phone.replace(/\D/g, '');
+  fetch(`https://graph.facebook.com/v19.0/${wa.phoneNumberId}/messages`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${wa.accessToken}` },
+    body: JSON.stringify({ messaging_product: 'whatsapp', to, type: 'text', text: { body: text } })
+  }).catch((err) => console.error(`Falha ao notificar ${user.name} via WhatsApp:`, err.message));
+}
+
 // ---------- Stages ----------
 app.get('/api/stages', requireAuth, (req, res) => {
   const data = db.read();
@@ -168,7 +192,11 @@ app.post('/api/organizations', requireAuth, (req, res) => {
     cnpj: req.body.cnpj || '',
     razaoSocial: req.body.razaoSocial || '',
     setor: req.body.setor || '',
+    phone: req.body.phone || '',
+    mobile: req.body.mobile || '',
     address: req.body.address || '',
+    notes: req.body.notes || '',
+    tags: Array.isArray(req.body.tags) ? req.body.tags : [],
     ownerId: req.body.ownerId || null,
     extraInfo: []
   };
@@ -217,7 +245,7 @@ app.post('/api/contacts', requireAuth, (req, res) => {
     phone: req.body.phone || '',
     orgId: req.body.orgId || null,
     notes: req.body.notes || '',
-    category: req.body.category || null,
+    categories: Array.isArray(req.body.categories) ? req.body.categories : req.body.category ? [req.body.category] : [],
     tags: Array.isArray(req.body.tags) ? req.body.tags : [],
     ownerId: req.body.ownerId || null,
     extraInfo: [],
@@ -237,7 +265,7 @@ app.put('/api/contacts/:id', requireAuth, (req, res) => {
   const before = { ...contact };
   const { attendantId, ...payload } = req.body;
   Object.assign(contact, payload);
-  const summary = diffSummary(before, contact, ['name', 'email', 'phone', 'orgId', 'category', 'ownerId', 'notes']);
+  const summary = diffSummary(before, contact, ['name', 'email', 'phone', 'orgId', 'categories', 'ownerId', 'notes']);
   if (summary) logHistory(data, 'lead', contact.id, attendantId, 'updated', summary);
   db.write(data);
   res.json(contact);
@@ -299,9 +327,15 @@ app.put('/api/deals/:id', requireAuth, (req, res) => {
     deal.stageHistory.push({ stageId: req.body.stage, enteredAt: now, exitedAt: null });
   }
 
+  const statusChanged = req.body.status && req.body.status !== deal.status;
   Object.assign(deal, req.body);
   db.write(data);
   res.json(deal);
+
+  if (statusChanged && deal.ownerId && (deal.status === 'won' || deal.status === 'lost')) {
+    const label = deal.status === 'won' ? 'GANHO 🎉' : 'perdido';
+    notifyUserWhatsApp(data, deal.ownerId, `Velocita Global: o negócio "${deal.title}" foi marcado como ${label}.`);
+  }
 });
 
 app.delete('/api/deals/:id', requireAuth, (req, res) => {
@@ -335,6 +369,7 @@ app.post('/api/activities', requireAuth, (req, res) => {
   data.activities.push(activity);
   db.write(data);
   res.status(201).json(activity);
+  maybeNotifyActivity(data, activity);
 });
 
 app.get('/api/deals/:id/activities', requireAuth, (req, res) => {
@@ -357,6 +392,7 @@ app.post('/api/deals/:id/activities', requireAuth, (req, res) => {
   data.activities.push(activity);
   db.write(data);
   res.status(201).json(activity);
+  maybeNotifyActivity(data, activity);
 });
 
 // Atividades gerais do lead (não vinculadas a um negócio específico)
@@ -380,6 +416,7 @@ app.post('/api/leads/:id/activities', requireAuth, (req, res) => {
   data.activities.push(activity);
   db.write(data);
   res.status(201).json(activity);
+  maybeNotifyActivity(data, activity);
 });
 
 app.put('/api/activities/:id', requireAuth, (req, res) => {
@@ -406,7 +443,12 @@ app.get('/api/tags', requireAuth, (req, res) => {
 app.post('/api/tags', requireAuth, (req, res) => {
   const data = db.read();
   if (!data.tags) data.tags = [];
-  const tag = { id: newId('tag'), name: req.body.name || '', color: req.body.color || '#1b2a4e' };
+  const tag = {
+    id: newId('tag'),
+    name: req.body.name || '',
+    color: req.body.color || '#1b2a4e',
+    type: req.body.type === 'org' ? 'org' : 'lead'
+  };
   data.tags.push(tag);
   db.write(data);
   res.status(201).json(tag);
@@ -417,6 +459,9 @@ app.delete('/api/tags/:id', requireAuth, (req, res) => {
   data.tags = (data.tags || []).filter((t) => t.id !== req.params.id);
   data.contacts.forEach((c) => {
     if (Array.isArray(c.tags)) c.tags = c.tags.filter((id) => id !== req.params.id);
+  });
+  data.organizations.forEach((o) => {
+    if (Array.isArray(o.tags)) o.tags = o.tags.filter((id) => id !== req.params.id);
   });
   db.write(data);
   res.json({ ok: true });
@@ -674,7 +719,7 @@ app.post('/api/webhooks/site-form', (req, res) => {
       phone: whatsapp,
       orgId,
       notes: '',
-      category: null,
+      categories: [],
       tags: [],
       ownerId: null,
       extraInfo: [],
@@ -1415,6 +1460,29 @@ app.get('/api/google/oauth-start', requireAuth, (req, res) => {
   res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
 });
 
+// Conexão separada (não por usuário) para ler a caixa de entrada real de um
+// e-mail compartilhado (ex: velocitaglobal@gmail.com) na aba E-mail > Caixa de
+// Entrada (Gmail). Usa o mesmo Client ID/Secret do Google Calendar, mas com o
+// escopo gmail.readonly, e reaproveita a mesma redirect_uri (identificado pelo
+// state="gmail-inbox" em vez de um id de usuário).
+app.get('/api/google/gmail-oauth-start', requireAuth, (req, res) => {
+  const data = db.read();
+  const gcal = data.settings.integrations.googleCalendar || {};
+  if (!gcal.clientId || !gcal.clientSecret) {
+    return res.status(400).send('Configure o Client ID e o Client Secret do Google em Configurações > Integrações antes de conectar a caixa de entrada.');
+  }
+  const params = new URLSearchParams({
+    client_id: gcal.clientId,
+    redirect_uri: googleRedirectUri(req),
+    response_type: 'code',
+    access_type: 'offline',
+    prompt: 'consent',
+    scope: 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/userinfo.email',
+    state: 'gmail-inbox'
+  });
+  res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
+});
+
 app.get('/api/google/oauth-callback', async (req, res) => {
   const closePopup = (payload) => {
     res.send(`<script>window.opener && window.opener.postMessage(${JSON.stringify(payload)}, '*'); window.close();</script><p>Pode fechar esta janela.</p>`);
@@ -1424,8 +1492,9 @@ app.get('/api/google/oauth-callback', async (req, res) => {
 
   const data = db.read();
   const gcal = data.settings.integrations.googleCalendar || {};
-  const user = data.users.find((u) => u.id === req.query.state);
-  if (!user || !gcal.clientId || !gcal.clientSecret) {
+  const isGmailInbox = req.query.state === 'gmail-inbox';
+  const user = isGmailInbox ? null : data.users.find((u) => u.id === req.query.state);
+  if ((!isGmailInbox && !user) || !gcal.clientId || !gcal.clientSecret) {
     return closePopup({ googleCalendarError: 'Configuração inválida ou usuário não encontrado.' });
   }
 
@@ -1452,13 +1521,134 @@ app.get('/api/google/oauth-callback', async (req, res) => {
     });
     const infoJson = await infoRes.json();
 
-    user.googleRefreshToken = tokenJson.refresh_token;
-    user.googleEmail = infoJson.email || '';
-    db.write(data);
-
-    closePopup({ googleCalendarConnected: true, userId: user.id, email: user.googleEmail });
+    if (isGmailInbox) {
+      if (!data.settings.integrations.gmailInbox) data.settings.integrations.gmailInbox = {};
+      data.settings.integrations.gmailInbox.refreshToken = tokenJson.refresh_token;
+      data.settings.integrations.gmailInbox.email = infoJson.email || '';
+      db.write(data);
+      closePopup({ gmailInboxConnected: true, email: data.settings.integrations.gmailInbox.email });
+    } else {
+      user.googleRefreshToken = tokenJson.refresh_token;
+      user.googleEmail = infoJson.email || '';
+      db.write(data);
+      closePopup({ googleCalendarConnected: true, userId: user.id, email: user.googleEmail });
+    }
   } catch (err) {
     closePopup({ googleCalendarError: err.message });
+  }
+});
+
+app.post('/api/settings/gmail-inbox-disconnect', requireAuth, (req, res) => {
+  const data = db.read();
+  data.settings.integrations.gmailInbox = {};
+  db.write(data);
+  res.json({ ok: true });
+});
+
+async function getGoogleAccessTokenGeneric(gcal, refreshToken, label) {
+  if (!gcal.clientId || !gcal.clientSecret) {
+    throw new Error('Configure o Client ID e o Client Secret do Google em Configurações > Integrações.');
+  }
+  if (!refreshToken) {
+    throw new Error(`${label || 'Esta conta'} ainda não foi conectada.`);
+  }
+  const response = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: gcal.clientId,
+      client_secret: gcal.clientSecret,
+      refresh_token: refreshToken,
+      grant_type: 'refresh_token'
+    })
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(`Falha ao renovar token do Google: ` + (result.error_description || result.error));
+  return result.access_token;
+}
+
+function decodeGmailBase64Url(str) {
+  return Buffer.from((str || '').replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
+}
+
+function extractGmailBody(payload) {
+  if (!payload) return '';
+  if (payload.body && payload.body.data && (payload.mimeType === 'text/html' || payload.mimeType === 'text/plain')) {
+    return decodeGmailBase64Url(payload.body.data);
+  }
+  if (Array.isArray(payload.parts)) {
+    const htmlPart = payload.parts.find((p) => p.mimeType === 'text/html');
+    if (htmlPart) return extractGmailBody(htmlPart);
+    const textPart = payload.parts.find((p) => p.mimeType === 'text/plain');
+    if (textPart) return extractGmailBody(textPart);
+    for (const part of payload.parts) {
+      const nested = extractGmailBody(part);
+      if (nested) return nested;
+    }
+  }
+  return '';
+}
+
+app.get('/api/email-inbox/gmail/messages', requireAuth, async (req, res) => {
+  const data = db.read();
+  const gcal = data.settings.integrations.googleCalendar || {};
+  const gmailInbox = data.settings.integrations.gmailInbox || {};
+  try {
+    const accessToken = await getGoogleAccessTokenGeneric(gcal, gmailInbox.refreshToken, 'A caixa de entrada do Gmail');
+    const listRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=25&labelIds=INBOX', {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    const listJson = await listRes.json();
+    if (!listRes.ok) throw new Error(listJson.error?.message || 'Erro ao listar mensagens do Gmail');
+
+    const messages = await Promise.all(
+      (listJson.messages || []).map(async (m) => {
+        const msgRes = await fetch(
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        const msgJson = await msgRes.json();
+        const headers = (msgJson.payload && msgJson.payload.headers) || [];
+        const getHeader = (name) => (headers.find((h) => h.name === name) || {}).value || '';
+        return {
+          id: m.id,
+          from: getHeader('From'),
+          subject: getHeader('Subject') || '(sem assunto)',
+          date: getHeader('Date'),
+          snippet: msgJson.snippet || '',
+          unread: (msgJson.labelIds || []).includes('UNREAD')
+        };
+      })
+    );
+    res.json({ email: gmailInbox.email || '', messages });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.get('/api/email-inbox/gmail/messages/:id', requireAuth, async (req, res) => {
+  const data = db.read();
+  const gcal = data.settings.integrations.googleCalendar || {};
+  const gmailInbox = data.settings.integrations.gmailInbox || {};
+  try {
+    const accessToken = await getGoogleAccessTokenGeneric(gcal, gmailInbox.refreshToken, 'A caixa de entrada do Gmail');
+    const msgRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${req.params.id}?format=full`, {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    const msgJson = await msgRes.json();
+    if (!msgRes.ok) throw new Error(msgJson.error?.message || 'Erro ao carregar a mensagem');
+    const headers = (msgJson.payload && msgJson.payload.headers) || [];
+    const getHeader = (name) => (headers.find((h) => h.name === name) || {}).value || '';
+    res.json({
+      id: req.params.id,
+      from: getHeader('From'),
+      to: getHeader('To'),
+      subject: getHeader('Subject') || '(sem assunto)',
+      date: getHeader('Date'),
+      body: extractGmailBody(msgJson.payload)
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 });
 

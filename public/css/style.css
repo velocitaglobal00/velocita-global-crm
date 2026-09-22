@@ -1013,7 +1013,7 @@ table.data-table tr.clickable:hover {
 
 .dd-col.right {
   border-left: 1px solid var(--vg-border);
-  background: #fafbfc;
+  background: var(--vg-surface-2);
 }
 
 .dd-value {
@@ -1327,6 +1327,72 @@ table.data-table tr.clickable:hover {
   gap: 8px;
   padding: 6px 0;
   font-size: 13px;
+}
+
+/* Chip-style multi-select (etiquetas, categorias) — chips wrap in a row and
+   toggle a hidden checkbox; unselected chips are dimmed, selected ones lit up. */
+.tag-chip-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tag-chip {
+  position: relative;
+  cursor: pointer;
+  display: inline-flex;
+  user-select: none;
+}
+
+.tag-chip input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.tag-chip .tag-chip-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 13px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--chip-color, #1b2a4e);
+  opacity: 0.4;
+  border: 2px solid transparent;
+  transition: opacity 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+
+.tag-chip:hover .tag-chip-label {
+  opacity: 0.7;
+}
+
+.tag-chip input:checked + .tag-chip-label {
+  opacity: 1;
+  border-color: #fff;
+  box-shadow: 0 0 0 2px var(--chip-color, #1b2a4e);
+}
+
+.tag-chip input:focus-visible + .tag-chip-label {
+  outline: 2px solid var(--chip-color, #1b2a4e);
+  outline-offset: 2px;
+}
+
+/* Pequenos selos de etiqueta/categoria no card de negócio do Pipeline */
+.deal-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.deal-badges .category-badge {
+  font-size: 10px;
+  padding: 2px 8px;
 }
 
 .channel-row {
@@ -2063,7 +2129,7 @@ table.data-table tr.clickable:hover {
 
 .gc-field input[readonly] {
   color: var(--vg-text-muted);
-  background: #fafbfc;
+  background: var(--vg-surface-2);
 }
 
 #gc-textarea {
