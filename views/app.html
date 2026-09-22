@@ -262,7 +262,8 @@
           <h2 style="color:var(--vg-navy); margin-top:0;">E-mail</h2>
           <div class="settings-tabs">
             <button class="settings-tab active" data-emailtab="leads">Por Lead</button>
-            <button class="settings-tab" data-emailtab="gmail">Caixa de Entrada (Gmail)</button>
+            <button class="settings-tab" data-emailtab="my">Minha Caixa (<span id="email-my-tab-name">-</span>)</button>
+            <button class="settings-tab" data-emailtab="gmail">velocitaglobal@gmail.com</button>
           </div>
 
           <div id="email-tab-leads" class="settings-panel">
@@ -281,6 +282,18 @@
                   </div>
                   <div class="chat-thread" id="email-thread-list"></div>
                 </div>
+              </div>
+            </div>
+          </div>
+
+          <div id="email-tab-my" class="settings-panel" style="display:none;">
+            <div class="comms-layout">
+              <div class="comms-list-col">
+                <div id="my-inbox-status" class="empty-state" style="text-align:left; padding:0 0 12px;"></div>
+                <div id="my-inbox-list"></div>
+              </div>
+              <div class="comms-chat-col">
+                <div id="my-message-view" class="empty-state" style="padding:60px 10px;">Selecione uma mensagem à esquerda.</div>
               </div>
             </div>
           </div>

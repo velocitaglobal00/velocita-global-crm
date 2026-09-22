@@ -210,7 +210,9 @@ const Api = {
   googleDisconnect: (userId) => api(`/api/users/${userId}/google-disconnect`, { method: 'POST' }),
   gmailInboxMessages: () => api('/api/email-inbox/gmail/messages'),
   gmailInboxMessage: (id) => api(`/api/email-inbox/gmail/messages/${id}`),
-  gmailInboxDisconnect: () => api('/api/settings/gmail-inbox-disconnect', { method: 'POST' })
+  gmailInboxDisconnect: () => api('/api/settings/gmail-inbox-disconnect', { method: 'POST' }),
+  myInboxMessages: (attendantId) => api(`/api/email-inbox/my/messages?attendantId=${encodeURIComponent(attendantId || '')}`),
+  myInboxMessage: (attendantId, id) => api(`/api/email-inbox/my/messages/${id}?attendantId=${encodeURIComponent(attendantId || '')}`)
 };
 
 // ============ Init ============
@@ -2832,25 +2834,25 @@ function bindEmailTabs() {
       tab.classList.add('active');
       const emailTab = tab.dataset.emailtab;
       document.getElementById('email-tab-leads').style.display = emailTab === 'leads' ? '' : 'none';
+      document.getElementById('email-tab-my').style.display = emailTab === 'my' ? '' : 'none';
       document.getElementById('email-tab-gmail').style.display = emailTab === 'gmail' ? '' : 'none';
+      if (emailTab === 'my') renderMyInbox();
       if (emailTab === 'gmail') renderGmailInbox();
     });
   });
 }
 
-async function renderGmailInbox() {
-  const status = document.getElementById('gmail-inbox-status');
-  const list = document.getElementById('gmail-inbox-list');
+// Caixas de e-mail baseadas no Gmail: a compartilhada (velocitaglobal@gmail.com) e a
+// pessoal de quem está "Atendendo como X". Mesma UI, fontes de dados diferentes.
+async function renderGenericGmailInbox(opts) {
+  const status = document.getElementById(opts.statusId);
+  const list = document.getElementById(opts.listId);
   status.innerHTML = '';
   list.innerHTML = '<div class="empty-state">Carregando...</div>';
   try {
-    const { email, messages } = await Api.gmailInboxMessages();
-    status.innerHTML = `${svgIcon('calendar')} Conectado: <strong>${escapeHtml(email)}</strong> <button class="icon-btn danger" id="btn-gmail-disconnect" title="Desconectar" style="margin-left:6px;">${svgIcon('trash')}</button>`;
-    document.getElementById('btn-gmail-disconnect').addEventListener('click', async () => {
-      if (!confirm('Desconectar a caixa de entrada do Gmail?')) return;
-      await Api.gmailInboxDisconnect();
-      renderGmailInbox();
-    });
+    const { email, messages } = await opts.fetchMessages();
+    status.innerHTML = opts.connectedStatusHtml(email);
+    if (opts.bindDisconnect) opts.bindDisconnect();
 
     if (!messages.length) {
       list.innerHTML = '<div class="empty-state">Nenhuma mensagem na caixa de entrada.</div>';
@@ -2859,7 +2861,7 @@ async function renderGmailInbox() {
     list.innerHTML = messages
       .map(
         (m) => `
-      <div class="list-row clickable" data-gmail-msg="${m.id}" style="align-items:flex-start; ${m.unread ? 'font-weight:700;' : ''}">
+      <div class="list-row clickable" data-inbox-msg="${m.id}" style="align-items:flex-start; ${m.unread ? 'font-weight:700;' : ''}">
         <div>
           <div class="name">${escapeHtml(m.from)}</div>
           <div style="font-size:12px;">${escapeHtml(m.subject)}</div>
@@ -2869,28 +2871,26 @@ async function renderGmailInbox() {
     `
       )
       .join('');
-    list.querySelectorAll('[data-gmail-msg]').forEach((row) => {
-      row.addEventListener('click', () => loadGmailMessage(row.dataset.gmailMsg));
+    list.querySelectorAll('[data-inbox-msg]').forEach((row) => {
+      row.addEventListener('click', () => loadGenericGmailMessage(opts, row.dataset.inboxMsg));
     });
   } catch (err) {
     status.innerHTML = '';
     list.innerHTML = `
       <div class="empty-state" style="text-align:left;">
-        ${escapeHtml(err.message || 'Caixa de entrada do Gmail não conectada.')}
+        ${escapeHtml(err.message || 'Caixa de entrada não conectada.')}
       </div>
-      <button class="btn-primary" id="btn-gmail-connect" style="width:100%; margin-top:10px;">Conectar Gmail</button>
+      ${opts.connectButtonHtml || ''}
     `;
-    document.getElementById('btn-gmail-connect').addEventListener('click', () => {
-      window.open('/api/google/gmail-oauth-start', 'gmail-connect', 'width=520,height=650');
-    });
+    if (opts.bindConnect) opts.bindConnect();
   }
 }
 
-async function loadGmailMessage(id) {
-  const view = document.getElementById('gmail-message-view');
+async function loadGenericGmailMessage(opts, id) {
+  const view = document.getElementById(opts.viewId);
   view.innerHTML = '<div class="empty-state">Carregando...</div>';
   try {
-    const msg = await Api.gmailInboxMessage(id);
+    const msg = await opts.fetchMessage(id);
     view.innerHTML = `
       <div style="padding:16px;">
         <h3 style="margin:0 0 6px;">${escapeHtml(msg.subject)}</h3>
@@ -2903,6 +2903,46 @@ async function loadGmailMessage(id) {
   } catch (err) {
     view.innerHTML = `<div class="empty-state">${escapeHtml(err.message || 'Erro ao carregar mensagem')}</div>`;
   }
+}
+
+function renderGmailInbox() {
+  return renderGenericGmailInbox({
+    statusId: 'gmail-inbox-status',
+    listId: 'gmail-inbox-list',
+    viewId: 'gmail-message-view',
+    fetchMessages: () => Api.gmailInboxMessages(),
+    fetchMessage: (id) => Api.gmailInboxMessage(id),
+    connectedStatusHtml: (email) =>
+      `${svgIcon('calendar')} Conectado: <strong>${escapeHtml(email)}</strong> <button class="icon-btn danger" id="btn-gmail-disconnect" title="Desconectar" style="margin-left:6px;">${svgIcon('trash')}</button>`,
+    bindDisconnect: () => {
+      document.getElementById('btn-gmail-disconnect').addEventListener('click', async () => {
+        if (!confirm('Desconectar a caixa de entrada do Gmail?')) return;
+        await Api.gmailInboxDisconnect();
+        renderGmailInbox();
+      });
+    },
+    connectButtonHtml: '<button class="btn-primary" id="btn-gmail-connect" style="width:100%; margin-top:10px;">Conectar Gmail</button>',
+    bindConnect: () => {
+      document.getElementById('btn-gmail-connect').addEventListener('click', () => {
+        window.open('/api/google/gmail-oauth-start', 'gmail-connect', 'width=520,height=650');
+      });
+    }
+  });
+}
+
+function renderMyInbox() {
+  const attendant = state.users.find((u) => u.id === state.attendantId);
+  document.getElementById('email-my-tab-name').textContent = attendant ? attendant.name : '-';
+  return renderGenericGmailInbox({
+    statusId: 'my-inbox-status',
+    listId: 'my-inbox-list',
+    viewId: 'my-message-view',
+    fetchMessages: () => Api.myInboxMessages(state.attendantId),
+    fetchMessage: (id) => Api.myInboxMessage(state.attendantId, id),
+    connectedStatusHtml: (email) => `${svgIcon('calendar')} Conectado: <strong>${escapeHtml(email)}</strong>`,
+    connectButtonHtml:
+      '<p style="font-size:12px; color:var(--vg-text-muted);">Conecte sua conta Google em Configurações &gt; Usuários (o mesmo botão usado para o Google Calendar já dá acesso à sua caixa de entrada).</p>'
+  });
 }
 
 async function renderEmailInbox() {

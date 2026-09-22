@@ -1454,7 +1454,7 @@ app.get('/api/google/oauth-start', requireAuth, (req, res) => {
     response_type: 'code',
     access_type: 'offline',
     prompt: 'consent',
-    scope: 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/userinfo.email',
+    scope: 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/userinfo.email',
     state: user.id
   });
   res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
@@ -1589,37 +1589,59 @@ function extractGmailBody(payload) {
   return '';
 }
 
+async function listGmailMessages(accessToken) {
+  const listRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=25&labelIds=INBOX', {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+  const listJson = await listRes.json();
+  if (!listRes.ok) throw new Error(listJson.error?.message || 'Erro ao listar mensagens do Gmail');
+
+  return Promise.all(
+    (listJson.messages || []).map(async (m) => {
+      const msgRes = await fetch(
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      const msgJson = await msgRes.json();
+      const headers = (msgJson.payload && msgJson.payload.headers) || [];
+      const getHeader = (name) => (headers.find((h) => h.name === name) || {}).value || '';
+      return {
+        id: m.id,
+        from: getHeader('From'),
+        subject: getHeader('Subject') || '(sem assunto)',
+        date: getHeader('Date'),
+        snippet: msgJson.snippet || '',
+        unread: (msgJson.labelIds || []).includes('UNREAD')
+      };
+    })
+  );
+}
+
+async function getGmailMessage(accessToken, id) {
+  const msgRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=full`, {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+  const msgJson = await msgRes.json();
+  if (!msgRes.ok) throw new Error(msgJson.error?.message || 'Erro ao carregar a mensagem');
+  const headers = (msgJson.payload && msgJson.payload.headers) || [];
+  const getHeader = (name) => (headers.find((h) => h.name === name) || {}).value || '';
+  return {
+    id,
+    from: getHeader('From'),
+    to: getHeader('To'),
+    subject: getHeader('Subject') || '(sem assunto)',
+    date: getHeader('Date'),
+    body: extractGmailBody(msgJson.payload)
+  };
+}
+
 app.get('/api/email-inbox/gmail/messages', requireAuth, async (req, res) => {
   const data = db.read();
   const gcal = data.settings.integrations.googleCalendar || {};
   const gmailInbox = data.settings.integrations.gmailInbox || {};
   try {
     const accessToken = await getGoogleAccessTokenGeneric(gcal, gmailInbox.refreshToken, 'A caixa de entrada do Gmail');
-    const listRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=25&labelIds=INBOX', {
-      headers: { Authorization: `Bearer ${accessToken}` }
-    });
-    const listJson = await listRes.json();
-    if (!listRes.ok) throw new Error(listJson.error?.message || 'Erro ao listar mensagens do Gmail');
-
-    const messages = await Promise.all(
-      (listJson.messages || []).map(async (m) => {
-        const msgRes = await fetch(
-          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`,
-          { headers: { Authorization: `Bearer ${accessToken}` } }
-        );
-        const msgJson = await msgRes.json();
-        const headers = (msgJson.payload && msgJson.payload.headers) || [];
-        const getHeader = (name) => (headers.find((h) => h.name === name) || {}).value || '';
-        return {
-          id: m.id,
-          from: getHeader('From'),
-          subject: getHeader('Subject') || '(sem assunto)',
-          date: getHeader('Date'),
-          snippet: msgJson.snippet || '',
-          unread: (msgJson.labelIds || []).includes('UNREAD')
-        };
-      })
-    );
+    const messages = await listGmailMessages(accessToken);
     res.json({ email: gmailInbox.email || '', messages });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -1632,21 +1654,35 @@ app.get('/api/email-inbox/gmail/messages/:id', requireAuth, async (req, res) => 
   const gmailInbox = data.settings.integrations.gmailInbox || {};
   try {
     const accessToken = await getGoogleAccessTokenGeneric(gcal, gmailInbox.refreshToken, 'A caixa de entrada do Gmail');
-    const msgRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${req.params.id}?format=full`, {
-      headers: { Authorization: `Bearer ${accessToken}` }
-    });
-    const msgJson = await msgRes.json();
-    if (!msgRes.ok) throw new Error(msgJson.error?.message || 'Erro ao carregar a mensagem');
-    const headers = (msgJson.payload && msgJson.payload.headers) || [];
-    const getHeader = (name) => (headers.find((h) => h.name === name) || {}).value || '';
-    res.json({
-      id: req.params.id,
-      from: getHeader('From'),
-      to: getHeader('To'),
-      subject: getHeader('Subject') || '(sem assunto)',
-      date: getHeader('Date'),
-      body: extractGmailBody(msgJson.payload)
-    });
+    res.json(await getGmailMessage(accessToken, req.params.id));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Caixa de entrada pessoal de quem está "Atendendo como X" no momento — reaproveita
+// o MESMO refresh token que o usuário já conectou para o Google Calendar (o escopo
+// gmail.readonly foi incluído nesse fluxo), então não precisa de uma conexão separada.
+app.get('/api/email-inbox/my/messages', requireAuth, async (req, res) => {
+  const data = db.read();
+  const gcal = data.settings.integrations.googleCalendar || {};
+  const user = data.users.find((u) => u.id === req.query.attendantId);
+  try {
+    const accessToken = await getGoogleAccessTokenGeneric(gcal, user && user.googleRefreshToken, user ? user.name : 'Este usuário');
+    const messages = await listGmailMessages(accessToken);
+    res.json({ email: user.googleEmail || '', messages });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.get('/api/email-inbox/my/messages/:id', requireAuth, async (req, res) => {
+  const data = db.read();
+  const gcal = data.settings.integrations.googleCalendar || {};
+  const user = data.users.find((u) => u.id === req.query.attendantId);
+  try {
+    const accessToken = await getGoogleAccessTokenGeneric(gcal, user && user.googleRefreshToken, user ? user.name : 'Este usuário');
+    res.json(await getGmailMessage(accessToken, req.params.id));
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
