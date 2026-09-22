@@ -9,6 +9,9 @@ const APP_PASSWORD = 'Velocita1';
 const PORT = process.env.PORT || 3000;
 
 const app = express();
+// Necessário no Render (atrás de proxy) para que req.protocol reporte "https"
+// corretamente — usado para montar a redirect_uri do OAuth do Google Calendar.
+app.set('trust proxy', 1);
 // Limite maior que o padrão (100kb) porque fotos/áudios do Chat da Equipe e
 // anexos de e-mail chegam em base64 dentro do corpo JSON — uma foto de celular
 // sozinha já passa de 1-5MB antes mesmo da inflação de ~33% do base64.
@@ -1357,22 +1360,111 @@ app.post('/api/leads/:id/call', requireAuth, async (req, res) => {
   }
 });
 
-// ---------- Google Calendar: sincronizar reunião/tarefa como evento ----------
-// Requer um Client ID/Secret de um projeto no Google Cloud Console e um Refresh
-// Token obtido via OAuth (veja INTEGRACOES.md). Sem isso, retorna erro claro.
-async function getGoogleAccessToken(gcal) {
+// ---------- Google Calendar: um app OAuth compartilhado (Client ID/Secret,
+// cadastrado em Configurações > Integrações), cada usuário conecta sua PRÓPRIA
+// conta Google individualmente (Configurações > Usuários), guardando um refresh
+// token por usuário. Assim cada sócio recebe os eventos no calendário dele.
+function googleRedirectUri(req) {
+  return `${req.protocol}://${req.get('host')}/api/google/oauth-callback`;
+}
+
+app.get('/api/google/oauth-start', requireAuth, (req, res) => {
+  const data = db.read();
+  const gcal = data.settings.integrations.googleCalendar || {};
+  const user = data.users.find((u) => u.id === req.query.userId);
+  if (!gcal.clientId || !gcal.clientSecret) {
+    return res.status(400).send('Configure o Client ID e o Client Secret do Google em Configurações > Integrações antes de conectar um usuário.');
+  }
+  if (!user) return res.status(404).send('Usuário não encontrado.');
+
+  const params = new URLSearchParams({
+    client_id: gcal.clientId,
+    redirect_uri: googleRedirectUri(req),
+    response_type: 'code',
+    access_type: 'offline',
+    prompt: 'consent',
+    scope: 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/userinfo.email',
+    state: user.id
+  });
+  res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
+});
+
+app.get('/api/google/oauth-callback', async (req, res) => {
+  const closePopup = (payload) => {
+    res.send(`<script>window.opener && window.opener.postMessage(${JSON.stringify(payload)}, '*'); window.close();</script><p>Pode fechar esta janela.</p>`);
+  };
+
+  if (req.query.error) return closePopup({ googleCalendarError: String(req.query.error) });
+
+  const data = db.read();
+  const gcal = data.settings.integrations.googleCalendar || {};
+  const user = data.users.find((u) => u.id === req.query.state);
+  if (!user || !gcal.clientId || !gcal.clientSecret) {
+    return closePopup({ googleCalendarError: 'Configuração inválida ou usuário não encontrado.' });
+  }
+
+  try {
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code: req.query.code,
+        client_id: gcal.clientId,
+        client_secret: gcal.clientSecret,
+        redirect_uri: googleRedirectUri(req),
+        grant_type: 'authorization_code'
+      })
+    });
+    const tokenJson = await tokenRes.json();
+    if (!tokenRes.ok) throw new Error(tokenJson.error_description || tokenJson.error || 'Falha ao obter token do Google');
+    if (!tokenJson.refresh_token) {
+      throw new Error('O Google não retornou um refresh token. Remova o acesso do app em myaccount.google.com/permissions e tente conectar de novo.');
+    }
+
+    const infoRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+      headers: { Authorization: `Bearer ${tokenJson.access_token}` }
+    });
+    const infoJson = await infoRes.json();
+
+    user.googleRefreshToken = tokenJson.refresh_token;
+    user.googleEmail = infoJson.email || '';
+    db.write(data);
+
+    closePopup({ googleCalendarConnected: true, userId: user.id, email: user.googleEmail });
+  } catch (err) {
+    closePopup({ googleCalendarError: err.message });
+  }
+});
+
+app.post('/api/users/:id/google-disconnect', requireAuth, (req, res) => {
+  const data = db.read();
+  const user = data.users.find((u) => u.id === req.params.id);
+  if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
+  delete user.googleRefreshToken;
+  delete user.googleEmail;
+  db.write(data);
+  res.json({ ok: true });
+});
+
+async function getGoogleAccessTokenForUser(gcal, user) {
+  if (!gcal.clientId || !gcal.clientSecret) {
+    throw new Error('Configure o Client ID e o Client Secret do Google em Configurações > Integrações.');
+  }
+  if (!user || !user.googleRefreshToken) {
+    throw new Error(`${user ? user.name : 'O atendente responsável'} ainda não conectou o Google Calendar (Configurações > Usuários).`);
+  }
   const response = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       client_id: gcal.clientId,
       client_secret: gcal.clientSecret,
-      refresh_token: gcal.refreshToken,
+      refresh_token: user.googleRefreshToken,
       grant_type: 'refresh_token'
     })
   });
   const result = await response.json();
-  if (!response.ok) throw new Error(result.error_description || result.error || 'Falha ao renovar token do Google');
+  if (!response.ok) throw new Error(`Falha ao renovar token do Google de ${user.name}: ` + (result.error_description || result.error));
   return result.access_token;
 }
 
@@ -1382,12 +1474,10 @@ app.post('/api/activities/:id/sync-calendar', requireAuth, async (req, res) => {
   if (!activity) return res.status(404).json({ error: 'Atividade não encontrada' });
 
   const gcal = data.settings.integrations.googleCalendar || {};
-  if (!gcal.clientId || !gcal.clientSecret || !gcal.refreshToken) {
-    return res.status(400).json({ error: 'Integração do Google Calendar não configurada em Configurações > Integrações.' });
-  }
+  const user = data.users.find((u) => u.id === activity.attendantId);
 
   try {
-    const accessToken = await getGoogleAccessToken(gcal);
+    const accessToken = await getGoogleAccessTokenForUser(gcal, user);
     const start = new Date(activity.date);
     const end = new Date(start.getTime() + 60 * 60 * 1000);
     const calendarId = gcal.calendarId || 'primary';
@@ -1415,6 +1505,34 @@ app.post('/api/activities/:id/sync-calendar', requireAuth, async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// ---------- Calendário: agenda unificada de reuniões/tarefas com data ----------
+app.get('/api/calendar/events', requireAuth, (req, res) => {
+  const data = db.read();
+  const events = data.activities
+    .filter((a) => a.date && (a.type === 'meeting' || a.type === 'task'))
+    .map((a) => {
+      const deal = a.dealId ? data.deals.find((d) => d.id === a.dealId) : null;
+      const lead = a.leadId ? data.contacts.find((c) => c.id === a.leadId) : null;
+      const user = data.users.find((u) => u.id === a.attendantId);
+      return {
+        id: a.id,
+        dealId: a.dealId || null,
+        leadId: a.leadId || null,
+        dealTitle: deal ? deal.title : null,
+        leadName: lead ? lead.name : null,
+        type: a.type,
+        text: a.text,
+        date: a.date,
+        done: !!a.done,
+        attendantId: a.attendantId || null,
+        attendantName: user ? user.name : null,
+        googleEventLink: a.googleEventLink || null
+      };
+    })
+    .sort((x, y) => new Date(x.date) - new Date(y.date));
+  res.json(events);
 });
 
 // ---------- Roteiro do Dia (gerador de roteiros virais para afiliados) ----------

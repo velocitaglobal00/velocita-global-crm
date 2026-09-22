@@ -204,7 +204,9 @@ const Api = {
   syncCalendar: (activityId) => api(`/api/activities/${activityId}/sync-calendar`, { method: 'POST' }),
   teamChat: (attendantId) => api(`/api/team-chat?attendantId=${encodeURIComponent(attendantId || '')}`),
   sendTeamChat: (payload) => api('/api/team-chat', { method: 'POST', body: JSON.stringify(payload) }),
-  markTeamChatRead: (id, attendantId) => api(`/api/team-chat/${id}/read`, { method: 'POST', body: JSON.stringify({ attendantId }) })
+  markTeamChatRead: (id, attendantId) => api(`/api/team-chat/${id}/read`, { method: 'POST', body: JSON.stringify({ attendantId }) }),
+  calendarEvents: () => api('/api/calendar/events'),
+  googleDisconnect: (userId) => api(`/api/users/${userId}/google-disconnect`, { method: 'POST' })
 };
 
 // ============ Init ============
@@ -253,6 +255,8 @@ async function init() {
   bindRoteiro();
   bindTeamChat();
   bindBiTabs();
+  bindGoogleCalendarPopup();
+  bindCalendarioPage();
 
   ensureAttendant();
   pollNotifications();
@@ -302,6 +306,7 @@ function switchView(viewName) {
     stopBiPolling();
   }
   if (viewName === 'roteiro') renderRoteiro();
+  if (viewName === 'calendario') renderCalendario();
   if (viewName === 'chatequipe') {
     renderTeamChat();
     startTeamChatPolling();
@@ -1866,10 +1871,16 @@ function renderSettings() {
   usersList.innerHTML = state.users
     .map(
       (u) => `
-    <div class="list-row">
+    <div class="list-row" style="flex-wrap:wrap; gap:8px;">
       <span class="name">${escapeHtml(u.name)}${u.ramal ? ` <span style="color:#8a94a6; font-weight:400;">· ramal ${escapeHtml(u.ramal)}</span>` : ''}</span>
       <div class="row-actions">
         <input type="text" class="filter-input" style="max-width:110px; padding:5px 8px;" placeholder="ramal" value="${escapeHtml(u.ramal || '')}" data-ramal-for="${u.id}" />
+        ${
+          u.googleEmail
+            ? `<span style="font-size:12px; color:var(--vg-text-muted);">${svgIcon('calendar')} ${escapeHtml(u.googleEmail)}</span>
+               <button class="icon-btn danger" data-gcal-disconnect="${u.id}" title="Desconectar Google Calendar">${svgIcon('trash')}</button>`
+            : `<button class="btn-secondary" data-gcal-connect="${u.id}" type="button" style="padding:5px 10px; font-size:12px;">${svgIcon('calendar')} Conectar Google Calendar</button>`
+        }
         <button class="icon-btn" data-edit-signature="${u.id}" title="Assinatura de e-mail">${svgIcon('edit')}</button>
         <button class="icon-btn danger" data-del-user="${u.id}" title="Excluir">${svgIcon('trash')}</button>
       </div>
@@ -1903,6 +1914,26 @@ function renderSettings() {
         showToast('Usuário excluído');
       } catch (err) {
         showToast(err.message || 'Erro ao excluir usuário');
+      }
+    });
+  });
+  usersList.querySelectorAll('[data-gcal-connect]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const userId = btn.dataset.gcalConnect;
+      window.open(`/api/google/oauth-start?userId=${encodeURIComponent(userId)}`, 'gcal-connect', 'width=520,height=650');
+    });
+  });
+  usersList.querySelectorAll('[data-gcal-disconnect]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('Desconectar esta conta do Google Calendar?')) return;
+      try {
+        await Api.googleDisconnect(btn.dataset.gcalDisconnect);
+        const u = state.users.find((u) => u.id === btn.dataset.gcalDisconnect);
+        if (u) { delete u.googleEmail; delete u.googleRefreshToken; }
+        renderSettings();
+        showToast('Google Calendar desconectado');
+      } catch (err) {
+        showToast(err.message || 'Erro ao desconectar');
       }
     });
   });
@@ -2019,6 +2050,12 @@ function loadIntegrationsForm() {
   document.getElementById('int-pabx-url').value = pabx.apiUrl || '';
   document.getElementById('int-pabx-token').value = pabx.apiToken || '';
 
+  const gcal = i.googleCalendar || {};
+  document.getElementById('int-gcal-clientid').value = gcal.clientId || '';
+  document.getElementById('int-gcal-secret').value = gcal.clientSecret || '';
+  document.getElementById('int-gcal-calendarid').value = gcal.calendarId || '';
+  document.getElementById('gcal-redirect-uri').value = window.location.origin + '/api/google/oauth-callback';
+
   document.getElementById('wa-webhook-url').textContent = window.location.origin + '/api/webhooks/whatsapp';
 }
 
@@ -2058,6 +2095,11 @@ async function saveIntegrations() {
     vivoPabx: {
       apiUrl: document.getElementById('int-pabx-url').value.trim(),
       apiToken: document.getElementById('int-pabx-token').value.trim()
+    },
+    googleCalendar: {
+      clientId: document.getElementById('int-gcal-clientid').value.trim(),
+      clientSecret: document.getElementById('int-gcal-secret').value.trim(),
+      calendarId: document.getElementById('int-gcal-calendarid').value.trim()
     }
   };
 
@@ -3546,6 +3588,109 @@ function stopBiPolling() {
     clearInterval(state.biPollHandle);
     state.biPollHandle = null;
   }
+}
+
+// ---------- Google Calendar: popup de conexão por usuário ----------
+function bindGoogleCalendarPopup() {
+  window.addEventListener('message', async (ev) => {
+    if (!ev.data) return;
+    if (ev.data.googleCalendarConnected) {
+      state.users = await Api.users();
+      renderSettings();
+      showToast(`Google Calendar conectado (${ev.data.email})`);
+    } else if (ev.data.googleCalendarError) {
+      showToast('Erro ao conectar Google Calendar: ' + ev.data.googleCalendarError);
+    }
+  });
+}
+
+// ---------- Calendário (agenda unificada de reuniões/tarefas) ----------
+function bindCalendarioPage() {
+  const select = document.getElementById('calendario-attendant-filter');
+  if (select) select.addEventListener('change', renderCalendario);
+}
+
+async function renderCalendario() {
+  const select = document.getElementById('calendario-attendant-filter');
+  if (select && !select.dataset.filled) {
+    select.innerHTML =
+      '<option value="">Todos os responsáveis</option>' +
+      state.users.map((u) => `<option value="${u.id}">${escapeHtml(u.name)}</option>`).join('');
+    select.dataset.filled = '1';
+  }
+
+  const container = document.getElementById('calendario-list');
+  container.innerHTML = '<div class="empty-state">Carregando...</div>';
+
+  let events;
+  try {
+    events = await Api.calendarEvents();
+  } catch (err) {
+    container.innerHTML = `<div class="empty-state">Erro ao carregar o calendário: ${escapeHtml(err.message || '')}</div>`;
+    return;
+  }
+
+  const attendantFilter = select ? select.value : '';
+  if (attendantFilter) events = events.filter((e) => e.attendantId === attendantFilter);
+
+  if (!events.length) {
+    container.innerHTML = '<div class="empty-state">Nenhuma reunião ou tarefa com data marcada ainda.</div>';
+    return;
+  }
+
+  const groups = {};
+  events.forEach((e) => {
+    const day = new Date(e.date).toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
+    if (!groups[day]) groups[day] = [];
+    groups[day].push(e);
+  });
+
+  container.innerHTML = Object.entries(groups)
+    .map(
+      ([day, dayEvents]) => `
+    <div class="panel" style="margin-bottom:14px;">
+      <h3 style="text-transform:capitalize;">${escapeHtml(day)}</h3>
+      ${dayEvents
+        .map((e) => {
+          const time = new Date(e.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+          const context = e.dealTitle ? `Negócio: ${escapeHtml(e.dealTitle)}` : e.leadName ? `Lead: ${escapeHtml(e.leadName)}` : '';
+          const typeLabel = e.type === 'meeting' ? 'Reunião' : 'Tarefa';
+          const syncBtn = e.googleEventLink
+            ? `<a href="${e.googleEventLink}" target="_blank" class="gcal-sync-btn">${svgIcon('calendar')} Ver no Google Calendar</a>`
+            : `<button class="gcal-sync-btn" data-sync-calendario-activity="${e.id}">${svgIcon('calendar')} Sincronizar com Google Calendar</button>`;
+          return `
+        <div class="list-row" style="align-items:flex-start;">
+          <div>
+            <span class="name">${time} · ${escapeHtml(typeLabel)}: ${escapeHtml(e.text || '')}</span><br/>
+            <span style="font-size:12px; color:var(--vg-text-muted);">
+              ${context}${context && e.attendantName ? ' · ' : ''}${e.attendantName ? 'Responsável: ' + escapeHtml(e.attendantName) : ''}
+              ${e.done ? ' · Concluída' : ''}
+            </span>
+          </div>
+          <div class="row-actions">${syncBtn}</div>
+        </div>
+      `;
+        })
+        .join('')}
+    </div>
+  `
+    )
+    .join('');
+
+  container.querySelectorAll('[data-sync-calendario-activity]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      btn.textContent = 'Sincronizando...';
+      try {
+        await Api.syncCalendar(btn.dataset.syncCalendarioActivity);
+        showToast('Evento criado no Google Calendar!');
+        renderCalendario();
+      } catch (err) {
+        showToast(err.message || 'Erro ao sincronizar com o Google Calendar');
+        renderCalendario();
+      }
+    });
+  });
 }
 
 // Métricas de leads/negócios ligados a um canal de tráfego pago (Facebook Ads,

@@ -122,7 +122,41 @@ Em **Configurações > Assistente IA**, escolha um provedor:
 
 ---
 
-## 8. Vivo PABX (ligações)
+## 8. Google Calendar (agenda de cada sócio)
+
+Cada usuário do CRM (você e os sócios) conecta a **própria** conta Google individualmente — assim, quando o Velo-Cito
+agenda uma reunião para um atendente específico, ela aparece automaticamente no Google Calendar **dele**, não numa
+conta compartilhada.
+
+**Passo 1 — Criar o app OAuth no Google (só uma vez, feito por você):**
+1. Acesse o [Google Cloud Console](https://console.cloud.google.com) e crie um projeto (ou use um existente).
+2. Vá em **APIs e Serviços > Biblioteca**, procure **Google Calendar API** e clique em **Ativar**.
+3. Vá em **APIs e Serviços > Tela de consentimento OAuth**: escolha **Externo**, preencha nome do app e e-mail, e adicione
+   os e-mails dos sócios em **Usuários de teste** (enquanto o app não for publicado, só esses e-mails conseguem conectar).
+4. Vá em **APIs e Serviços > Credenciais > Criar Credenciais > ID do cliente OAuth**. Tipo de aplicativo: **Aplicativo da Web**.
+5. Em **URIs de redirecionamento autorizados**, cole exatamente a **Redirect URI** mostrada em
+   **Configurações > Integrações > Google Calendar** do próprio CRM (ela já vem preenchida com o endereço certo do seu
+   site, ex: `https://velocita-global-crm.onrender.com/api/google/oauth-callback`).
+6. Copie o **Client ID** e o **Client Secret** gerados.
+7. No Velocita Global, em **Configurações > Integrações > Google Calendar**, cole o Client ID e o Client Secret e salve.
+
+**Passo 2 — Cada sócio conecta a própria conta (repita para cada um):**
+1. Vá em **Configurações > Usuários**.
+2. Ao lado do nome de cada pessoa, clique em **Conectar Google Calendar**.
+3. Uma janela do Google abre pedindo login e permissão — a pessoa entra com a própria conta Google e autoriza.
+4. A janela fecha sozinha e o e-mail conectado aparece ao lado do nome dela.
+
+**Pronto:** a partir daí, toda vez que o Velo-Cito (ou o botão "Sincronizar" na aba **Calendário** ou no detalhe do
+negócio) criar uma reunião/tarefa com data para essa pessoa, o evento é criado automaticamente no Google Calendar
+dela. A aba **Calendário** do CRM mostra a agenda de todo mundo junto, com filtro por responsável.
+
+> Se o Google não devolver um "refresh token" ao conectar (erro comum ao reconectar a mesma conta duas vezes), peça
+> para a pessoa revogar o acesso em [myaccount.google.com/permissions](https://myaccount.google.com/permissions) e
+> clicar em "Conectar Google Calendar" de novo.
+
+---
+
+## 9. Vivo PABX (ligações)
 
 A Vivo PABX Virtual não publica uma API padronizada como as outras — o acesso é liberado por contrato. Para configurar:
 
