@@ -1571,20 +1571,44 @@ function decodeGmailBase64Url(str) {
   return Buffer.from((str || '').replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
 }
 
-function extractGmailBody(payload) {
-  if (!payload) return '';
-  if (payload.body && payload.body.data && (payload.mimeType === 'text/html' || payload.mimeType === 'text/plain')) {
-    return decodeGmailBase64Url(payload.body.data);
+// Acha a melhor parte (html > texto simples) e devolve a referência bruta —
+// pode vir com o conteúdo já embutido (body.data) ou só uma referência
+// (body.attachmentId) quando a parte é grande demais pro Gmail embutir inline.
+function findGmailBodyPart(payload) {
+  if (!payload) return null;
+  if (payload.body && (payload.body.data || payload.body.attachmentId) && (payload.mimeType === 'text/html' || payload.mimeType === 'text/plain')) {
+    return payload;
   }
   if (Array.isArray(payload.parts)) {
     const htmlPart = payload.parts.find((p) => p.mimeType === 'text/html');
-    if (htmlPart) return extractGmailBody(htmlPart);
+    if (htmlPart) {
+      const found = findGmailBodyPart(htmlPart);
+      if (found) return found;
+    }
     const textPart = payload.parts.find((p) => p.mimeType === 'text/plain');
-    if (textPart) return extractGmailBody(textPart);
+    if (textPart) {
+      const found = findGmailBodyPart(textPart);
+      if (found) return found;
+    }
     for (const part of payload.parts) {
-      const nested = extractGmailBody(part);
+      const nested = findGmailBodyPart(part);
       if (nested) return nested;
     }
+  }
+  return null;
+}
+
+async function extractGmailBody(payload, accessToken, messageId) {
+  const part = findGmailBodyPart(payload);
+  if (!part) return '';
+  if (part.body.data) return decodeGmailBase64Url(part.body.data);
+  if (part.body.attachmentId && accessToken && messageId) {
+    const attRes = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}/attachments/${part.body.attachmentId}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    const attJson = await attRes.json();
+    if (attRes.ok && attJson.data) return decodeGmailBase64Url(attJson.data);
   }
   return '';
 }
@@ -1631,7 +1655,7 @@ async function getGmailMessage(accessToken, id) {
     to: getHeader('To'),
     subject: getHeader('Subject') || '(sem assunto)',
     date: getHeader('Date'),
-    body: extractGmailBody(msgJson.payload)
+    body: await extractGmailBody(msgJson.payload, accessToken, id)
   };
 }
 
