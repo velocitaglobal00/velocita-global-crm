@@ -315,6 +315,25 @@ app.get('/api/activities', requireAuth, (req, res) => {
   res.json(db.read().activities);
 });
 
+// Criação avulsa (aba Calendário) — não vinculada obrigatoriamente a um negócio/lead.
+app.post('/api/activities', requireAuth, (req, res) => {
+  const data = db.read();
+  const activity = {
+    id: newId('a'),
+    dealId: req.body.dealId || null,
+    leadId: req.body.leadId || null,
+    type: req.body.type || 'meeting',
+    text: req.body.text || '',
+    date: req.body.date || new Date().toISOString(),
+    done: !!req.body.done,
+    attendantId: req.body.attendantId || null,
+    attendantName: (data.users.find((u) => u.id === req.body.attendantId) || {}).name || null
+  };
+  data.activities.push(activity);
+  db.write(data);
+  res.status(201).json(activity);
+});
+
 app.get('/api/deals/:id/activities', requireAuth, (req, res) => {
   const data = db.read();
   res.json(data.activities.filter((a) => a.dealId === req.params.id));
@@ -890,7 +909,11 @@ app.post('/api/leads/:id/messages', requireAuth, async (req, res) => {
             auth: { user: email.smtpUser, pass: email.smtpPass }
           });
           const trackingPixel = `<img src="${req.protocol}://${req.get('host')}/api/track/open/${message.id}.png" width="1" height="1" alt="" style="display:none;" />`;
-          const htmlBody = message.text.replace(/\n/g, '<br>') + trackingPixel;
+          const signatureImageHtml =
+            attendant && attendant.signatureImage
+              ? `<br><br><img src="${attendant.signatureImage}" alt="Assinatura" style="max-width:320px;" />`
+              : '';
+          const htmlBody = message.text.replace(/\n/g, '<br>') + signatureImageHtml + trackingPixel;
           const mailAttachments = (Array.isArray(attachments) ? attachments : [])
             .filter((a) => a.dataBase64)
             .map((a) => ({ filename: a.filename, content: a.dataBase64, encoding: 'base64' }));

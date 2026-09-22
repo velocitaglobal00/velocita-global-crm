@@ -206,6 +206,7 @@ const Api = {
   sendTeamChat: (payload) => api('/api/team-chat', { method: 'POST', body: JSON.stringify(payload) }),
   markTeamChatRead: (id, attendantId) => api(`/api/team-chat/${id}/read`, { method: 'POST', body: JSON.stringify({ attendantId }) }),
   calendarEvents: () => api('/api/calendar/events'),
+  addCalendarEvent: (payload) => api('/api/activities', { method: 'POST', body: JSON.stringify(payload) }),
   googleDisconnect: (userId) => api(`/api/users/${userId}/google-disconnect`, { method: 'POST' })
 };
 
@@ -3621,6 +3622,60 @@ function bindGoogleCalendarPopup() {
 function bindCalendarioPage() {
   const select = document.getElementById('calendario-attendant-filter');
   if (select) select.addEventListener('change', renderCalendario);
+
+  document.getElementById('btn-add-calendar-event').addEventListener('click', openCalendarEventModal);
+  document.getElementById('btn-save-calendar-event').addEventListener('click', saveCalendarEvent);
+}
+
+function openCalendarEventModal() {
+  document.getElementById('cal-event-title').value = '';
+  document.getElementById('cal-event-type').value = 'meeting';
+
+  const now = new Date();
+  now.setMinutes(now.getMinutes() - now.getTimezoneOffset() + 60);
+  document.getElementById('cal-event-date').value = now.toISOString().slice(0, 16);
+
+  const attendantSelect = document.getElementById('cal-event-attendant');
+  attendantSelect.innerHTML = state.users.map((u) => `<option value="${u.id}">${escapeHtml(u.name)}</option>`).join('');
+  if (state.attendantId) attendantSelect.value = state.attendantId;
+
+  const linkSelect = document.getElementById('cal-event-link');
+  const dealOptions = state.deals
+    .filter((d) => d.status === 'open')
+    .map((d) => `<option value="deal:${d.id}">Negócio: ${escapeHtml(d.title)}</option>`)
+    .join('');
+  const leadOptions = state.contacts.map((c) => `<option value="lead:${c.id}">Lead: ${escapeHtml(c.name)}</option>`).join('');
+  linkSelect.innerHTML = `<option value="">Nenhum</option>${dealOptions}${leadOptions}`;
+
+  openModal('modal-calendar-event');
+}
+
+async function saveCalendarEvent() {
+  const title = document.getElementById('cal-event-title').value.trim();
+  const dateVal = document.getElementById('cal-event-date').value;
+  if (!title) return showToast('Informe um título para o evento');
+  if (!dateVal) return showToast('Informe a data e hora');
+
+  const [linkType, linkId] = (document.getElementById('cal-event-link').value || '').split(':');
+
+  const payload = {
+    type: document.getElementById('cal-event-type').value,
+    text: title,
+    date: new Date(dateVal).toISOString(),
+    attendantId: document.getElementById('cal-event-attendant').value,
+    done: false,
+    dealId: linkType === 'deal' ? linkId : null,
+    leadId: linkType === 'lead' ? linkId : null
+  };
+
+  try {
+    await Api.addCalendarEvent(payload);
+    closeModal('modal-calendar-event');
+    showToast('Evento criado!');
+    renderCalendario();
+  } catch (err) {
+    showToast(err.message || 'Erro ao criar evento');
+  }
 }
 
 async function renderCalendario() {
@@ -3933,14 +3988,51 @@ function revenueBreakdownRows(deals, keyFn, color) {
 }
 
 // ============ Assinatura de e-mail (usuários) ============
+// undefined = sem alteração na imagem; null = remover; string (data URL) = nova imagem
+let pendingSignatureImage;
+
+function renderSignatureImagePreview(dataUrl) {
+  const preview = document.getElementById('sig-user-image-preview');
+  const removeBtn = document.getElementById('sig-user-image-remove');
+  if (dataUrl) {
+    preview.innerHTML = `<img src="${dataUrl}" alt="Assinatura" style="max-width:280px; max-height:120px; border-radius:6px; border:1px solid var(--vg-border, #333);" />`;
+    removeBtn.style.display = 'inline-block';
+  } else {
+    preview.innerHTML = '<span style="font-size:12px; color:var(--vg-text-muted);">Nenhuma imagem cadastrada.</span>';
+    removeBtn.style.display = 'none';
+  }
+}
+
 function bindUserSignatureModal() {
+  document.getElementById('sig-user-image-input').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      pendingSignatureImage = reader.result;
+      renderSignatureImagePreview(pendingSignatureImage);
+    };
+    reader.readAsDataURL(file);
+  });
+
+  document.getElementById('sig-user-image-remove').addEventListener('click', () => {
+    pendingSignatureImage = null;
+    document.getElementById('sig-user-image-input').value = '';
+    renderSignatureImagePreview(null);
+  });
+
   document.getElementById('btn-save-signature').addEventListener('click', async () => {
     const id = document.getElementById('sig-user-id').value;
     const signature = document.getElementById('sig-user-text').value;
+    const payload = { signature };
+    if (pendingSignatureImage !== undefined) payload.signatureImage = pendingSignatureImage;
     try {
-      const updated = await Api.updateUser(id, { signature });
+      const updated = await Api.updateUser(id, payload);
       const user = state.users.find((u) => u.id === id);
-      if (user) user.signature = updated.signature;
+      if (user) {
+        user.signature = updated.signature;
+        user.signatureImage = updated.signatureImage;
+      }
       closeModal('modal-user-signature');
       showToast('Assinatura salva');
     } catch (err) {
@@ -3952,9 +4044,12 @@ function bindUserSignatureModal() {
 function openUserSignatureModal(userId) {
   const user = state.users.find((u) => u.id === userId);
   if (!user) return;
+  pendingSignatureImage = undefined;
   document.getElementById('sig-user-id').value = user.id;
   document.getElementById('sig-user-name').textContent = user.name;
   document.getElementById('sig-user-text').value = (user.signature || '').replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '');
+  document.getElementById('sig-user-image-input').value = '';
+  renderSignatureImagePreview(user.signatureImage || null);
   openModal('modal-user-signature');
 }
 

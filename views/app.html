@@ -316,6 +316,7 @@
         <section class="view" id="view-calendario">
           <div class="pipeline-header">
             <h2 style="margin:0;">Calendário</h2>
+            <button class="btn-primary" id="btn-add-calendar-event">+ Nova Reunião/Evento</button>
           </div>
           <p class="empty-state" style="text-align:left; padding:0 0 14px;">
             Reuniões e tarefas com data marcada, de todos os negócios e leads. Quando o Velo-Cito agenda uma reunião pelo
@@ -329,6 +330,49 @@
           </div>
           <div id="calendario-list"></div>
         </section>
+
+        <!-- ===== MODAL: Nova Reunião/Evento (Calendário) ===== -->
+        <div class="modal-overlay" id="modal-calendar-event">
+          <div class="modal">
+            <div class="modal-header">
+              <h3>Nova Reunião/Evento</h3>
+              <button class="modal-close" data-close="modal-calendar-event">&times;</button>
+            </div>
+            <div class="modal-body">
+              <div class="form-group">
+                <label>Título</label>
+                <input type="text" id="cal-event-title" placeholder="Ex: Reunião de alinhamento" />
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Tipo</label>
+                  <select id="cal-event-type">
+                    <option value="meeting">Reunião</option>
+                    <option value="task">Tarefa</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Data e hora</label>
+                  <input type="datetime-local" id="cal-event-date" />
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Responsável</label>
+                  <select id="cal-event-attendant"></select>
+                </div>
+                <div class="form-group">
+                  <label>Vincular a (opcional)</label>
+                  <select id="cal-event-link"><option value="">Nenhum</option></select>
+                </div>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn-secondary" data-close="modal-calendar-event">Cancelar</button>
+              <button class="btn-primary" id="btn-save-calendar-event">Salvar</button>
+            </div>
+          </div>
+        </div>
 
         <!-- ===== CHAT DA EQUIPE (interno, somente entre admins/atendentes) ===== -->
         <section class="view" id="view-chatequipe">
@@ -1049,8 +1093,14 @@
       <div class="modal-body">
         <input type="hidden" id="sig-user-id" />
         <div class="form-group">
-          <label>Assinatura de <span id="sig-user-name"></span></label>
+          <label>Assinatura de <span id="sig-user-name"></span> (texto, opcional)</label>
           <textarea id="sig-user-text" rows="5" placeholder="Ex: Nome, cargo, telefone..."></textarea>
+        </div>
+        <div class="form-group">
+          <label>Assinatura em imagem (anexada automaticamente no fim dos e-mails)</label>
+          <div id="sig-user-image-preview" style="margin-bottom:8px;"></div>
+          <input type="file" id="sig-user-image-input" accept="image/*" />
+          <button class="btn-secondary" id="sig-user-image-remove" type="button" style="margin-top:8px; display:none;">Remover imagem</button>
         </div>
       </div>
       <div class="modal-footer">
