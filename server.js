@@ -1482,8 +1482,16 @@ app.post('/api/activities/:id/sync-calendar', requireAuth, async (req, res) => {
     const end = new Date(start.getTime() + 60 * 60 * 1000);
     const calendarId = gcal.calendarId || 'primary';
 
+    // Convida os demais sócios (pelo e-mail cadastrado em Configurações > Usuários)
+    // como participantes, com lembretes de push/e-mail — é assim que o celular de
+    // cada um recebe a notificação da reunião, mesmo sem terem conectado a própria
+    // conta Google ainda (o convite chega por e-mail e pelo Google Agenda de qualquer forma).
+    const attendees = data.users
+      .filter((u) => u.email && u.id !== user.id)
+      .map((u) => ({ email: u.email }));
+
     const response = await fetch(
-      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`,
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?sendUpdates=all`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
@@ -1491,7 +1499,15 @@ app.post('/api/activities/:id/sync-calendar', requireAuth, async (req, res) => {
           summary: activity.text,
           description: 'Criado automaticamente pelo Velocita Global CRM',
           start: { dateTime: start.toISOString() },
-          end: { dateTime: end.toISOString() }
+          end: { dateTime: end.toISOString() },
+          attendees,
+          reminders: {
+            useDefault: false,
+            overrides: [
+              { method: 'popup', minutes: 30 },
+              { method: 'email', minutes: 60 }
+            ]
+          }
         })
       }
     );
