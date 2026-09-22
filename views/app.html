@@ -270,6 +270,8 @@
             <div class="comms-layout">
               <div class="comms-list-col">
                 <select id="email-inbox-new-select" style="width:100%; margin-bottom:6px; padding:9px 8px; border-radius:7px; border:1.5px solid var(--vg-border);"></select>
+                <div style="text-align:center; font-size:11px; color:var(--vg-text-muted); margin-bottom:6px;">— ou —</div>
+                <input type="email" id="email-inbox-new-typed" placeholder="Digite um e-mail (não precisa ser um lead)" style="width:100%; margin-bottom:6px; padding:9px 8px; border-radius:7px; border:1.5px solid var(--vg-border);" />
                 <button class="btn-primary" id="btn-new-email-inbox" style="width:100%; margin-bottom:10px;"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg> Novo E-mail</button>
                 <input type="text" class="filter-input" id="email-inbox-filter" placeholder="Buscar conversa..." style="width:100%; margin-bottom:10px;" />
                 <div id="email-inbox-list"></div>
@@ -289,6 +291,12 @@
           <div id="email-tab-my" class="settings-panel" style="display:none;">
             <div class="comms-layout">
               <div class="comms-list-col">
+                <div class="tab-pills gmail-folder-pills" data-folderfor="my">
+                  <button class="tab-pill active" data-folder="INBOX">Recebidos</button>
+                  <button class="tab-pill" data-folder="SENT">Enviados</button>
+                  <button class="tab-pill" data-folder="SPAM">Spam</button>
+                  <button class="tab-pill" data-folder="TRASH">Lixeira</button>
+                </div>
                 <div id="my-inbox-status" class="empty-state" style="text-align:left; padding:0 0 12px;"></div>
                 <div id="my-inbox-list"></div>
               </div>
@@ -301,6 +309,12 @@
           <div id="email-tab-gmail" class="settings-panel" style="display:none;">
             <div class="comms-layout">
               <div class="comms-list-col">
+                <div class="tab-pills gmail-folder-pills" data-folderfor="gmail">
+                  <button class="tab-pill active" data-folder="INBOX">Recebidos</button>
+                  <button class="tab-pill" data-folder="SENT">Enviados</button>
+                  <button class="tab-pill" data-folder="SPAM">Spam</button>
+                  <button class="tab-pill" data-folder="TRASH">Lixeira</button>
+                </div>
                 <div id="gmail-inbox-status" class="empty-state" style="text-align:left; padding:0 0 12px;"></div>
                 <div id="gmail-inbox-list"></div>
               </div>

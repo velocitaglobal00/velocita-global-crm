@@ -208,10 +208,11 @@ const Api = {
   calendarEvents: () => api('/api/calendar/events'),
   addCalendarEvent: (payload) => api('/api/activities', { method: 'POST', body: JSON.stringify(payload) }),
   googleDisconnect: (userId) => api(`/api/users/${userId}/google-disconnect`, { method: 'POST' }),
-  gmailInboxMessages: () => api('/api/email-inbox/gmail/messages'),
+  gmailInboxMessages: (folder) => api(`/api/email-inbox/gmail/messages?folder=${encodeURIComponent(folder || 'INBOX')}`),
   gmailInboxMessage: (id) => api(`/api/email-inbox/gmail/messages/${id}`),
   gmailInboxDisconnect: () => api('/api/settings/gmail-inbox-disconnect', { method: 'POST' }),
-  myInboxMessages: (attendantId) => api(`/api/email-inbox/my/messages?attendantId=${encodeURIComponent(attendantId || '')}`),
+  myInboxMessages: (attendantId, folder) =>
+    api(`/api/email-inbox/my/messages?attendantId=${encodeURIComponent(attendantId || '')}&folder=${encodeURIComponent(folder || 'INBOX')}`),
   myInboxMessage: (attendantId, id) => api(`/api/email-inbox/my/messages/${id}?attendantId=${encodeURIComponent(attendantId || '')}`)
 };
 
@@ -2811,10 +2812,33 @@ async function sendCommsMessage() {
 // ============ E-mail (caixa de entrada dedicada) ============
 function bindEmailInbox() {
   document.getElementById('email-inbox-filter').addEventListener('input', renderEmailInbox);
-  document.getElementById('btn-new-email-inbox').addEventListener('click', () => {
+  document.getElementById('btn-new-email-inbox').addEventListener('click', async () => {
+    const typedEmail = document.getElementById('email-inbox-new-typed').value.trim();
+    if (typedEmail) {
+      let contact = state.contacts.find((c) => (c.email || '').toLowerCase() === typedEmail.toLowerCase());
+      if (!contact) {
+        try {
+          contact = await Api.addContact({
+            name: typedEmail,
+            email: typedEmail,
+            ownerId: state.attendantId,
+            attendantId: state.attendantId,
+            source: { channel: 'organico', campaign: '' }
+          });
+          state.contacts.push(contact);
+        } catch (err) {
+          showToast(err.message || 'Erro ao criar contato para esse e-mail');
+          return;
+        }
+      }
+      document.getElementById('email-inbox-new-typed').value = '';
+      populateEmailNewSelect();
+      openEmailCompose(contact.id);
+      return;
+    }
     const selected = document.getElementById('email-inbox-new-select').value || state.emailInboxLeadId;
     if (selected) openEmailCompose(selected);
-    else showToast('Cadastre um lead com e-mail primeiro');
+    else showToast('Cadastre um lead com e-mail primeiro, ou digite um e-mail acima');
   });
   bindEmailTabs();
 }
@@ -2827,6 +2851,8 @@ function populateEmailNewSelect() {
     : '<option value="">Nenhum lead com e-mail cadastrado</option>';
 }
 
+state.gmailFolder = { my: 'INBOX', gmail: 'INBOX' };
+
 function bindEmailTabs() {
   document.querySelectorAll('#view-email .settings-tab').forEach((tab) => {
     tab.addEventListener('click', () => {
@@ -2838,6 +2864,19 @@ function bindEmailTabs() {
       document.getElementById('email-tab-gmail').style.display = emailTab === 'gmail' ? '' : 'none';
       if (emailTab === 'my') renderMyInbox();
       if (emailTab === 'gmail') renderGmailInbox();
+    });
+  });
+
+  document.querySelectorAll('.gmail-folder-pills').forEach((row) => {
+    const forInbox = row.dataset.folderfor;
+    row.querySelectorAll('[data-folder]').forEach((pill) => {
+      pill.addEventListener('click', () => {
+        row.querySelectorAll('[data-folder]').forEach((p) => p.classList.remove('active'));
+        pill.classList.add('active');
+        state.gmailFolder[forInbox] = pill.dataset.folder;
+        if (forInbox === 'my') renderMyInbox();
+        else renderGmailInbox();
+      });
     });
   });
 }
@@ -2910,7 +2949,7 @@ function renderGmailInbox() {
     statusId: 'gmail-inbox-status',
     listId: 'gmail-inbox-list',
     viewId: 'gmail-message-view',
-    fetchMessages: () => Api.gmailInboxMessages(),
+    fetchMessages: () => Api.gmailInboxMessages(state.gmailFolder.gmail),
     fetchMessage: (id) => Api.gmailInboxMessage(id),
     connectedStatusHtml: (email) =>
       `${svgIcon('calendar')} Conectado: <strong>${escapeHtml(email)}</strong> <button class="icon-btn danger" id="btn-gmail-disconnect" title="Desconectar" style="margin-left:6px;">${svgIcon('trash')}</button>`,
@@ -2937,7 +2976,7 @@ function renderMyInbox() {
     statusId: 'my-inbox-status',
     listId: 'my-inbox-list',
     viewId: 'my-message-view',
-    fetchMessages: () => Api.myInboxMessages(state.attendantId),
+    fetchMessages: () => Api.myInboxMessages(state.attendantId, state.gmailFolder.my),
     fetchMessage: (id) => Api.myInboxMessage(state.attendantId, id),
     connectedStatusHtml: (email) => `${svgIcon('calendar')} Conectado: <strong>${escapeHtml(email)}</strong>`,
     connectButtonHtml:

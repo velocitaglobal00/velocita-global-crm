@@ -1613,8 +1613,11 @@ async function extractGmailBody(payload, accessToken, messageId) {
   return '';
 }
 
-async function listGmailMessages(accessToken) {
-  const listRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=25&labelIds=INBOX', {
+const GMAIL_FOLDERS = ['INBOX', 'SENT', 'SPAM', 'TRASH'];
+
+async function listGmailMessages(accessToken, folder) {
+  const label = GMAIL_FOLDERS.includes(folder) ? folder : 'INBOX';
+  const listRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=25&labelIds=${label}`, {
     headers: { Authorization: `Bearer ${accessToken}` }
   });
   const listJson = await listRes.json();
@@ -1665,7 +1668,7 @@ app.get('/api/email-inbox/gmail/messages', requireAuth, async (req, res) => {
   const gmailInbox = data.settings.integrations.gmailInbox || {};
   try {
     const accessToken = await getGoogleAccessTokenGeneric(gcal, gmailInbox.refreshToken, 'A caixa de entrada do Gmail');
-    const messages = await listGmailMessages(accessToken);
+    const messages = await listGmailMessages(accessToken, req.query.folder);
     res.json({ email: gmailInbox.email || '', messages });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -1693,7 +1696,7 @@ app.get('/api/email-inbox/my/messages', requireAuth, async (req, res) => {
   const user = data.users.find((u) => u.id === req.query.attendantId);
   try {
     const accessToken = await getGoogleAccessTokenGeneric(gcal, user && user.googleRefreshToken, user ? user.name : 'Este usuário');
-    const messages = await listGmailMessages(accessToken);
+    const messages = await listGmailMessages(accessToken, req.query.folder);
     res.json({ email: user.googleEmail || '', messages });
   } catch (err) {
     res.status(400).json({ error: err.message });
