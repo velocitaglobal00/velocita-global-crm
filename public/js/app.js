@@ -1875,6 +1875,7 @@ function renderSettings() {
       <span class="name">${escapeHtml(u.name)}${u.ramal ? ` <span style="color:#8a94a6; font-weight:400;">· ramal ${escapeHtml(u.ramal)}</span>` : ''}</span>
       <div class="row-actions">
         <input type="text" class="filter-input" style="max-width:110px; padding:5px 8px;" placeholder="ramal" value="${escapeHtml(u.ramal || '')}" data-ramal-for="${u.id}" />
+        <input type="email" class="filter-input" style="max-width:190px; padding:5px 8px;" placeholder="e-mail (Google Calendar)" value="${escapeHtml(u.email || '')}" data-email-for="${u.id}" />
         ${
           u.googleEmail
             ? `<span style="font-size:12px; color:var(--vg-text-muted);">${svgIcon('calendar')} ${escapeHtml(u.googleEmail)}</span>
@@ -1890,6 +1891,18 @@ function renderSettings() {
     .join('');
   usersList.querySelectorAll('[data-edit-signature]').forEach((btn) => {
     btn.addEventListener('click', () => openUserSignatureModal(btn.dataset.editSignature));
+  });
+  usersList.querySelectorAll('[data-email-for]').forEach((input) => {
+    input.addEventListener('change', async () => {
+      try {
+        const updated = await Api.updateUser(input.dataset.emailFor, { email: input.value.trim() });
+        const u = state.users.find((u) => u.id === input.dataset.emailFor);
+        if (u) u.email = updated.email;
+        showToast('E-mail atualizado');
+      } catch (err) {
+        showToast('Erro ao atualizar e-mail');
+      }
+    });
   });
   usersList.querySelectorAll('[data-ramal-for]').forEach((input) => {
     input.addEventListener('change', async () => {
