@@ -264,6 +264,7 @@ async function init() {
   bindBiTabs();
   bindGoogleCalendarPopup();
   bindCalendarioPage();
+  bindGoalEdit();
 
   ensureAttendant();
   pollNotifications();
@@ -451,6 +452,53 @@ function closeModal(id) {
 }
 
 // ============ Dashboard ============
+function bindGoalEdit() {
+  document.getElementById('btn-edit-goal').addEventListener('click', () => {
+    const goalText = document.getElementById('goal-text');
+    if (goalText.querySelector('input')) return;
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.step = '0.01';
+    input.min = '0';
+    input.value = Number(state.settings.monthlyGoal) || 0;
+    input.style.cssText = 'font: inherit; font-weight: inherit; width: 140px; padding: 2px 4px;';
+    goalText.textContent = '';
+    goalText.appendChild(input);
+    input.focus();
+    input.select();
+
+    let committed = false;
+    const commit = async () => {
+      if (committed) return;
+      committed = true;
+      const value = Number(input.value);
+      if (Number.isNaN(value) || value < 0) {
+        showToast('Valor inválido');
+        renderDashboard();
+        return;
+      }
+      try {
+        const updated = await Api.updateSettings({ monthlyGoal: value });
+        state.settings = updated;
+        showToast('Meta atualizada');
+      } catch (err) {
+        showToast(err.message || 'Erro ao atualizar a meta');
+      }
+      renderDashboard();
+    };
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        input.blur();
+      } else if (e.key === 'Escape') {
+        committed = true;
+        renderDashboard();
+      }
+    });
+    input.addEventListener('blur', commit);
+  });
+}
+
 function renderDashboard() {
   const openDeals = state.deals.filter((d) => d.status === 'open');
   const wonDeals = state.deals.filter((d) => d.status === 'won');
@@ -779,6 +827,168 @@ function bindDealDetailModal() {
       renderActivityFeed();
     });
   });
+
+  document.getElementById('new-activity-type').addEventListener('change', (e) => {
+    const needsDate = ['meeting', 'call', 'task'].includes(e.target.value);
+    document.getElementById('new-activity-date').style.display = needsDate ? '' : 'none';
+  });
+
+  bindDealDetailInlineEdits();
+}
+
+// Clique-para-editar genérico: troca o texto por um input/select, salva ao sair do
+// campo (blur) ou Enter, cancela com Esc. Usado nos campos do painel esquerdo do
+// negócio (título, valor, estágio, data de fechamento, dono).
+function enableClickToEdit(el, buildInput, onCommit) {
+  el.style.cursor = 'pointer';
+  el.title = 'Clique para editar';
+  el.addEventListener('click', () => {
+    if (el.querySelector('input,select')) return;
+    const original = el.textContent;
+    const input = buildInput(original);
+    el.textContent = '';
+    el.appendChild(input);
+    input.focus();
+    if (input.select) input.select();
+
+    let committed = false;
+    const commit = async () => {
+      if (committed) return;
+      committed = true;
+      await onCommit(input.value, original);
+    };
+    if (input.tagName === 'SELECT') {
+      input.addEventListener('change', commit);
+      input.addEventListener('blur', () => {
+        if (!committed) commit();
+      });
+    } else {
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          input.blur();
+        } else if (e.key === 'Escape') {
+          committed = true;
+          el.textContent = original;
+        }
+      });
+      input.addEventListener('blur', commit);
+    }
+  });
+}
+
+function bindDealDetailInlineEdits() {
+  enableClickToEdit(
+    document.getElementById('dd-title'),
+    (current) => {
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.value = current;
+      input.style.cssText = 'font: inherit; font-weight: inherit; width: 100%; padding: 2px 4px;';
+      return input;
+    },
+    async (value, original) => {
+      const title = value.trim() || original;
+      document.getElementById('dd-title').textContent = title;
+      await saveDealField({ title });
+    }
+  );
+
+  enableClickToEdit(
+    document.getElementById('dd-value'),
+    (current) => {
+      const input = document.createElement('input');
+      input.type = 'number';
+      input.step = '0.01';
+      const deal = state.deals.find((d) => d.id === state.currentDealId);
+      input.value = deal ? deal.value : 0;
+      input.style.cssText = 'font: inherit; font-weight: inherit; width: 100%; padding: 2px 4px;';
+      return input;
+    },
+    async (value) => {
+      const num = Number(value) || 0;
+      const deal = state.deals.find((d) => d.id === state.currentDealId);
+      document.getElementById('dd-value').textContent = fmtMoney(num, deal ? deal.currency : 'BRL');
+      await saveDealField({ value: num });
+    }
+  );
+
+  enableClickToEdit(
+    document.getElementById('dd-stage-name'),
+    () => {
+      const select = document.createElement('select');
+      select.style.cssText = 'font: inherit; width: 100%;';
+      state.stages
+        .slice()
+        .sort((a, b) => a.order - b.order)
+        .forEach((s) => {
+          const opt = document.createElement('option');
+          opt.value = s.id;
+          opt.textContent = s.name;
+          const deal = state.deals.find((d) => d.id === state.currentDealId);
+          if (deal && deal.stage === s.id) opt.selected = true;
+          select.appendChild(opt);
+        });
+      return select;
+    },
+    async (value) => {
+      document.getElementById('dd-stage-name').textContent = stageName(value);
+      await saveDealField({ stage: value });
+      const deal = state.deals.find((d) => d.id === state.currentDealId);
+      if (deal) renderStageDurations(deal);
+      renderKanban();
+    }
+  );
+
+  enableClickToEdit(
+    document.getElementById('dd-close-date'),
+    (current) => {
+      const input = document.createElement('input');
+      input.type = 'date';
+      const deal = state.deals.find((d) => d.id === state.currentDealId);
+      input.value = deal && deal.closeDate ? deal.closeDate.slice(0, 10) : '';
+      input.style.cssText = 'font: inherit; width: 100%; padding: 2px 4px;';
+      return input;
+    },
+    async (value) => {
+      document.getElementById('dd-close-date').textContent = fmtDate(value);
+      await saveDealField({ closeDate: value || null });
+    }
+  );
+
+  enableClickToEdit(
+    document.getElementById('dd-owner'),
+    () => {
+      const select = document.createElement('select');
+      select.style.cssText = 'font: inherit; width: 100%;';
+      const deal = state.deals.find((d) => d.id === state.currentDealId);
+      state.users.forEach((u) => {
+        const opt = document.createElement('option');
+        opt.value = u.id;
+        opt.textContent = u.name;
+        if (deal && deal.ownerId === u.id) opt.selected = true;
+        select.appendChild(opt);
+      });
+      return select;
+    },
+    async (value) => {
+      document.getElementById('dd-owner').textContent = userName(value);
+      await saveDealField({ ownerId: value });
+    }
+  );
+}
+
+async function saveDealField(payload) {
+  const dealId = state.currentDealId;
+  try {
+    const updated = await Api.updateDeal(dealId, payload);
+    const idx = state.deals.findIndex((d) => d.id === dealId);
+    if (idx !== -1) state.deals[idx] = updated;
+    renderKanban();
+    renderDashboard();
+  } catch (err) {
+    showToast(err.message || 'Erro ao salvar alteração');
+  }
 }
 
 function renderStageDurations(deal) {
@@ -956,28 +1166,41 @@ async function addActivityToCurrentDeal() {
   const dealId = state.currentDealId;
   const type = document.getElementById('new-activity-type').value;
   const textEl = document.getElementById('new-activity-text');
+  const dateEl = document.getElementById('new-activity-date');
   const text = textEl.value.trim();
   if (!text) {
     showToast('Escreva algo antes de adicionar');
+    return;
+  }
+  const needsDate = ['meeting', 'call', 'task'].includes(type);
+  if (needsDate && !dateEl.value) {
+    showToast('Escolha a data e hora');
     return;
   }
   try {
     const activity = await Api.addActivity(dealId, {
       type,
       text,
-      date: new Date().toISOString(),
+      date: needsDate ? new Date(dateEl.value).toISOString() : new Date().toISOString(),
       done: type !== 'task',
       attendantId: state.attendantId
     });
     if (!state.activitiesCache[dealId]) state.activitiesCache[dealId] = [];
     state.activitiesCache[dealId].push(activity);
     textEl.value = '';
+    dateEl.value = '';
+    dateEl.style.display = 'none';
+    document.getElementById('new-activity-type').value = 'note';
     renderActivityFeed();
     renderKanban();
     if (type === 'task') {
       state.reminders = await Api.reminders();
     }
     showToast('Atividade adicionada');
+
+    if (type === 'meeting' || type === 'task') {
+      await syncActivityToCalendar(activity.id, renderActivityFeed);
+    }
   } catch (err) {
     showToast('Erro ao adicionar atividade');
   }

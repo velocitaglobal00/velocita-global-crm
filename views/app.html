@@ -136,7 +136,10 @@
           </div>
 
           <div class="panel">
-            <h3>Meta do mês</h3>
+            <h3 style="display:flex; align-items:center; justify-content:space-between;">
+              Meta do mês
+              <button class="icon-btn" id="btn-edit-goal" title="Editar meta"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg></button>
+            </h3>
             <div class="goal-track">
               <div class="goal-fill" id="goal-fill" style="width:0%"></div>
               <div class="goal-text" id="goal-text">R$ 0 de R$ 0</div>
@@ -792,6 +795,7 @@
               <option value="meeting">Reunião</option>
               <option value="task">Tarefa</option>
             </select>
+            <input type="datetime-local" id="new-activity-date" style="display:none; padding:9px 8px; border-radius:7px; border:1.5px solid var(--vg-border);" />
             <textarea id="new-activity-text" placeholder="Adicionar uma atividade..."></textarea>
             <button class="btn-primary" id="btn-add-activity">Adicionar</button>
           </div>
