@@ -416,11 +416,12 @@ function updateAttendantTopbar() {
 }
 
 function ensureAttendant() {
+  // Sempre pede pra confirmar quem está usando o CRM nesta sessão — é o que
+  // determina de quem são as notas/atividades registradas. Pré-seleciona o
+  // último usado (conveniência), mas exige clicar em Confirmar toda vez.
   const stored = localStorage.getItem(ATTENDANT_KEY);
   if (stored && state.users.some((u) => u.id === stored)) {
     state.attendantId = stored;
-    updateAttendantTopbar();
-    return;
   }
   openAttendantPicker();
 }
