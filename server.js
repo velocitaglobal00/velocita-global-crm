@@ -297,6 +297,8 @@ app.post('/api/deals', requireAuth, (req, res) => {
     title: req.body.title || 'Novo negócio',
     value: Number(req.body.value) || 0,
     currency: req.body.currency || 'BRL',
+    supplyCost: Number(req.body.supplyCost) || 0,
+    marketingCost: Number(req.body.marketingCost) || 0,
     personId: req.body.personId || null,
     orgId: req.body.orgId || null,
     stage: stageId,

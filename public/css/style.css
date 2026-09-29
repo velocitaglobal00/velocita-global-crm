@@ -745,6 +745,12 @@ body {
   margin-bottom: 8px;
 }
 
+.deal-card .deal-cost {
+  font-size: 11px;
+  color: var(--vg-text-muted);
+  margin: -5px 0 6px;
+}
+
 .deal-card .deal-meta {
   display: flex;
   align-items: center;
@@ -2650,4 +2656,39 @@ table.data-table tr.clickable:hover {
 .ajuda-chapter-card .cs {
   font-size: 11.5px;
   color: var(--vg-text-muted);
+}
+
+/* Cursor animado da aba Ajuda — simula navegação ao vivo pelo mockup */
+.ajuda-cursor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 5;
+  transition: transform 0.7s cubic-bezier(0.65, 0, 0.35, 1);
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.35));
+}
+
+.ajuda-cursor.clicking svg {
+  animation: ajuda-click-pulse 0.26s ease;
+}
+
+@keyframes ajuda-click-pulse {
+  0% { transform: scale(1); }
+  40% { transform: scale(0.72); }
+  100% { transform: scale(1); }
+}
+
+.ajuda-visual .tag-pill,
+.ajuda-visual .category-badge {
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.ajuda-visual .ajuda-clicked {
+  box-shadow: 0 0 0 3px var(--vg-orange);
+  transform: scale(1.06);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ajuda-cursor { display: none; }
 }

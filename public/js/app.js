@@ -321,6 +321,7 @@ function switchView(viewName) {
   } else {
     ajudaState.isPlaying = false;
     ajudaStopSpeaking();
+    if (window._ajudaCursorTimer) clearTimeout(window._ajudaCursorTimer);
   }
   if (viewName === 'chatequipe') {
     renderTeamChat();
@@ -704,9 +705,14 @@ function buildDealCard(deal) {
   const leadTags = contact && Array.isArray(contact.tags) ? contact.tags.map((tid) => tagById(tid)).filter(Boolean) : [];
   const leadTagBadges = leadTags.map((t) => `<span class="category-badge" style="background:${t.color}">${escapeHtml(t.name)}</span>`).join('');
 
+  const costLines = [];
+  if (deal.supplyCost) costLines.push(`<div class="deal-cost">Fornecimento: ${fmtMoney(deal.supplyCost, deal.currency)}</div>`);
+  if (deal.marketingCost) costLines.push(`<div class="deal-cost">Marketing Digital: ${fmtMoney(deal.marketingCost, deal.currency)}</div>`);
+
   card.innerHTML = `
     <div class="deal-title">${escapeHtml(deal.title)}</div>
     <div class="deal-value">${fmtMoney(deal.value, deal.currency)}</div>
+    ${costLines.join('')}
     <div class="deal-meta">
       <div class="deal-owner">
         <div class="owner-avatar">${initials(owner)}</div>
@@ -776,6 +782,8 @@ function openDealModal(deal, presetPersonId) {
   document.getElementById('deal-title').value = deal ? deal.title : '';
   document.getElementById('deal-value').value = deal ? deal.value : '';
   document.getElementById('deal-currency').value = deal ? deal.currency : 'BRL';
+  document.getElementById('deal-supply-cost').value = deal && deal.supplyCost ? deal.supplyCost : '';
+  document.getElementById('deal-marketing-cost').value = deal && deal.marketingCost ? deal.marketingCost : '';
   populateDealPersonSelect(deal ? deal.personId : presetPersonId || null);
   populateDealStageSelect(deal ? deal.stage : (state.stages[0] && state.stages[0].id));
   document.getElementById('deal-close-date').value = deal && deal.closeDate ? deal.closeDate.slice(0, 10) : '';
@@ -796,6 +804,8 @@ async function saveDeal() {
     title,
     value: Number(document.getElementById('deal-value').value) || 0,
     currency: document.getElementById('deal-currency').value,
+    supplyCost: Number(document.getElementById('deal-supply-cost').value) || 0,
+    marketingCost: Number(document.getElementById('deal-marketing-cost').value) || 0,
     personId,
     orgId: contact ? contact.orgId : null,
     stage: document.getElementById('deal-stage').value,
@@ -920,6 +930,44 @@ function bindDealDetailInlineEdits() {
       const deal = state.deals.find((d) => d.id === state.currentDealId);
       document.getElementById('dd-value').textContent = fmtMoney(num, deal ? deal.currency : 'BRL');
       await saveDealField({ value: num });
+    }
+  );
+
+  enableClickToEdit(
+    document.getElementById('dd-supply-cost'),
+    (current) => {
+      const input = document.createElement('input');
+      input.type = 'number';
+      input.step = '0.01';
+      const deal = state.deals.find((d) => d.id === state.currentDealId);
+      input.value = deal ? deal.supplyCost || 0 : 0;
+      input.style.cssText = 'font: inherit; width: 100%; padding: 2px 4px;';
+      return input;
+    },
+    async (value) => {
+      const num = Number(value) || 0;
+      const deal = state.deals.find((d) => d.id === state.currentDealId);
+      document.getElementById('dd-supply-cost').textContent = fmtMoney(num, deal ? deal.currency : 'BRL');
+      await saveDealField({ supplyCost: num });
+    }
+  );
+
+  enableClickToEdit(
+    document.getElementById('dd-marketing-cost'),
+    (current) => {
+      const input = document.createElement('input');
+      input.type = 'number';
+      input.step = '0.01';
+      const deal = state.deals.find((d) => d.id === state.currentDealId);
+      input.value = deal ? deal.marketingCost || 0 : 0;
+      input.style.cssText = 'font: inherit; width: 100%; padding: 2px 4px;';
+      return input;
+    },
+    async (value) => {
+      const num = Number(value) || 0;
+      const deal = state.deals.find((d) => d.id === state.currentDealId);
+      document.getElementById('dd-marketing-cost').textContent = fmtMoney(num, deal ? deal.currency : 'BRL');
+      await saveDealField({ marketingCost: num });
     }
   );
 
@@ -1065,6 +1113,8 @@ async function openDealDetail(dealId) {
 
   document.getElementById('dd-title').textContent = deal.title;
   document.getElementById('dd-value').textContent = fmtMoney(deal.value, deal.currency);
+  document.getElementById('dd-supply-cost').textContent = fmtMoney(deal.supplyCost || 0, deal.currency);
+  document.getElementById('dd-marketing-cost').textContent = fmtMoney(deal.marketingCost || 0, deal.currency);
   document.getElementById('dd-stage-name').textContent = stageName(deal.stage);
   document.getElementById('dd-close-date').textContent = fmtDate(deal.closeDate);
   document.getElementById('dd-owner').textContent = userName(deal.ownerId);
@@ -4949,13 +4999,60 @@ function ajudaRenderScene() {
   const s = AJUDA_SCENES[ajudaState.idx];
   document.getElementById('ajuda-chapter-tag').textContent = 'CAPÍTULO ' + (ajudaState.idx + 1) + ' / ' + AJUDA_SCENES.length + ' · ' + s.chapter.toUpperCase();
   document.getElementById('ajuda-scene-title').textContent = s.title;
-  document.getElementById('ajuda-scene-visual').innerHTML = s.visual;
+  const visual = document.getElementById('ajuda-scene-visual');
+  visual.innerHTML = s.visual;
   document.getElementById('ajuda-caption-text').textContent = s.narration;
   const pct = (ajudaState.idx / (AJUDA_SCENES.length - 1)) * 100;
   document.getElementById('ajuda-scrubber-fill').style.width = pct + '%';
   document.querySelectorAll('.ajuda-chapter-card').forEach((btn, i) => {
     btn.classList.toggle('active', i === ajudaState.idx);
   });
+  ajudaAnimateCursor(visual);
+}
+
+// Como não consigo gravar/anexar um vídeo de verdade, simulo visualmente uma
+// pessoa navegando: um cursor desenhado em CSS que se move sozinho até cada
+// elemento clicável do mockup da cena e faz um "clique" nele, em loop.
+function ajudaAnimateCursor(container) {
+  if (window._ajudaCursorTimer) clearTimeout(window._ajudaCursorTimer);
+  container.style.position = 'relative';
+  const old = container.querySelector('.ajuda-cursor');
+  if (old) old.remove();
+
+  const targets = Array.prototype.slice.call(container.querySelectorAll('.tag-pill, .category-badge'));
+  if (!targets.length) return;
+
+  const cursor = document.createElement('div');
+  cursor.className = 'ajuda-cursor';
+  cursor.innerHTML =
+    '<svg width="20" height="20" viewBox="0 0 24 24" fill="var(--vg-heading)" stroke="var(--vg-surface)" stroke-width="1.2"><path d="M4 2l14 6.5-6 1.5-2 6L4 2z"/></svg>';
+  container.appendChild(cursor);
+
+  const containerBox = container.getBoundingClientRect();
+  let step = 0;
+
+  function moveToNext() {
+    if (!container.isConnected || !cursor.isConnected) return;
+    const target = targets[step % targets.length];
+    const box = target.getBoundingClientRect();
+    const x = box.left - containerBox.left + box.width / 2 - 4;
+    const y = box.top - containerBox.top + box.height / 2 - 2;
+    cursor.style.transform = `translate(${x}px, ${y}px)`;
+
+    window._ajudaCursorTimer = setTimeout(() => {
+      target.classList.add('ajuda-clicked');
+      cursor.classList.add('clicking');
+      window._ajudaCursorTimer = setTimeout(() => {
+        target.classList.remove('ajuda-clicked');
+        cursor.classList.remove('clicking');
+        step++;
+        window._ajudaCursorTimer = setTimeout(moveToNext, 500);
+      }, 260);
+    }, 700);
+  }
+
+  cursor.style.transform = 'translate(-20px, -20px)';
+  window._ajudaCursorTimer = setTimeout(moveToNext, 500);
 }
 
 function ajudaBuildChapterList() {
