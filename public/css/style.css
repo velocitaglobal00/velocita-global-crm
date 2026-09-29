@@ -2458,3 +2458,196 @@ table.data-table tr.clickable:hover {
     flex-wrap: wrap;
   }
 }
+
+/* ---------- Ajuda (tutorial narrado) ---------- */
+.ajuda-player {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ajuda-stage-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ajuda-chapter-tag {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--vg-orange);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.ajuda-visual {
+  background: var(--vg-surface-2);
+  border: 1px solid var(--vg-border);
+  border-radius: 10px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 90px;
+}
+
+.ajuda-visual .ajuda-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ajuda-visual .ajuda-howto {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.ajuda-visual .ajuda-howto li {
+  font-size: 12.5px;
+  color: var(--vg-text-muted);
+  display: flex;
+  gap: 7px;
+  align-items: baseline;
+}
+
+.ajuda-visual .ajuda-howto li::before {
+  content: "\2192";
+  color: var(--vg-orange);
+  font-weight: 700;
+}
+
+.ajuda-visual .ajuda-howto li b {
+  color: var(--vg-text);
+}
+
+.ajuda-captions {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  background: var(--vg-surface-2);
+  border: 1px solid var(--vg-border);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+
+.ajuda-mic {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--vg-surface);
+  border: 1px solid var(--vg-border);
+  color: var(--vg-orange);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ajuda-captions p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--vg-text);
+}
+
+.ajuda-scrubber {
+  position: relative;
+  height: 6px;
+  background: var(--vg-column-bg);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.ajuda-scrubber-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0%;
+  background: var(--vg-orange);
+  border-radius: 999px;
+  transition: width 0.25s ease;
+}
+
+.ajuda-scrubber-marks {
+  position: absolute;
+  inset: 0;
+  display: flex;
+}
+
+.ajuda-scrubber-marks .mark {
+  flex: 1;
+  position: relative;
+  cursor: pointer;
+}
+
+.ajuda-transport {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ajuda-chapters {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 10px;
+}
+
+.ajuda-chapter-card {
+  text-align: left;
+  background: var(--vg-surface);
+  border: 1px solid var(--vg-border);
+  border-radius: 10px;
+  padding: 12px 13px;
+  cursor: pointer;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  color: var(--vg-text);
+  font-family: inherit;
+}
+
+.ajuda-chapter-card:hover {
+  border-color: var(--vg-orange);
+}
+
+.ajuda-chapter-card.active {
+  border-color: var(--vg-orange);
+  background: var(--vg-highlight-bg);
+}
+
+.ajuda-chapter-num {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--vg-orange);
+  background: var(--vg-surface-2);
+  border: 1px solid var(--vg-border);
+  border-radius: 6px;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ajuda-chapter-card.active .ajuda-chapter-num {
+  background: var(--vg-orange);
+  color: #fff;
+  border-color: var(--vg-orange);
+}
+
+.ajuda-chapter-card .ct {
+  font-weight: 700;
+  font-size: 13px;
+  margin-bottom: 2px;
+}
+
+.ajuda-chapter-card .cs {
+  font-size: 11.5px;
+  color: var(--vg-text-muted);
+}

@@ -265,6 +265,7 @@ async function init() {
   bindGoogleCalendarPopup();
   bindCalendarioPage();
   bindGoalEdit();
+  bindAjuda();
 
   ensureAttendant();
   pollNotifications();
@@ -315,6 +316,12 @@ function switchView(viewName) {
   }
   if (viewName === 'roteiro') renderRoteiro();
   if (viewName === 'calendario') renderCalendario();
+  if (viewName === 'ajuda') {
+    renderAjuda();
+  } else {
+    ajudaState.isPlaying = false;
+    ajudaStopSpeaking();
+  }
   if (viewName === 'chatequipe') {
     renderTeamChat();
     startTeamChatPolling();
@@ -4690,6 +4697,308 @@ function openUserSignatureModal(userId) {
   document.getElementById('sig-user-image-input').value = '';
   renderSignatureImagePreview(user.signatureImage || null);
   openModal('modal-user-signature');
+}
+
+// ============ Ajuda (tutorial narrado, aba a aba) ============
+var AJUDA_SCENES = [
+  {
+    chapter: 'Boas-vindas',
+    title: 'O que é o Velocita Global CRM',
+    narration:
+      'Bem-vindo ao tour completo do Velocita Global CRM. Nos próximos capítulos, vou te mostrar, uma por uma, todas as abas do sistema: o que cada uma faz, e como preencher cada formulário. O CRM é organizado como um funil de vendas: você cadastra leads, transforma leads em negócios, acompanha esses negócios em um quadro chamado Pipeline, e o sistema te ajuda a não esquecer nenhuma tarefa ao longo do caminho.',
+    visual:
+      '<div class="ajuda-row"><span class="tag-pill" style="background:var(--vg-orange)">Dashboard</span><span class="tag-pill" style="background:var(--vg-navy)">Pipeline</span><span class="tag-pill" style="background:var(--vg-navy)">Leads</span><span class="tag-pill" style="background:var(--vg-navy)">Empresas</span></div>'
+  },
+  {
+    chapter: 'Login e identificação',
+    title: 'Entrando no sistema e dizendo quem é você',
+    narration:
+      'O acesso ao CRM é feito com uma senha única, compartilhada entre os sócios. Assim que você entra, a janela "Quem está atendendo?" sempre aparece. Essa escolha identifica quem fez cada nota, cada ligação, cada negócio. Ela reaparece toda vez que o site é aberto, mesmo que você já tenha escolhido seu nome antes — isso evita que, num computador compartilhado, as ações de uma pessoa fiquem registradas como se fossem de outra.',
+    visual:
+      '<div class="ajuda-row"><span class="tag-pill" style="background:var(--vg-orange)">Luis Dias</span><span class="tag-pill" style="background:var(--vg-navy)">Pedro Romanello</span><span class="tag-pill" style="background:var(--vg-navy)">Diego Gianini</span></div><ul class="ajuda-howto"><li><b>Selecione seu nome</b> e clique em Confirmar toda vez que abrir o CRM</li></ul>'
+  },
+  {
+    chapter: 'Dashboard',
+    title: 'Dashboard: o resumo do seu mês',
+    narration:
+      'A tela inicial é o Dashboard. Aqui você vê quatro números centrais: negócios em aberto, quanto isso vale em dinheiro, quanto já foi ganho no período, e a taxa de conversão. Logo abaixo fica a Meta do mês, que é editável: clique no lápis ao lado do título para digitar um novo valor. Mais abaixo, os lembretes a vencer avisam sobre tarefas com prazo próximo, e o funil de conversão mostra quantos negócios existem em cada etapa.',
+    visual:
+      '<div class="ajuda-row"><span class="tag-pill" style="background:var(--vg-green)">Negócios em aberto: 4</span><span class="tag-pill" style="background:var(--vg-navy)">Meta do mês ✎</span></div>'
+  },
+  {
+    chapter: 'Roteiro do Dia',
+    title: 'Roteiro do Dia: sua agenda de hoje',
+    narration:
+      'O Roteiro do Dia junta em uma lista só tudo que está marcado para hoje: reuniões, ligações e tarefas, de todos os negócios e leads. Dá para filtrar por atendente. O botão Mais Nova Tarefa cria um compromisso avulso: para uma pessoa específica, Geral para todos os sócios, ou vinculado a um negócio do Pipeline — nesse caso ela também aparece dentro daquele negócio. Cada item tem um círculo à esquerda para marcar como concluído.',
+    visual:
+      '<div class="ajuda-row"><span class="tag-pill" style="background:var(--vg-orange)">+ Nova Tarefa</span></div><ul class="ajuda-howto"><li><b>Responsável</b> — uma pessoa, ou "Geral" para todos</li><li><b>Vincular a</b> — opcional, um negócio do Pipeline</li></ul>'
+  },
+  {
+    chapter: 'Pipeline — visão geral',
+    title: 'Pipeline: o quadro de negócios',
+    narration:
+      'O Pipeline é o coração do CRM: colunas representando cada etapa da venda. Cada cartão é um negócio, e você arrasta de uma coluna para outra conforme ele avança. No cartão aparece o valor, o dono do negócio, há quantos dias ele está naquela etapa, e as etiquetas do lead vinculado, como Lead Quente, Morno ou Frio, junto com a categoria dele.',
+    visual:
+      '<div class="ajuda-row"><span class="tag-pill" style="background:var(--vg-navy)">Prospecção</span><span class="tag-pill" style="background:var(--vg-navy)">Qualificação</span><span class="tag-pill" style="background:var(--vg-navy)">Proposta</span></div><div class="ajuda-row"><span class="category-badge" style="background:#7c3aed">Marketing Digital</span><span class="category-badge" style="background:#d64545">Lead Quente</span></div>'
+  },
+  {
+    chapter: 'Pipeline — novo negócio',
+    title: 'Cadastrando um novo negócio',
+    narration:
+      'Ao clicar em Adicionar Negócio, um formulário simples se abre: título, valor, a qual lead ou empresa ele pertence, a etapa inicial do funil, a data prevista de fechamento, o dono do negócio, a plataforma envolvida e etiquetas opcionais. Depois de salvar, o negócio já aparece como um cartão na coluna certa.',
+    visual:
+      '<ul class="ajuda-howto"><li><b>Título</b> e <b>Valor</b></li><li><b>Empresa / Pessoa</b> — lead vinculado</li><li><b>Etapa inicial</b> e <b>Data de fechamento</b></li><li><b>Proprietário</b> — sócio responsável</li></ul>'
+  },
+  {
+    chapter: 'Pipeline — tela do negócio',
+    title: 'A tela do negócio: 100% editável',
+    narration:
+      'Clicando em um cartão, você abre a tela completa do negócio. Todo o painel da esquerda é editável direto ali: basta clicar no título, no valor, no estágio, na data de fechamento ou no dono do negócio para transformar em um campo editável na hora, sem abrir outro formulário. No meio fica o histórico de atividades, e à direita os dados do lead e da empresa vinculados.',
+    visual:
+      '<div class="ajuda-row"><span class="tag-pill" style="background:var(--vg-orange)">R$ 85.000,00 ✎</span><span class="tag-pill" style="background:var(--vg-navy)">Estágio: Proposta ✎</span></div><ul class="ajuda-howto"><li>Clique em qualquer valor do painel esquerdo para editar na hora</li></ul>'
+  },
+  {
+    chapter: 'Pipeline — atividades e agenda',
+    title: 'Adicionando atividades e agendando reuniões',
+    narration:
+      'Dentro da tela do negócio, o campo Adicionar uma atividade permite registrar uma Nota, E-mail, Chamada, Reunião ou Tarefa. Ao escolher Reunião, Chamada ou Tarefa, aparece um seletor de data e hora. Assim que a atividade é salva, se for reunião ou tarefa, ela já sincroniza sozinha com o Google Calendar da pessoa responsável.',
+    visual:
+      '<div class="ajuda-row"><span class="tag-pill" style="background:var(--vg-navy)">Tipo: Reunião</span><span class="tag-pill" style="background:var(--vg-orange)">28/09 15:00</span></div><ul class="ajuda-howto"><li>Reunião e Tarefa sincronizam sozinhas com o Google Calendar</li></ul>'
+  },
+  {
+    chapter: 'Leads',
+    title: 'Leads: cadastro de contatos',
+    narration:
+      'A aba Leads lista todos os contatos captados. Ao adicionar um novo lead, você preenche nome, e-mail, telefone, a empresa a que pertence, uma ou mais categorias de cliente, o canal de origem, o proprietário responsável, e etiquetas como Lead Quente, Morno, Frio ou Recorrente. Se a empresa ainda não existe, o botão Mais Criar Empresa abre o cadastro sem sair da tela.',
+    visual:
+      '<ul class="ajuda-howto"><li><b>Nome, e-mail, telefone</b></li><li><b>Empresa</b> — selecione ou clique em "+ Criar Empresa"</li><li><b>Categoria de Cliente</b> — múltipla escolha</li><li><b>Etiquetas</b> — Lead Quente / Morno / Frio</li></ul>'
+  },
+  {
+    chapter: 'Empresas',
+    title: 'Empresas: dados da conta cliente',
+    narration:
+      'A aba Empresas guarda os dados das contas clientes: nome, CNPJ, razão social, setor de atuação, telefone, celular, endereço, o sócio responsável internamente por essa conta, etiquetas próprias de empresa, separadas das etiquetas de lead, e um campo de notas livre.',
+    visual:
+      '<ul class="ajuda-howto"><li><b>Nome, CNPJ, Razão Social, Setor</b></li><li><b>Telefone e Celular</b></li><li><b>Responsável interno</b> — sócio da Velocita</li><li><b>Etiquetas de Empresa</b> — separadas das de lead</li></ul>'
+  },
+  {
+    chapter: 'E-mail',
+    title: 'E-mail: três caixas em uma aba só',
+    narration:
+      'A aba E-mail tem três sub-abas. Por Lead mostra a conversa organizada por contato, com um botão Novo E-mail que aceita escolher um lead ou digitar qualquer endereço na hora. Ao responder, você escolhe entre Responder, que cita a última mensagem, ou Escrever novo, em branco. Minha Caixa mostra a caixa pessoal do Gmail de quem está atendendo, com pastas de Recebidos, Enviados, Spam e Lixeira. A terceira é a caixa compartilhada da empresa.',
+    visual:
+      '<div class="ajuda-row"><span class="tag-pill" style="background:var(--vg-orange)">Por Lead</span><span class="tag-pill" style="background:var(--vg-navy)">Minha Caixa</span><span class="tag-pill" style="background:var(--vg-navy)">velocitaglobal@gmail.com</span></div>'
+  },
+  {
+    chapter: 'Notificações',
+    title: 'Notificações: tudo que chegou',
+    narration:
+      'O sininho e a aba Notificações mostram mensagens recebidas em todos os canais, WhatsApp, Facebook, Instagram e e-mail, em um só lugar. Sempre que uma reunião ou tarefa é atribuída a um sócio, ou um negócio dele é marcado como Ganho ou Perdido, o sistema também manda um aviso pelo WhatsApp pessoal daquela pessoa.',
+    visual:
+      '<ul class="ajuda-howto"><li>Nova mensagem — Marcos Oliveira</li><li>Negócio marcado como Ganho — avisado por WhatsApp</li></ul>'
+  },
+  {
+    chapter: 'BI',
+    title: 'BI: os números do negócio em gráficos',
+    narration:
+      'A aba BI é dividida em três partes. Visão Geral traz gráficos de faturamento por mês e de leads por canal de origem, além do desempenho por categoria de cliente. Tráfego Pago mostra o retorno de cada canal de anúncio. Marketplaces mostra o faturamento por plataforma de venda. Os dados são ao vivo, puxados direto dos negócios e leads cadastrados.',
+    visual:
+      '<div class="ajuda-row"><span class="tag-pill" style="background:var(--vg-orange)">Visão Geral</span><span class="tag-pill" style="background:var(--vg-navy)">Tráfego Pago</span><span class="tag-pill" style="background:var(--vg-navy)">Marketplaces</span></div>'
+  },
+  {
+    chapter: 'Calendário',
+    title: 'Calendário: a agenda de todo mundo, sincronizada',
+    narration:
+      'A aba Calendário junta as reuniões e tarefas com data marcada de todos os negócios e leads, com filtro por responsável. O botão Mais Nova Reunião cria um compromisso direto por aqui. E cada sócio conecta a própria conta do Google, uma única vez, em Configurações, Usuários — depois disso, tudo que é agendado para aquela pessoa aparece sozinho no Google Calendar pessoal dela.',
+    visual:
+      '<ul class="ajuda-howto"><li>Cada sócio conecta o próprio Google Calendar em Configurações → Usuários</li></ul>'
+  },
+  {
+    chapter: 'Chat da Equipe',
+    title: 'Chat da Equipe: conversa interna',
+    narration:
+      'O Chat da Equipe é um espaço só para os sócios conversarem entre si, não é visto pelos leads. Dá para mandar texto, fotos, documentos e áudios, e abrir conversas privadas, além do chat geral. Mensagens mostram quando foram entregues e visualizadas, no estilo WhatsApp.',
+    visual:
+      '<div class="ajuda-row"><span class="tag-pill" style="background:var(--vg-orange)">Geral</span><span class="tag-pill" style="background:var(--vg-navy)">Pedro Romanello</span></div>'
+  },
+  {
+    chapter: 'Velo-Cito, o assistente',
+    title: 'Velo-Cito: o assistente de IA',
+    narration:
+      'No canto inferior direito, em qualquer tela, fica o Velo-Cito, o assistente de inteligência artificial. Na aba Dicas, ele analisa seus negócios em aberto e sugere como fechar cada venda. Na aba Chat, você conversa sobre um negócio específico, e ele pode sugerir mudar a etapa, marcar como ganho, criar uma tarefa, agendar uma reunião, ou ligar para o contato. Toda sugestão aparece com um botão Aplicar Sugestão, e nada é feito sem você confirmar.',
+    visual:
+      '<ul class="ajuda-howto"><li>Sugestão: Agendar reunião "Follow-up" em 30/09 <b>[Aplicar sugestão]</b></li></ul>'
+  },
+  {
+    chapter: 'Configurações',
+    title: 'Configurações: onde tudo é ajustado',
+    narration:
+      'Configurações reúne seis sub-abas. Etapas do Funil define as colunas do Pipeline. Usuários cadastra os sócios, o ramal de cada um, a assinatura de e-mail com imagem, e o botão para conectar o Google Calendar pessoal. Campos Personalizados e Etiquetas criam categorias e marcadores próprios, separados entre Lead e Empresa. Integrações guarda as chaves de WhatsApp, Facebook, Instagram, Google Ads, e-mail, Google Calendar e Vivo PABX. Assistente de IA escolhe qual inteligência artificial roda por trás do Velo-Cito. E com isso, você já conhece o Velocita Global CRM inteiro. Bem-vindo à equipe!',
+    visual:
+      '<div class="ajuda-row"><span class="tag-pill" style="background:var(--vg-navy)">Etapas do Funil</span><span class="tag-pill" style="background:var(--vg-orange)">Usuários</span><span class="tag-pill" style="background:var(--vg-navy)">Integrações</span></div>'
+  }
+];
+
+var ajudaState = { idx: 0, isPlaying: false, isMuted: false, voice: null };
+var ajudaSynth = typeof window !== 'undefined' && 'speechSynthesis' in window ? window.speechSynthesis : null;
+
+function ajudaPickVoice() {
+  if (!ajudaSynth) return;
+  var voices = ajudaSynth.getVoices() || [];
+  if (!voices.length) return;
+  // Prioriza vozes em português do Brasil que rodam "na nuvem" (localService:
+  // false) — no Chrome, essas costumam ser as vozes do Google, bem mais
+  // naturais que a voz local do sistema operacional (a robótica de sempre).
+  var ptBR = voices.filter((v) => /pt-BR/i.test(v.lang));
+  var scored = (ptBR.length ? ptBR : voices.filter((v) => /^pt/i.test(v.lang))).slice();
+  scored.sort((a, b) => {
+    const score = (v) => (v.localService ? 0 : 2) + (/google/i.test(v.name) ? 1 : 0);
+    return score(b) - score(a);
+  });
+  ajudaState.voice = scored[0] || voices.find((v) => /^pt/i.test(v.lang)) || voices[0];
+  const statusEl = document.getElementById('ajuda-voice-status');
+  if (statusEl && ajudaState.voice) statusEl.textContent = 'Voz: ' + ajudaState.voice.name;
+}
+
+if (ajudaSynth) {
+  ajudaPickVoice();
+  ajudaSynth.addEventListener && ajudaSynth.addEventListener('voiceschanged', ajudaPickVoice);
+  ajudaSynth.onvoiceschanged = ajudaPickVoice;
+}
+
+// Quebra a narração em frases e fala uma de cada vez, com uma pausa curta entre
+// elas — soa bem mais natural do que jogar o parágrafo inteiro como um único
+// utterance (que tende a sair apressado e monótono nos motores de voz do
+// navegador), e evita o corte que alguns navegadores dão em falas muito longas.
+function ajudaSplitSentences(text) {
+  return text
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function ajudaSpeakScene(sceneIdx) {
+  if (!ajudaSynth || ajudaState.isMuted) {
+    if (ajudaState.isPlaying) {
+      window._ajudaTimer = setTimeout(ajudaAdvance, 6000);
+    }
+    return;
+  }
+  ajudaSynth.cancel();
+  const sentences = ajudaSplitSentences(AJUDA_SCENES[sceneIdx].narration);
+  const rate = parseFloat(document.getElementById('ajuda-rate-select').value || '1');
+  let i = 0;
+  function speakNext() {
+    if (i >= sentences.length) {
+      if (ajudaState.isPlaying && sceneIdx === ajudaState.idx) ajudaAdvance();
+      return;
+    }
+    const utter = new SpeechSynthesisUtterance(sentences[i]);
+    if (ajudaState.voice) utter.voice = ajudaState.voice;
+    utter.lang = ajudaState.voice ? ajudaState.voice.lang : 'pt-BR';
+    utter.rate = rate * 0.95;
+    utter.pitch = 1;
+    i++;
+    utter.onend = () => {
+      if (sceneIdx !== ajudaState.idx) return; // usuário já pulou de capítulo
+      window._ajudaTimer = setTimeout(speakNext, 160);
+    };
+    utter.onerror = () => {
+      if (sceneIdx !== ajudaState.idx) return;
+      window._ajudaTimer = setTimeout(speakNext, 300);
+    };
+    ajudaSynth.speak(utter);
+  }
+  speakNext();
+}
+
+function ajudaStopSpeaking() {
+  if (ajudaSynth) ajudaSynth.cancel();
+  if (window._ajudaTimer) clearTimeout(window._ajudaTimer);
+}
+
+function ajudaAdvance() {
+  if (ajudaState.idx < AJUDA_SCENES.length - 1) {
+    ajudaState.idx++;
+    ajudaRenderScene();
+  } else {
+    ajudaState.isPlaying = false;
+    ajudaUpdatePlayButton();
+  }
+}
+
+function ajudaGoTo(i) {
+  ajudaState.idx = Math.max(0, Math.min(AJUDA_SCENES.length - 1, i));
+  ajudaStopSpeaking();
+  ajudaRenderScene();
+  if (ajudaState.isPlaying) ajudaSpeakScene(ajudaState.idx);
+}
+
+function ajudaUpdatePlayButton() {
+  document.getElementById('ajuda-btn-play').innerHTML = ajudaState.isPlaying ? '⏸ Pausar' : '▶ Reproduzir';
+}
+
+function ajudaTogglePlay() {
+  ajudaState.isPlaying = !ajudaState.isPlaying;
+  ajudaUpdatePlayButton();
+  if (ajudaState.isPlaying) ajudaSpeakScene(ajudaState.idx);
+  else ajudaStopSpeaking();
+}
+
+function ajudaRenderScene() {
+  const s = AJUDA_SCENES[ajudaState.idx];
+  document.getElementById('ajuda-chapter-tag').textContent = 'CAPÍTULO ' + (ajudaState.idx + 1) + ' / ' + AJUDA_SCENES.length + ' · ' + s.chapter.toUpperCase();
+  document.getElementById('ajuda-scene-title').textContent = s.title;
+  document.getElementById('ajuda-scene-visual').innerHTML = s.visual;
+  document.getElementById('ajuda-caption-text').textContent = s.narration;
+  const pct = (ajudaState.idx / (AJUDA_SCENES.length - 1)) * 100;
+  document.getElementById('ajuda-scrubber-fill').style.width = pct + '%';
+  document.querySelectorAll('.ajuda-chapter-card').forEach((btn, i) => {
+    btn.classList.toggle('active', i === ajudaState.idx);
+  });
+}
+
+function ajudaBuildChapterList() {
+  const list = document.getElementById('ajuda-chapters-list');
+  list.innerHTML = AJUDA_SCENES.map(
+    (s, i) => `
+    <button class="ajuda-chapter-card" data-idx="${i}" type="button">
+      <div class="ajuda-chapter-num">${i + 1}</div>
+      <div><div class="ct">${escapeHtml(s.chapter)}</div><div class="cs">${escapeHtml(s.title)}</div></div>
+    </button>
+  `
+  ).join('');
+  list.querySelectorAll('[data-idx]').forEach((btn) => {
+    btn.addEventListener('click', () => ajudaGoTo(parseInt(btn.dataset.idx, 10)));
+  });
+}
+
+function ajudaBuildScrubberMarks() {
+  const marks = document.getElementById('ajuda-scrubber-marks');
+  marks.innerHTML = AJUDA_SCENES.map((_, i) => `<div class="mark" data-idx="${i}"></div>`).join('');
+  marks.querySelectorAll('[data-idx]').forEach((m) => {
+    m.addEventListener('click', () => ajudaGoTo(parseInt(m.dataset.idx, 10)));
+  });
+}
+
+function bindAjuda() {
+  ajudaBuildChapterList();
+  ajudaBuildScrubberMarks();
+  document.getElementById('ajuda-btn-play').addEventListener('click', ajudaTogglePlay);
+  document.getElementById('ajuda-btn-prev').addEventListener('click', () => ajudaGoTo(ajudaState.idx - 1));
+  document.getElementById('ajuda-btn-next').addEventListener('click', () => ajudaGoTo(ajudaState.idx + 1));
+  document.getElementById('ajuda-btn-mute').addEventListener('click', (e) => {
+    ajudaState.isMuted = !ajudaState.isMuted;
+    e.target.textContent = ajudaState.isMuted ? '🔇' : '🔊';
+    if (ajudaState.isMuted) ajudaStopSpeaking();
+  });
+  document.getElementById('ajuda-rate-select').addEventListener('change', () => {
+    if (ajudaState.isPlaying) ajudaSpeakScene(ajudaState.idx);
+  });
+}
+
+function renderAjuda() {
+  ajudaRenderScene();
 }
 
 // ============ Boot ============

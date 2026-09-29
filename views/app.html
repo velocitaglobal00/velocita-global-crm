@@ -108,6 +108,10 @@
           <svg class="si" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"></path></svg>
           Configurações
         </div>
+        <div class="sidebar-link" data-view="ajuda">
+          <svg class="si" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+          Ajuda
+        </div>
       </aside>
       <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
 
@@ -446,6 +450,54 @@
               </div>
             </div>
           </div>
+        </section>
+
+        <!-- ===== AJUDA (tutorial narrado, aba a aba) ===== -->
+        <section class="view" id="view-ajuda">
+          <div class="pipeline-header">
+            <h2 style="margin:0;">Ajuda</h2>
+            <span class="k" id="ajuda-voice-status" style="font-size:11px; color:var(--vg-text-muted);"></span>
+          </div>
+          <p class="empty-state" style="text-align:left; padding:0 0 14px;">
+            Tutorial narrado por voz, capítulo a capítulo, explicando cada aba do CRM e como preencher cada formulário.
+          </p>
+
+          <div class="panel ajuda-player">
+            <div class="ajuda-stage-top">
+              <div>
+                <div class="ajuda-chapter-tag" id="ajuda-chapter-tag">CAPÍTULO 1 / 16</div>
+                <h3 id="ajuda-scene-title" style="margin:4px 0 0;">-</h3>
+              </div>
+            </div>
+
+            <div class="ajuda-visual" id="ajuda-scene-visual"></div>
+
+            <div class="ajuda-captions">
+              <div class="ajuda-mic"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg></div>
+              <p id="ajuda-caption-text">Carregando o tutorial…</p>
+            </div>
+
+            <div class="ajuda-scrubber" id="ajuda-scrubber">
+              <div class="ajuda-scrubber-fill" id="ajuda-scrubber-fill"></div>
+              <div class="ajuda-scrubber-marks" id="ajuda-scrubber-marks"></div>
+            </div>
+
+            <div class="ajuda-transport">
+              <button class="btn-secondary" id="ajuda-btn-prev" title="Capítulo anterior">⏮</button>
+              <button class="btn-primary" id="ajuda-btn-play" title="Reproduzir / Pausar">▶ Reproduzir</button>
+              <button class="btn-secondary" id="ajuda-btn-next" title="Próximo capítulo">⏭</button>
+              <button class="btn-secondary" id="ajuda-btn-mute" title="Silenciar narração">🔊</button>
+              <select class="btn-secondary" id="ajuda-rate-select" title="Velocidade da narração">
+                <option value="0.9">0.9×</option>
+                <option value="1" selected>1×</option>
+                <option value="1.15">1.15×</option>
+                <option value="1.3">1.3×</option>
+              </select>
+            </div>
+          </div>
+
+          <h3 style="margin-bottom:10px;">Todos os capítulos</h3>
+          <div class="ajuda-chapters" id="ajuda-chapters-list"></div>
         </section>
 
         <!-- ===== SETTINGS ===== -->
