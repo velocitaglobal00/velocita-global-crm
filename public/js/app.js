@@ -4757,7 +4757,7 @@ var AJUDA_SCENES = [
     narration:
       'Bem-vindo ao tour completo do Velocita Global CRM. Nos próximos capítulos, vou te mostrar, uma por uma, todas as abas do sistema: o que cada uma faz, e como preencher cada formulário. O CRM é organizado como um funil de vendas: você cadastra leads, transforma leads em negócios, acompanha esses negócios em um quadro chamado Pipeline, e o sistema te ajuda a não esquecer nenhuma tarefa ao longo do caminho.',
     visual:
-      '<div class="ajuda-row"><span class="tag-pill" style="background:var(--vg-orange)">Dashboard</span><span class="tag-pill" style="background:var(--vg-navy)">Pipeline</span><span class="tag-pill" style="background:var(--vg-navy)">Leads</span><span class="tag-pill" style="background:var(--vg-navy)">Empresas</span></div>'
+      '<div class="mock-frame"><div class="mock-topbar"><span class="mock-brand">Velocita Global</span><span class="mock-search">Buscar negócios, contatos, empresas...</span></div><div class="mock-body"><div class="mock-sidebar"><div class="mock-nav-item active ajuda-hotspot">Dashboard</div><div class="mock-nav-item ajuda-hotspot">Pipeline</div><div class="mock-nav-item ajuda-hotspot">Leads</div><div class="mock-nav-item ajuda-hotspot">Empresas</div><div class="mock-nav-item ajuda-hotspot">E-mail</div></div><div class="mock-content"><div class="mock-stat-grid"><div class="mock-stat"><div class="lbl">Negócios abertos</div><div class="val">4</div></div><div class="mock-stat"><div class="lbl">Valor em aberto</div><div class="val">R$ 108k</div></div></div></div></div></div>'
   },
   {
     chapter: 'Login e identificação',
@@ -4765,7 +4765,7 @@ var AJUDA_SCENES = [
     narration:
       'O acesso ao CRM é feito com uma senha única, compartilhada entre os sócios. Assim que você entra, a janela "Quem está atendendo?" sempre aparece. Essa escolha identifica quem fez cada nota, cada ligação, cada negócio. Ela reaparece toda vez que o site é aberto, mesmo que você já tenha escolhido seu nome antes — isso evita que, num computador compartilhado, as ações de uma pessoa fiquem registradas como se fossem de outra.',
     visual:
-      '<div class="ajuda-row"><span class="tag-pill" style="background:var(--vg-orange)">Luis Dias</span><span class="tag-pill" style="background:var(--vg-navy)">Pedro Romanello</span><span class="tag-pill" style="background:var(--vg-navy)">Diego Gianini</span></div><ul class="ajuda-howto"><li><b>Selecione seu nome</b> e clique em Confirmar toda vez que abrir o CRM</li></ul>'
+      '<div class="mock-frame"><div class="mock-body" style="min-height:120px;"><div class="mock-content" style="align-items:center;"><div class="mock-form" style="background:var(--vg-surface); border:1px solid var(--vg-border); border-radius:10px; padding:14px; width:220px;"><div class="mock-h" style="text-align:center;">Quem está atendendo?</div><div class="mock-field"><div class="box ajuda-hotspot">Luis Dias</div></div><div class="mock-field"><div class="box ajuda-hotspot">Pedro Romanello</div></div><div class="mock-field"><div class="box ajuda-hotspot">Diego Gianini</div></div><span class="mock-btn ajuda-hotspot" style="align-self:center;">Confirmar</span></div></div></div></div>'
   },
   {
     chapter: 'Dashboard',
@@ -4773,7 +4773,7 @@ var AJUDA_SCENES = [
     narration:
       'A tela inicial é o Dashboard. Aqui você vê quatro números centrais: negócios em aberto, quanto isso vale em dinheiro, quanto já foi ganho no período, e a taxa de conversão. Logo abaixo fica a Meta do mês, que é editável: clique no lápis ao lado do título para digitar um novo valor. Mais abaixo, os lembretes a vencer avisam sobre tarefas com prazo próximo, e o funil de conversão mostra quantos negócios existem em cada etapa.',
     visual:
-      '<div class="ajuda-row"><span class="tag-pill" style="background:var(--vg-green)">Negócios em aberto: 4</span><span class="tag-pill" style="background:var(--vg-navy)">Meta do mês ✎</span></div>'
+      '<div class="mock-frame"><div class="mock-body"><div class="mock-sidebar"><div class="mock-nav-item active">Dashboard</div><div class="mock-nav-item">Pipeline</div><div class="mock-nav-item">Leads</div></div><div class="mock-content"><div class="mock-stat-grid"><div class="mock-stat ajuda-hotspot"><div class="lbl">Negócios abertos</div><div class="val">4</div></div><div class="mock-stat ajuda-hotspot"><div class="lbl">Valor em aberto</div><div class="val">R$ 108k</div></div><div class="mock-stat ajuda-hotspot"><div class="lbl">Ganhos no período</div><div class="val" style="color:var(--vg-green)">R$ 125k</div></div></div><div class="mock-list-row ajuda-hotspot"><span class="dot"></span> Meta do mês: R$ 125.500 de R$ 250.000 <span class="mock-btn secondary" style="margin-left:auto;">✎</span></div></div></div></div>'
   },
   {
     chapter: 'Roteiro do Dia',
@@ -4781,7 +4781,7 @@ var AJUDA_SCENES = [
     narration:
       'O Roteiro do Dia junta em uma lista só tudo que está marcado para hoje: reuniões, ligações e tarefas, de todos os negócios e leads. Dá para filtrar por atendente. O botão Mais Nova Tarefa cria um compromisso avulso: para uma pessoa específica, Geral para todos os sócios, ou vinculado a um negócio do Pipeline — nesse caso ela também aparece dentro daquele negócio. Cada item tem um círculo à esquerda para marcar como concluído.',
     visual:
-      '<div class="ajuda-row"><span class="tag-pill" style="background:var(--vg-orange)">+ Nova Tarefa</span></div><ul class="ajuda-howto"><li><b>Responsável</b> — uma pessoa, ou "Geral" para todos</li><li><b>Vincular a</b> — opcional, um negócio do Pipeline</li></ul>'
+      '<div class="mock-frame"><div class="mock-body"><div class="mock-sidebar"><div class="mock-nav-item active">Roteiro do Dia</div><div class="mock-nav-item">Pipeline</div></div><div class="mock-content"><div style="display:flex; justify-content:flex-end;"><span class="mock-btn ajuda-hotspot">+ Nova Tarefa</span></div><div class="mock-list-row ajuda-hotspot"><span class="dot"></span> 09:00 · Ligar para agendar reunião · Luis Dias</div><div class="mock-list-row ajuda-hotspot"><span class="dot" style="background:var(--vg-navy);"></span> 14:30 · Enviar contrato revisado · Geral</div></div></div></div>'
   },
   {
     chapter: 'Pipeline — visão geral',
@@ -4789,7 +4789,7 @@ var AJUDA_SCENES = [
     narration:
       'O Pipeline é o coração do CRM: colunas representando cada etapa da venda. Cada cartão é um negócio, e você arrasta de uma coluna para outra conforme ele avança. No cartão aparece o valor, o dono do negócio, há quantos dias ele está naquela etapa, e as etiquetas do lead vinculado, como Lead Quente, Morno ou Frio, junto com a categoria dele.',
     visual:
-      '<div class="ajuda-row"><span class="tag-pill" style="background:var(--vg-navy)">Prospecção</span><span class="tag-pill" style="background:var(--vg-navy)">Qualificação</span><span class="tag-pill" style="background:var(--vg-navy)">Proposta</span></div><div class="ajuda-row"><span class="category-badge" style="background:#7c3aed">Marketing Digital</span><span class="category-badge" style="background:#d64545">Lead Quente</span></div>'
+      '<div class="mock-frame"><div class="mock-body"><div class="mock-sidebar"><div class="mock-nav-item">Dashboard</div><div class="mock-nav-item active">Pipeline</div><div class="mock-nav-item">Leads</div></div><div class="mock-content"><div style="display:flex; justify-content:flex-end;"><span class="mock-btn ajuda-hotspot">+ Adicionar Negócio</span></div><div class="mock-kanban"><div class="mock-col"><div class="mock-col-title">Prospecção</div></div><div class="mock-col"><div class="mock-col-title">Qualificação</div><div class="mock-card ajuda-hotspot"><div class="t">Contrato Digital</div><div class="v">R$ 12.000</div></div></div><div class="mock-col"><div class="mock-col-title">Proposta</div><div class="mock-card ajuda-hotspot"><div class="t">Renovação anual</div><div class="v">R$ 63.000</div></div></div></div></div></div></div>'
   },
   {
     chapter: 'Pipeline — novo negócio',
@@ -4797,7 +4797,7 @@ var AJUDA_SCENES = [
     narration:
       'Ao clicar em Adicionar Negócio, um formulário simples se abre: título, valor, a qual lead ou empresa ele pertence, a etapa inicial do funil, a data prevista de fechamento, o dono do negócio, a plataforma envolvida e etiquetas opcionais. Depois de salvar, o negócio já aparece como um cartão na coluna certa.',
     visual:
-      '<ul class="ajuda-howto"><li><b>Título</b> e <b>Valor</b></li><li><b>Empresa / Pessoa</b> — lead vinculado</li><li><b>Etapa inicial</b> e <b>Data de fechamento</b></li><li><b>Proprietário</b> — sócio responsável</li></ul>'
+      '<div class="mock-frame"><div class="mock-content" style="padding:16px;"><div class="mock-h">Adicionar Negócio</div><div class="mock-form"><div class="mock-field ajuda-hotspot"><div class="lbl">Título</div><div class="box">Contrato de fornecimento</div></div><div class="mock-field ajuda-hotspot"><div class="lbl">Valor</div><div class="box">R$ 0,00</div></div><div class="mock-field ajuda-hotspot"><div class="lbl">Etapa inicial</div><div class="box">Prospecção</div></div><div class="mock-field ajuda-hotspot"><div class="lbl">Proprietário</div><div class="box">Luis Dias</div></div><span class="mock-btn ajuda-hotspot" style="align-self:flex-start;">Salvar Negócio</span></div></div></div>'
   },
   {
     chapter: 'Pipeline — tela do negócio',
@@ -4805,7 +4805,7 @@ var AJUDA_SCENES = [
     narration:
       'Clicando em um cartão, você abre a tela completa do negócio. Todo o painel da esquerda é editável direto ali: basta clicar no título, no valor, no estágio, na data de fechamento ou no dono do negócio para transformar em um campo editável na hora, sem abrir outro formulário. No meio fica o histórico de atividades, e à direita os dados do lead e da empresa vinculados.',
     visual:
-      '<div class="ajuda-row"><span class="tag-pill" style="background:var(--vg-orange)">R$ 85.000,00 ✎</span><span class="tag-pill" style="background:var(--vg-navy)">Estágio: Proposta ✎</span></div><ul class="ajuda-howto"><li>Clique em qualquer valor do painel esquerdo para editar na hora</li></ul>'
+      '<div class="mock-frame"><div class="mock-content" style="padding:14px;"><div class="mock-h">Contrato de frete anual</div><div class="mock-stat-grid"><div class="mock-stat ajuda-hotspot"><div class="lbl">Valor ✎</div><div class="val">R$ 85.000</div></div><div class="mock-stat ajuda-hotspot"><div class="lbl">Estágio ✎</div><div class="val" style="font-size:11px;">Proposta</div></div><div class="mock-stat ajuda-hotspot"><div class="lbl">Dono ✎</div><div class="val" style="font-size:11px;">Luis Dias</div></div></div><div class="mock-list-row"><span class="dot"></span> Nota · Cliente pediu revisão da proposta</div></div></div>'
   },
   {
     chapter: 'Pipeline — atividades e agenda',
@@ -4813,7 +4813,7 @@ var AJUDA_SCENES = [
     narration:
       'Dentro da tela do negócio, o campo Adicionar uma atividade permite registrar uma Nota, E-mail, Chamada, Reunião ou Tarefa. Ao escolher Reunião, Chamada ou Tarefa, aparece um seletor de data e hora. Assim que a atividade é salva, se for reunião ou tarefa, ela já sincroniza sozinha com o Google Calendar da pessoa responsável.',
     visual:
-      '<div class="ajuda-row"><span class="tag-pill" style="background:var(--vg-navy)">Tipo: Reunião</span><span class="tag-pill" style="background:var(--vg-orange)">28/09 15:00</span></div><ul class="ajuda-howto"><li>Reunião e Tarefa sincronizam sozinhas com o Google Calendar</li></ul>'
+      '<div class="mock-frame"><div class="mock-content" style="padding:14px;"><div class="mock-h">Adicionar atividade</div><div class="mock-form" style="flex-direction:row; flex-wrap:wrap;"><div class="mock-field ajuda-hotspot"><div class="lbl">Tipo</div><div class="box">Reunião</div></div><div class="mock-field ajuda-hotspot"><div class="lbl">Data e hora</div><div class="box">28/09 15:00</div></div><span class="mock-btn ajuda-hotspot">Adicionar</span></div><div class="mock-list-row ajuda-hotspot"><span class="dot"></span> Reunião sincronizada <span class="mock-btn secondary" style="margin-left:auto;">Ver no Calendar</span></div></div></div>'
   },
   {
     chapter: 'Leads',
@@ -4821,7 +4821,7 @@ var AJUDA_SCENES = [
     narration:
       'A aba Leads lista todos os contatos captados. Ao adicionar um novo lead, você preenche nome, e-mail, telefone, a empresa a que pertence, uma ou mais categorias de cliente, o canal de origem, o proprietário responsável, e etiquetas como Lead Quente, Morno, Frio ou Recorrente. Se a empresa ainda não existe, o botão Mais Criar Empresa abre o cadastro sem sair da tela.',
     visual:
-      '<ul class="ajuda-howto"><li><b>Nome, e-mail, telefone</b></li><li><b>Empresa</b> — selecione ou clique em "+ Criar Empresa"</li><li><b>Categoria de Cliente</b> — múltipla escolha</li><li><b>Etiquetas</b> — Lead Quente / Morno / Frio</li></ul>'
+      '<div class="mock-frame"><div class="mock-body"><div class="mock-sidebar"><div class="mock-nav-item">Pipeline</div><div class="mock-nav-item active">Leads</div><div class="mock-nav-item">Empresas</div></div><div class="mock-content"><table class="mock-table"><tr><th>Nome</th><th>Empresa</th><th>Categoria</th></tr><tr class="mock-row ajuda-hotspot"><td>Marcos Oliveira</td><td>Norte Logística</td><td>E-commerce</td></tr><tr class="mock-row ajuda-hotspot"><td>Ricardo Lima</td><td>Vetta Alimentos</td><td>Marketing Digital</td></tr></table><div style="display:flex; justify-content:flex-end;"><span class="mock-btn ajuda-hotspot">+ Adicionar Lead</span></div></div></div></div>'
   },
   {
     chapter: 'Empresas',
@@ -4829,7 +4829,7 @@ var AJUDA_SCENES = [
     narration:
       'A aba Empresas guarda os dados das contas clientes: nome, CNPJ, razão social, setor de atuação, telefone, celular, endereço, o sócio responsável internamente por essa conta, etiquetas próprias de empresa, separadas das etiquetas de lead, e um campo de notas livre.',
     visual:
-      '<ul class="ajuda-howto"><li><b>Nome, CNPJ, Razão Social, Setor</b></li><li><b>Telefone e Celular</b></li><li><b>Responsável interno</b> — sócio da Velocita</li><li><b>Etiquetas de Empresa</b> — separadas das de lead</li></ul>'
+      '<div class="mock-frame"><div class="mock-body"><div class="mock-sidebar"><div class="mock-nav-item">Leads</div><div class="mock-nav-item active">Empresas</div><div class="mock-nav-item">E-mail</div></div><div class="mock-content"><table class="mock-table"><tr><th>Empresa</th><th>CNPJ</th><th>Setor</th></tr><tr class="mock-row ajuda-hotspot"><td>Norte Logística</td><td>12.345.678/0001-00</td><td>Logística</td></tr></table><div style="display:flex; justify-content:flex-end;"><span class="mock-btn ajuda-hotspot">+ Adicionar Empresa</span></div></div></div></div>'
   },
   {
     chapter: 'E-mail',
@@ -4837,7 +4837,7 @@ var AJUDA_SCENES = [
     narration:
       'A aba E-mail tem três sub-abas. Por Lead mostra a conversa organizada por contato, com um botão Novo E-mail que aceita escolher um lead ou digitar qualquer endereço na hora. Ao responder, você escolhe entre Responder, que cita a última mensagem, ou Escrever novo, em branco. Minha Caixa mostra a caixa pessoal do Gmail de quem está atendendo, com pastas de Recebidos, Enviados, Spam e Lixeira. A terceira é a caixa compartilhada da empresa.',
     visual:
-      '<div class="ajuda-row"><span class="tag-pill" style="background:var(--vg-orange)">Por Lead</span><span class="tag-pill" style="background:var(--vg-navy)">Minha Caixa</span><span class="tag-pill" style="background:var(--vg-navy)">velocitaglobal@gmail.com</span></div>'
+      '<div class="mock-frame"><div class="mock-content" style="padding:12px;"><div class="mock-tabs"><span class="mock-tab active ajuda-hotspot">Por Lead</span><span class="mock-tab ajuda-hotspot">Minha Caixa</span><span class="mock-tab ajuda-hotspot">velocitaglobal@gmail.com</span></div><div class="mock-list-row ajuda-hotspot"><span class="dot"></span> Marcos Oliveira · Proposta comercial atualizada</div><div style="display:flex; justify-content:flex-end;"><span class="mock-btn ajuda-hotspot">Novo E-mail</span></div></div></div>'
   },
   {
     chapter: 'Notificações',
@@ -4845,7 +4845,7 @@ var AJUDA_SCENES = [
     narration:
       'O sininho e a aba Notificações mostram mensagens recebidas em todos os canais, WhatsApp, Facebook, Instagram e e-mail, em um só lugar. Sempre que uma reunião ou tarefa é atribuída a um sócio, ou um negócio dele é marcado como Ganho ou Perdido, o sistema também manda um aviso pelo WhatsApp pessoal daquela pessoa.',
     visual:
-      '<ul class="ajuda-howto"><li>Nova mensagem — Marcos Oliveira</li><li>Negócio marcado como Ganho — avisado por WhatsApp</li></ul>'
+      '<div class="mock-frame"><div class="mock-content" style="padding:12px;"><div class="mock-list-row ajuda-hotspot"><span class="dot"></span> Nova mensagem no WhatsApp — Marcos Oliveira</div><div class="mock-list-row ajuda-hotspot"><span class="dot" style="background:var(--vg-green);"></span> Negócio marcado como Ganho — avisado por WhatsApp</div><div class="mock-list-row ajuda-hotspot"><span class="dot"></span> Tarefa atribuída a você</div></div></div>'
   },
   {
     chapter: 'BI',
@@ -4853,7 +4853,7 @@ var AJUDA_SCENES = [
     narration:
       'A aba BI é dividida em três partes. Visão Geral traz gráficos de faturamento por mês e de leads por canal de origem, além do desempenho por categoria de cliente. Tráfego Pago mostra o retorno de cada canal de anúncio. Marketplaces mostra o faturamento por plataforma de venda. Os dados são ao vivo, puxados direto dos negócios e leads cadastrados.',
     visual:
-      '<div class="ajuda-row"><span class="tag-pill" style="background:var(--vg-orange)">Visão Geral</span><span class="tag-pill" style="background:var(--vg-navy)">Tráfego Pago</span><span class="tag-pill" style="background:var(--vg-navy)">Marketplaces</span></div>'
+      '<div class="mock-frame"><div class="mock-content" style="padding:12px;"><div class="mock-tabs"><span class="mock-tab active ajuda-hotspot">Visão Geral</span><span class="mock-tab ajuda-hotspot">Tráfego Pago</span><span class="mock-tab ajuda-hotspot">Marketplaces</span></div><div class="mock-stat-grid"><div class="mock-stat ajuda-hotspot"><div class="lbl">Faturamento set</div><div class="val">R$ 98k</div></div><div class="mock-stat ajuda-hotspot"><div class="lbl">Leads/canal</div><div class="val" style="font-size:11px;">5 canais</div></div></div></div></div>'
   },
   {
     chapter: 'Calendário',
@@ -4861,7 +4861,7 @@ var AJUDA_SCENES = [
     narration:
       'A aba Calendário junta as reuniões e tarefas com data marcada de todos os negócios e leads, com filtro por responsável. O botão Mais Nova Reunião cria um compromisso direto por aqui. E cada sócio conecta a própria conta do Google, uma única vez, em Configurações, Usuários — depois disso, tudo que é agendado para aquela pessoa aparece sozinho no Google Calendar pessoal dela.',
     visual:
-      '<ul class="ajuda-howto"><li>Cada sócio conecta o próprio Google Calendar em Configurações → Usuários</li></ul>'
+      '<div class="mock-frame"><div class="mock-content" style="padding:12px;"><div style="display:flex; justify-content:flex-end;"><span class="mock-btn ajuda-hotspot">+ Nova Reunião/Evento</span></div><div class="mock-list-row ajuda-hotspot"><span class="dot"></span> 15:00 · Reunião de alinhamento · Luis Dias</div><div class="mock-list-row ajuda-hotspot"><span class="dot" style="background:var(--vg-navy);"></span> Conectar Google Calendar em Configurações → Usuários</div></div></div>'
   },
   {
     chapter: 'Chat da Equipe',
@@ -4869,7 +4869,7 @@ var AJUDA_SCENES = [
     narration:
       'O Chat da Equipe é um espaço só para os sócios conversarem entre si, não é visto pelos leads. Dá para mandar texto, fotos, documentos e áudios, e abrir conversas privadas, além do chat geral. Mensagens mostram quando foram entregues e visualizadas, no estilo WhatsApp.',
     visual:
-      '<div class="ajuda-row"><span class="tag-pill" style="background:var(--vg-orange)">Geral</span><span class="tag-pill" style="background:var(--vg-navy)">Pedro Romanello</span></div>'
+      '<div class="mock-frame"><div class="mock-content" style="padding:12px;"><div class="mock-tabs"><span class="mock-tab active ajuda-hotspot">Geral</span><span class="mock-tab ajuda-hotspot">Pedro Romanello</span><span class="mock-tab ajuda-hotspot">Diego Gianini</span></div><div class="mock-list-row ajuda-hotspot"><span class="dot"></span> Luis Dias: Bom dia, time! ✓✓ Visualizado</div></div></div>'
   },
   {
     chapter: 'Velo-Cito, o assistente',
@@ -4877,7 +4877,7 @@ var AJUDA_SCENES = [
     narration:
       'No canto inferior direito, em qualquer tela, fica o Velo-Cito, o assistente de inteligência artificial. Na aba Dicas, ele analisa seus negócios em aberto e sugere como fechar cada venda. Na aba Chat, você conversa sobre um negócio específico, e ele pode sugerir mudar a etapa, marcar como ganho, criar uma tarefa, agendar uma reunião, ou ligar para o contato. Toda sugestão aparece com um botão Aplicar Sugestão, e nada é feito sem você confirmar.',
     visual:
-      '<ul class="ajuda-howto"><li>Sugestão: Agendar reunião "Follow-up" em 30/09 <b>[Aplicar sugestão]</b></li></ul>'
+      '<div class="mock-frame"><div class="mock-content" style="padding:12px;"><div class="mock-tabs"><span class="mock-tab active ajuda-hotspot">Dicas</span><span class="mock-tab ajuda-hotspot">Chat</span></div><div class="mock-list-row ajuda-hotspot">Sugestão: Agendar reunião "Follow-up" em 30/09</div><div style="display:flex; justify-content:flex-end;"><span class="mock-btn ajuda-hotspot">Aplicar sugestão</span></div></div></div>'
   },
   {
     chapter: 'Configurações',
@@ -4885,7 +4885,7 @@ var AJUDA_SCENES = [
     narration:
       'Configurações reúne seis sub-abas. Etapas do Funil define as colunas do Pipeline. Usuários cadastra os sócios, o ramal de cada um, a assinatura de e-mail com imagem, e o botão para conectar o Google Calendar pessoal. Campos Personalizados e Etiquetas criam categorias e marcadores próprios, separados entre Lead e Empresa. Integrações guarda as chaves de WhatsApp, Facebook, Instagram, Google Ads, e-mail, Google Calendar e Vivo PABX. Assistente de IA escolhe qual inteligência artificial roda por trás do Velo-Cito. E com isso, você já conhece o Velocita Global CRM inteiro. Bem-vindo à equipe!',
     visual:
-      '<div class="ajuda-row"><span class="tag-pill" style="background:var(--vg-navy)">Etapas do Funil</span><span class="tag-pill" style="background:var(--vg-orange)">Usuários</span><span class="tag-pill" style="background:var(--vg-navy)">Integrações</span></div>'
+      '<div class="mock-frame"><div class="mock-content" style="padding:12px;"><div class="mock-tabs" style="flex-wrap:wrap;"><span class="mock-tab ajuda-hotspot">Etapas do Funil</span><span class="mock-tab active ajuda-hotspot">Usuários</span><span class="mock-tab ajuda-hotspot">Etiquetas</span><span class="mock-tab ajuda-hotspot">Integrações</span><span class="mock-tab ajuda-hotspot">Assistente IA</span></div><div class="mock-list-row ajuda-hotspot"><span class="dot"></span> Luis Dias · ramal 1001 <span class="mock-btn secondary" style="margin-left:auto;">Conectar Google Calendar</span></div></div></div>'
   }
 ];
 
@@ -5019,7 +5019,7 @@ function ajudaAnimateCursor(container) {
   const old = container.querySelector('.ajuda-cursor');
   if (old) old.remove();
 
-  const targets = Array.prototype.slice.call(container.querySelectorAll('.tag-pill, .category-badge'));
+  const targets = Array.prototype.slice.call(container.querySelectorAll('.ajuda-hotspot'));
   if (!targets.length) return;
 
   const cursor = document.createElement('div');
