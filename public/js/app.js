@@ -693,6 +693,8 @@ function buildDealCard(deal) {
   const categoryBadges = dealCategories
     .map((cat) => `<span class="category-badge" style="background:${cat.color}">${escapeHtml(cat.name)}</span>`)
     .join('');
+  const leadTags = contact && Array.isArray(contact.tags) ? contact.tags.map((tid) => tagById(tid)).filter(Boolean) : [];
+  const leadTagBadges = leadTags.map((t) => `<span class="category-badge" style="background:${t.color}">${escapeHtml(t.name)}</span>`).join('');
 
   card.innerHTML = `
     <div class="deal-title">${escapeHtml(deal.title)}</div>
@@ -707,7 +709,7 @@ function buildDealCard(deal) {
     <div class="deal-meta" style="margin-top:6px;">
       <span class="days-badge ${daysWarn ? 'warn' : ''}">${days} dia${days === 1 ? '' : 's'} nesta etapa</span>
     </div>
-    ${categoryBadges ? `<div class="deal-badges">${categoryBadges}</div>` : ''}
+    ${categoryBadges || leadTagBadges ? `<div class="deal-badges">${categoryBadges}${leadTagBadges}</div>` : ''}
   `;
 
   card.addEventListener('dragstart', (e) => {
@@ -1144,6 +1146,18 @@ async function renderActivityFeed() {
   feed.querySelectorAll('[data-toggle-activity]').forEach((btn) => {
     btn.addEventListener('click', () => toggleActivityDone(btn.dataset.toggleActivity, renderActivityFeed));
   });
+}
+
+async function toggleRoteiroDone(activityId) {
+  const item = state.roteiroCache && state.roteiroCache[activityId];
+  if (!item) return;
+  try {
+    await Api.updateActivity(activityId, { done: !item.done });
+    state.reminders = await Api.reminders();
+    renderRoteiro();
+  } catch (err) {
+    showToast('Erro ao atualizar tarefa');
+  }
 }
 
 async function toggleActivityDone(activityId, refreshFn) {
@@ -3621,6 +3635,7 @@ const ROTEIRO_TYPE_LABEL = { meeting: 'Reunião', task: 'Tarefa', call: 'Chamada
 
 function bindRoteiro() {
   document.getElementById('roteiro-attendant-filter').addEventListener('change', renderRoteiro);
+  document.getElementById('btn-add-roteiro-task').addEventListener('click', () => openCalendarEventModal('task'));
 }
 
 function fmtTimeOnly(dateStr) {
@@ -3663,6 +3678,7 @@ async function renderRoteiro() {
 
   if (attendantId) {
     items = items.filter((a) => {
+      if (!a.attendantId && !a.dealId) return true; // tarefa geral: aparece para todos
       if (a.attendantId) return a.attendantId === attendantId;
       if (a.dealId) {
         const deal = state.deals.find((d) => d.id === a.dealId);
@@ -3699,26 +3715,42 @@ async function renderRoteiro() {
     return;
   }
 
+  state.roteiroCache = {};
+  items.forEach((it) => {
+    state.roteiroCache[it.id] = it;
+  });
+
   container.innerHTML = items
     .map((it) => {
-      const who = it.leadName || it.dealTitle || 'Sem contato vinculado';
+      const who = it.leadName || it.dealTitle || it.text;
       const sub = it.dealTitle && it.dealTitle !== who ? it.dealTitle : '';
+      const showText = who !== it.text;
       return `
-      <div class="roteiro-item ${it.done ? 'done' : ''}" data-roteiro-lead="${it.leadId || ''}" data-roteiro-deal="${it.dealId || ''}">
+      <div class="roteiro-item ${it.done ? 'done' : ''}">
+        <button class="activity-check ${it.done ? 'done' : ''}" data-roteiro-toggle="${it.id}" title="${it.done ? 'Marcar como pendente' : 'Marcar como feito'}">${it.done ? '✓' : ''}</button>
         <div class="ri-time">${fmtTimeOnly(it.date)}</div>
         <div class="ri-icon">${ROTEIRO_TYPE_ICON[it.type] || svgIcon('note')}</div>
-        <div>
+        <div class="roteiro-item-body" data-roteiro-lead="${it.leadId || ''}" data-roteiro-deal="${it.dealId || ''}">
           <div class="ri-title">${escapeHtml(who)}</div>
           ${sub ? `<div class="ri-sub">${escapeHtml(sub)}</div>` : ''}
-          <div class="ri-sub">${escapeHtml(it.text)}</div>
-          <div class="ri-meta">${ROTEIRO_TYPE_LABEL[it.type] || it.type}${it.attendantName ? ' · ' + escapeHtml(it.attendantName) : ''}</div>
+          ${showText ? `<div class="ri-sub">${escapeHtml(it.text)}</div>` : ''}
+          <div class="ri-meta">${ROTEIRO_TYPE_LABEL[it.type] || it.type}${it.attendantName ? ' · ' + escapeHtml(it.attendantName) : ' · Geral'}</div>
         </div>
       </div>
     `;
     })
     .join('');
 
+  container.querySelectorAll('[data-roteiro-toggle]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleRoteiroDone(btn.dataset.roteiroToggle);
+    });
+  });
+
   container.querySelectorAll('[data-roteiro-lead], [data-roteiro-deal]').forEach((el) => {
+    if (!el.dataset.roteiroLead && !el.dataset.roteiroDeal) return;
+    el.style.cursor = 'pointer';
     el.addEventListener('click', () => {
       if (el.dataset.roteiroDeal) {
         switchView('pipeline');
@@ -4150,16 +4182,17 @@ function bindCalendarioPage() {
   document.getElementById('btn-save-calendar-event').addEventListener('click', saveCalendarEvent);
 }
 
-function openCalendarEventModal() {
+function openCalendarEventModal(defaultType) {
   document.getElementById('cal-event-title').value = '';
-  document.getElementById('cal-event-type').value = 'meeting';
+  document.getElementById('cal-event-type').value = defaultType || 'meeting';
 
   const now = new Date();
   now.setMinutes(now.getMinutes() - now.getTimezoneOffset() + 60);
   document.getElementById('cal-event-date').value = now.toISOString().slice(0, 16);
 
   const attendantSelect = document.getElementById('cal-event-attendant');
-  attendantSelect.innerHTML = state.users.map((u) => `<option value="${u.id}">${escapeHtml(u.name)}</option>`).join('');
+  attendantSelect.innerHTML =
+    '<option value="">Geral (todos os sócios)</option>' + state.users.map((u) => `<option value="${u.id}">${escapeHtml(u.name)}</option>`).join('');
   if (state.attendantId) attendantSelect.value = state.attendantId;
 
   const linkSelect = document.getElementById('cal-event-link');
@@ -4185,7 +4218,7 @@ async function saveCalendarEvent() {
     type: document.getElementById('cal-event-type').value,
     text: title,
     date: new Date(dateVal).toISOString(),
-    attendantId: document.getElementById('cal-event-attendant').value,
+    attendantId: document.getElementById('cal-event-attendant').value || null,
     done: false,
     dealId: linkType === 'deal' ? linkId : null,
     leadId: linkType === 'lead' ? linkId : null
@@ -4195,7 +4228,8 @@ async function saveCalendarEvent() {
     await Api.addCalendarEvent(payload);
     closeModal('modal-calendar-event');
     showToast('Evento criado!');
-    renderCalendario();
+    if (document.getElementById('view-calendario').classList.contains('active')) renderCalendario();
+    if (document.getElementById('view-roteiro').classList.contains('active')) renderRoteiro();
   } catch (err) {
     showToast(err.message || 'Erro ao criar evento');
   }
