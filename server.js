@@ -258,6 +258,98 @@ app.post('/api/contacts', requireAuth, (req, res) => {
   res.status(201).json(contact);
 });
 
+// Importação em lote (planilha Excel/CSV lida no navegador). Cria a empresa pelo nome
+// quando ela ainda não existe e pula leads repetidos (mesmo e-mail ou telefone).
+app.post('/api/contacts/import', requireAuth, (req, res) => {
+  const rows = Array.isArray(req.body.rows) ? req.body.rows.slice(0, 5000) : [];
+  if (!rows.length) return res.status(400).json({ error: 'Nenhuma linha para importar' });
+  const data = db.read();
+  const digits = (s) => String(s || '').replace(/\D/g, '');
+  const emails = new Set(data.contacts.map((c) => (c.email || '').trim().toLowerCase()).filter(Boolean));
+  const phones = new Set(data.contacts.map((c) => digits(c.phone)).filter((p) => p.length >= 8));
+  let created = 0;
+  let skipped = 0;
+  let orgsCreated = 0;
+  for (const r of rows) {
+    const name = String(r.name || '').trim();
+    const email = String(r.email || '').trim();
+    const phone = String(r.phone || '').trim();
+    if (!name && !email) { skipped++; continue; }
+    const emailKey = email.toLowerCase();
+    const phoneKey = digits(phone);
+    if ((emailKey && emails.has(emailKey)) || (phoneKey.length >= 8 && phones.has(phoneKey))) { skipped++; continue; }
+    let orgId = null;
+    const company = String(r.company || '').trim();
+    if (company) {
+      let org = data.organizations.find((o) => (o.name || '').trim().toLowerCase() === company.toLowerCase());
+      if (!org) {
+        org = { id: newId('org'), name: company, cnpj: String(r.cnpj || ''), razaoSocial: '', setor: String(r.setor || ''), phone: '', mobile: '', address: '', notes: '', tags: [], ownerId: req.body.ownerId || null, extraInfo: [] };
+        data.organizations.push(org);
+        orgsCreated++;
+      }
+      orgId = org.id;
+    }
+    const contact = {
+      id: newId('c'),
+      name: name || email,
+      email,
+      phone,
+      orgId,
+      notes: String(r.notes || ''),
+      categories: r.category ? [String(r.category)] : [],
+      tags: [],
+      ownerId: req.body.ownerId || null,
+      extraInfo: r.role ? [{ id: newId('x'), label: 'Cargo', value: String(r.role) }] : [],
+      source: { channel: String(r.channel || 'importacao'), campaign: String(r.campaign || req.body.fileName || '') },
+      channels: { whatsapp: phone, facebookPsid: '', instagramId: '' }
+    };
+    data.contacts.push(contact);
+    if (emailKey) emails.add(emailKey);
+    if (phoneKey.length >= 8) phones.add(phoneKey);
+    created++;
+  }
+  logHistory(data, 'lead', 'import', req.body.attendantId, 'created', `Importação de planilha: ${created} leads`);
+  db.write(data);
+  res.json({ created, skipped, orgsCreated });
+});
+
+// ---------- Observações do dia (Roteiro) ----------
+// Uma anotação por dia e por atendente (attendantId null = observação geral do time).
+app.get('/api/daily-notes', requireAuth, (req, res) => {
+  const { from, to } = req.query;
+  let notes = db.read().dailyNotes || [];
+  if (from) notes = notes.filter((n) => n.date >= from);
+  if (to) notes = notes.filter((n) => n.date <= to);
+  res.json(notes);
+});
+
+app.put('/api/daily-notes', requireAuth, (req, res) => {
+  const { date, attendantId, text } = req.body || {};
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) return res.status(400).json({ error: 'Data inválida' });
+  const data = db.read();
+  if (!data.dailyNotes) data.dailyNotes = [];
+  const who = attendantId || null;
+  const idx = data.dailyNotes.findIndex((n) => n.date === date && (n.attendantId || null) === who);
+  const clean = String(text || '').trim();
+  if (!clean) {
+    if (idx >= 0) data.dailyNotes.splice(idx, 1);
+    db.write(data);
+    return res.json({ ok: true, removed: true });
+  }
+  const note = {
+    id: idx >= 0 ? data.dailyNotes[idx].id : newId('dn'),
+    date,
+    attendantId: who,
+    attendantName: (data.users.find((u) => u.id === who) || {}).name || null,
+    text: clean,
+    updatedAt: new Date().toISOString()
+  };
+  if (idx >= 0) data.dailyNotes[idx] = note;
+  else data.dailyNotes.push(note);
+  db.write(data);
+  res.json(note);
+});
+
 app.put('/api/contacts/:id', requireAuth, (req, res) => {
   const data = db.read();
   const contact = data.contacts.find((c) => c.id === req.params.id);

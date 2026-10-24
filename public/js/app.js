@@ -84,7 +84,8 @@ const SOURCE_LABEL = {
   tiktok_ads: 'TikTok Ads / Spark Ads',
   whatsapp: 'WhatsApp',
   indicacao: 'Indicação',
-  organico: 'Orgânico / Site'
+  organico: 'Orgânico / Site',
+  importacao: 'Importação (planilha)'
 };
 const TRAFEGO_PAGO_CHANNELS = ['facebook_ads', 'instagram_ads', 'google_ads', 'tiktok_ads'];
 const MARKETPLACE_PLATFORMS = ['Mercado Livre', 'Shopee', 'Amazon', 'TikTok Shop'];
@@ -199,6 +200,9 @@ const Api = {
   markNotifRead: (id) => api(`/api/notifications/${id}/read`, { method: 'POST' }),
   markAllNotifRead: () => api('/api/notifications/read-all', { method: 'POST' }),
   allActivities: () => api('/api/activities'),
+  dailyNotes: (from, to) => api(`/api/daily-notes?from=${from}&to=${to}`),
+  saveDailyNote: (payload) => api('/api/daily-notes', { method: 'PUT', body: JSON.stringify(payload) }),
+  importContacts: (payload) => api('/api/contacts/import', { method: 'POST', body: JSON.stringify(payload) }),
   leadActivities: (leadId) => api(`/api/leads/${leadId}/activities`),
   addLeadActivity: (leadId, payload) => api(`/api/leads/${leadId}/activities`, { method: 'POST', body: JSON.stringify(payload) }),
   syncCalendar: (activityId) => api(`/api/activities/${activityId}/sync-calendar`, { method: 'POST' }),
@@ -246,6 +250,7 @@ async function init() {
   bindLeadDetailModal();
   bindSettingsPanel();
   bindLeadsPage();
+  bindLeadsImportExport();
   bindOrgsPage();
   bindLogout();
   bindModalCloseButtons();
@@ -1210,7 +1215,7 @@ async function toggleRoteiroDone(activityId) {
   const item = state.roteiroCache && state.roteiroCache[activityId];
   if (!item) return;
   try {
-    await Api.updateActivity(activityId, { done: !item.done });
+    await Api.updateActivity(activityId, { done: !item.done, progress: item.done ? 'pendente' : 'concluida' });
     state.reminders = await Api.reminders();
     renderRoteiro();
   } catch (err) {
@@ -3687,18 +3692,82 @@ async function sendComposedEmail() {
   }
 }
 
-// ============ Roteiro do Dia ============
+// ============ Roteiro da Semana ============
+// Visão semanal (segunda a domingo) + painel do dia selecionado. Cada tarefa ganha
+// acompanhamento: status (pendente / em andamento / concluída), se o contato foi feito
+// e observações. O dia também tem um bloco de observações livres por atendente.
 const ROTEIRO_TYPE_ICON = { meeting: svgIcon('calendar'), task: svgIcon('check'), call: svgIcon('call') };
 const ROTEIRO_TYPE_LABEL = { meeting: 'Reunião', task: 'Tarefa', call: 'Chamada' };
+const RT_PROGRESS_LABEL = { pendente: 'Pendente', andamento: 'Em andamento', concluida: 'Concluída' };
+const RT_DOW = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+
+function rtProgress(a) {
+  return a.progress || (a.done ? 'concluida' : 'pendente');
+}
+function dateKey(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function parseDateKey(k) {
+  const [y, m, d] = k.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+function weekStart(d) {
+  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); // segunda-feira
+  return x;
+}
 
 function bindRoteiro() {
   document.getElementById('roteiro-attendant-filter').addEventListener('change', renderRoteiro);
-  document.getElementById('btn-add-roteiro-task').addEventListener('click', () => openCalendarEventModal('task'));
+  document.getElementById('btn-add-roteiro-task').addEventListener('click', () => openCalendarEventModal('task', state.rtDay));
+  document.getElementById('rt-add-day').addEventListener('click', () => openCalendarEventModal('task', state.rtDay));
+  document.getElementById('rt-prev').addEventListener('click', () => shiftRoteiroDay(-7));
+  document.getElementById('rt-next').addEventListener('click', () => shiftRoteiroDay(7));
+  document.getElementById('rt-today').addEventListener('click', () => {
+    state.rtDay = dateKey(new Date());
+    renderRoteiro();
+  });
+  document.getElementById('rt-save-notes').addEventListener('click', saveRoteiroNotes);
+}
+
+function shiftRoteiroDay(days) {
+  const d = parseDateKey(state.rtDay || dateKey(new Date()));
+  d.setDate(d.getDate() + days);
+  state.rtDay = dateKey(d);
+  renderRoteiro();
 }
 
 function fmtTimeOnly(dateStr) {
   const d = new Date(dateStr);
   return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function enrichRoteiroItem(a) {
+  let leadId = a.leadId || null;
+  let leadName = null;
+  let dealTitle = null;
+  const dealId = a.dealId || null;
+  if (a.dealId) {
+    const deal = state.deals.find((d) => d.id === a.dealId);
+    if (deal) {
+      dealTitle = deal.title;
+      leadId = deal.personId;
+      const lead = state.contacts.find((c) => c.id === deal.personId);
+      if (lead) leadName = lead.name;
+    }
+  } else if (a.leadId) {
+    const lead = state.contacts.find((c) => c.id === a.leadId);
+    if (lead) leadName = lead.name;
+  }
+  return { ...a, leadId, dealId, leadName, dealTitle };
+}
+
+function roteiroMatchesAttendant(a, attendantId) {
+  if (!attendantId) return true;
+  if (!a.attendantId && !a.dealId) return true; // tarefa geral: aparece para todos
+  if (a.attendantId) return a.attendantId === attendantId;
+  const deal = state.deals.find((d) => d.id === a.dealId);
+  return !!deal && deal.ownerId === attendantId;
 }
 
 async function renderRoteiro() {
@@ -3711,114 +3780,327 @@ async function renderRoteiro() {
       filterSelect.appendChild(opt);
     });
   }
-  const attendantId = filterSelect.value;
+  if (!state.rtDay) state.rtDay = dateKey(new Date());
+  const ws = weekStart(parseDateKey(state.rtDay));
+  const we = new Date(ws);
+  we.setDate(ws.getDate() + 7);
+  const lastDay = new Date(ws);
+  lastDay.setDate(ws.getDate() + 6);
 
-  const container = document.getElementById('roteiro-list');
-  container.innerHTML = '<div class="empty-state">Carregando...</div>';
+  const fmtShort = (d) => d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '');
+  document.getElementById('rt-range').textContent = `${fmtShort(ws)} – ${fmtShort(lastDay)} ${lastDay.getFullYear()}`;
+  document.getElementById('rt-week').innerHTML = '<div class="empty-state">Carregando...</div>';
 
-  let allActivities;
+  let activities;
+  let notes;
   try {
-    allActivities = await Api.allActivities();
+    [activities, notes] = await Promise.all([Api.allActivities(), Api.dailyNotes(dateKey(ws), dateKey(lastDay))]);
   } catch (err) {
-    container.innerHTML = '<div class="empty-state">Erro ao carregar o roteiro.</div>';
+    document.getElementById('rt-week').innerHTML = '<div class="empty-state">Erro ao carregar o roteiro.</div>';
     return;
   }
-
-  const now = new Date();
-  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
-
-  let items = allActivities.filter((a) => {
-    if (a.type !== 'meeting' && a.type !== 'task' && a.type !== 'call') return false;
-    const d = new Date(a.date);
-    return d >= startOfDay && d < endOfDay;
-  });
-
-  if (attendantId) {
-    items = items.filter((a) => {
-      if (!a.attendantId && !a.dealId) return true; // tarefa geral: aparece para todos
-      if (a.attendantId) return a.attendantId === attendantId;
-      if (a.dealId) {
-        const deal = state.deals.find((d) => d.id === a.dealId);
-        return deal && deal.ownerId === attendantId;
-      }
-      return false;
-    });
-  }
-
-  items = items
-    .map((a) => {
-      let leadId = a.leadId || null;
-      let leadName = null;
-      let dealTitle = null;
-      const dealId = a.dealId || null;
-      if (a.dealId) {
-        const deal = state.deals.find((d) => d.id === a.dealId);
-        if (deal) {
-          dealTitle = deal.title;
-          leadId = deal.personId;
-          const lead = state.contacts.find((c) => c.id === deal.personId);
-          if (lead) leadName = lead.name;
-        }
-      } else if (a.leadId) {
-        const lead = state.contacts.find((c) => c.id === a.leadId);
-        if (lead) leadName = lead.name;
-      }
-      return { ...a, leadId, dealId, leadName, dealTitle };
-    })
+  const attendantId = filterSelect.value;
+  const items = activities
+    .filter((a) => (a.type === 'meeting' || a.type === 'task' || a.type === 'call') && new Date(a.date) >= ws && new Date(a.date) < we)
+    .filter((a) => roteiroMatchesAttendant(a, attendantId))
+    .map(enrichRoteiroItem)
     .sort((x, y) => new Date(x.date) - new Date(y.date));
 
-  if (items.length === 0) {
-    container.innerHTML = '<div class="empty-state">Nenhum compromisso para hoje.</div>';
+  state.rtData = { ws, items, notes };
+  state.roteiroCache = {};
+  items.forEach((it) => (state.roteiroCache[it.id] = it));
+  renderRoteiroWeek();
+  renderRoteiroDay();
+}
+
+function renderRoteiroSummary() {
+  const { items } = state.rtData;
+  const now = new Date();
+  const count = (fn) => items.filter(fn).length;
+  const tiles = [
+    ['Na semana', items.length, ''],
+    ['Concluídas', count((a) => rtProgress(a) === 'concluida'), 'ok'],
+    ['Em andamento', count((a) => rtProgress(a) === 'andamento'), 'mid'],
+    ['Pendentes', count((a) => rtProgress(a) === 'pendente'), ''],
+    ['Atrasadas', count((a) => rtProgress(a) !== 'concluida' && new Date(a.date) < now), 'bad'],
+    ['Contatos feitos', count((a) => a.contacted === true), 'ok'],
+    ['Sem contato', count((a) => a.contacted === false), 'bad']
+  ];
+  document.getElementById('rt-summary').innerHTML = tiles
+    .map(([label, n, cls]) => `<div class="rt-tile ${cls}"><b>${n}</b><span>${label}</span></div>`)
+    .join('');
+}
+
+function renderRoteiroWeek() {
+  renderRoteiroSummary();
+  const { ws, items, notes } = state.rtData;
+  const todayKey = dateKey(new Date());
+  const html = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(ws);
+    d.setDate(ws.getDate() + i);
+    const key = dateKey(d);
+    const dayItems = items.filter((a) => dateKey(new Date(a.date)) === key);
+    const hasNote = notes.some((n) => n.date === key);
+    const doneCount = dayItems.filter((a) => rtProgress(a) === 'concluida').length;
+    const list = dayItems
+      .slice(0, 5)
+      .map(
+        (a) =>
+          `<div class="rt-mini ${rtProgress(a)}"><span class="rt-dot"></span><span class="rt-mini-time">${fmtTimeOnly(a.date)}</span><span class="rt-mini-title">${escapeHtml(a.leadName || a.text || a.dealTitle || '')}</span></div>`
+      )
+      .join('');
+    html.push(`
+      <button class="rt-daycol ${key === todayKey ? 'today' : ''} ${key === state.rtDay ? 'selected' : ''}" data-rt-day="${key}">
+        <div class="rt-dayhead"><span>${RT_DOW[d.getDay()]}</span><b>${d.getDate()}</b>${hasNote ? `<i class="rt-note-flag" title="Tem observações do dia">${svgIcon('note')}</i>` : ''}</div>
+        <div class="rt-daycount">${dayItems.length ? `${doneCount}/${dayItems.length} concluídas` : 'Livre'}</div>
+        <div class="rt-minis">${list}${dayItems.length > 5 ? `<div class="rt-more">+${dayItems.length - 5} mais</div>` : ''}</div>
+      </button>`);
+  }
+  const week = document.getElementById('rt-week');
+  week.innerHTML = html.join('');
+  week.querySelectorAll('[data-rt-day]').forEach((b) =>
+    b.addEventListener('click', () => {
+      state.rtDay = b.dataset.rtDay;
+      week.querySelectorAll('.rt-daycol').forEach((c) => c.classList.toggle('selected', c === b));
+      renderRoteiroDay();
+    })
+  );
+}
+
+function renderRoteiroDay() {
+  const { items, notes } = state.rtData;
+  const day = parseDateKey(state.rtDay);
+  const isToday = state.rtDay === dateKey(new Date());
+  const title = day.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' });
+  document.getElementById('rt-day-title').textContent = title.charAt(0).toUpperCase() + title.slice(1) + (isToday ? ' · Hoje' : '');
+
+  // observações do dia: a do atendente atual é editável, as dos outros aparecem abaixo
+  const mine = notes.find((n) => n.date === state.rtDay && (n.attendantId || null) === (state.attendantId || null));
+  document.getElementById('rt-day-notes').value = mine ? mine.text : '';
+  document.getElementById('rt-notes-status').textContent = mine
+    ? `Salvo às ${new Date(mine.updatedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+    : '';
+  const others = notes.filter((n) => n.date === state.rtDay && n !== mine);
+  document.getElementById('rt-notes-others').innerHTML = others
+    .map((n) => `<div class="rt-other-note"><b>${escapeHtml(n.attendantName || 'Geral')}</b><p>${escapeHtml(n.text)}</p></div>`)
+    .join('');
+
+  const container = document.getElementById('roteiro-list');
+  const dayItems = items.filter((a) => dateKey(new Date(a.date)) === state.rtDay);
+  if (!dayItems.length) {
+    container.innerHTML = '<div class="empty-state">Nenhum compromisso neste dia. Use “+ Tarefa neste dia” para agendar.</div>';
     return;
   }
-
-  state.roteiroCache = {};
-  items.forEach((it) => {
-    state.roteiroCache[it.id] = it;
-  });
-
-  container.innerHTML = items
+  const now = new Date();
+  container.innerHTML = dayItems
     .map((it) => {
+      const prog = rtProgress(it);
       const who = it.leadName || it.dealTitle || it.text;
       const sub = it.dealTitle && it.dealTitle !== who ? it.dealTitle : '';
       const showText = who !== it.text;
+      const late = prog !== 'concluida' && new Date(it.date) < now;
+      const link = it.dealId
+        ? `<button class="btn-link" data-rt-open-deal="${it.dealId}">Abrir negócio</button>`
+        : it.leadId
+          ? `<button class="btn-link" data-rt-open-lead="${it.leadId}">Abrir lead</button>`
+          : '';
       return `
-      <div class="roteiro-item ${it.done ? 'done' : ''}">
-        <button class="activity-check ${it.done ? 'done' : ''}" data-roteiro-toggle="${it.id}" title="${it.done ? 'Marcar como pendente' : 'Marcar como feito'}">${it.done ? '✓' : ''}</button>
+      <div class="roteiro-item rt-full ${prog} ${late ? 'late' : ''}" data-rt-item="${it.id}">
+        <button class="activity-check ${prog === 'concluida' ? 'done' : ''}" data-roteiro-toggle="${it.id}" title="${prog === 'concluida' ? 'Marcar como pendente' : 'Marcar como concluída'}">${prog === 'concluida' ? '✓' : ''}</button>
         <div class="ri-time">${fmtTimeOnly(it.date)}</div>
         <div class="ri-icon">${ROTEIRO_TYPE_ICON[it.type] || svgIcon('note')}</div>
-        <div class="roteiro-item-body" data-roteiro-lead="${it.leadId || ''}" data-roteiro-deal="${it.dealId || ''}">
-          <div class="ri-title">${escapeHtml(who)}</div>
+        <div class="roteiro-item-body">
+          <div class="ri-title">${escapeHtml(who)} ${late ? '<span class="rt-late">Atrasada</span>' : ''}</div>
           ${sub ? `<div class="ri-sub">${escapeHtml(sub)}</div>` : ''}
           ${showText ? `<div class="ri-sub">${escapeHtml(it.text)}</div>` : ''}
-          <div class="ri-meta">${ROTEIRO_TYPE_LABEL[it.type] || it.type}${it.attendantName ? ' · ' + escapeHtml(it.attendantName) : ' · Geral'}</div>
+          <div class="ri-meta">${ROTEIRO_TYPE_LABEL[it.type] || it.type}${it.attendantName ? ' · ' + escapeHtml(it.attendantName) : ' · Geral'} ${link}</div>
+          <div class="rt-controls">
+            <div class="rt-seg" role="group" aria-label="Status">
+              ${Object.entries(RT_PROGRESS_LABEL)
+                .map(([k, l]) => `<button class="${prog === k ? 'on ' + k : ''}" data-rt-progress="${k}">${l}</button>`)
+                .join('')}
+            </div>
+            <div class="rt-seg" role="group" aria-label="Contato feito">
+              <span class="rt-seg-label">Contato feito?</span>
+              <button class="${it.contacted === true ? 'on concluida' : ''}" data-rt-contact="sim">Sim</button>
+              <button class="${it.contacted === false ? 'on bad' : ''}" data-rt-contact="nao">Não</button>
+            </div>
+          </div>
+          <textarea class="rt-obs" rows="2" placeholder="Observações: o que foi conversado, resultado, próximo passo...">${escapeHtml(it.outcomeNotes || '')}</textarea>
+          <div class="rt-obs-foot"><span class="rt-saved">${
+            it.outcomeUpdatedAt
+              ? 'Atualizado em ' + new Date(it.outcomeUpdatedAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+              : ''
+          }</span><button class="btn-secondary btn-sm" data-rt-save-obs>Salvar observação</button></div>
         </div>
-      </div>
-    `;
+      </div>`;
     })
     .join('');
 
-  container.querySelectorAll('[data-roteiro-toggle]').forEach((btn) => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      toggleRoteiroDone(btn.dataset.roteiroToggle);
-    });
+  container.querySelectorAll('[data-roteiro-toggle]').forEach((btn) =>
+    btn.addEventListener('click', () => {
+      const it = state.roteiroCache[btn.dataset.roteiroToggle];
+      updateRoteiroItem(it.id, { progress: rtProgress(it) === 'concluida' ? 'pendente' : 'concluida' });
+    })
+  );
+  container.querySelectorAll('[data-rt-item]').forEach((row) => {
+    const id = row.dataset.rtItem;
+    row.querySelectorAll('[data-rt-progress]').forEach((b) => b.addEventListener('click', () => updateRoteiroItem(id, { progress: b.dataset.rtProgress })));
+    row.querySelectorAll('[data-rt-contact]').forEach((b) =>
+      b.addEventListener('click', () => {
+        const val = b.dataset.rtContact === 'sim';
+        updateRoteiroItem(id, { contacted: state.roteiroCache[id].contacted === val ? null : val });
+      })
+    );
+    const ta = row.querySelector('.rt-obs');
+    const saveObs = () => {
+      if ((state.roteiroCache[id].outcomeNotes || '') === ta.value.trim()) return;
+      updateRoteiroItem(id, { outcomeNotes: ta.value.trim() }, true);
+    };
+    row.querySelector('[data-rt-save-obs]').addEventListener('click', saveObs);
+    ta.addEventListener('blur', saveObs);
   });
+  container.querySelectorAll('[data-rt-open-deal]').forEach((b) =>
+    b.addEventListener('click', () => {
+      switchView('pipeline');
+      openDealDetail(b.dataset.rtOpenDeal);
+    })
+  );
+  container.querySelectorAll('[data-rt-open-lead]').forEach((b) =>
+    b.addEventListener('click', () => {
+      switchView('leads');
+      openLeadDetail(b.dataset.rtOpenLead);
+    })
+  );
+}
 
-  container.querySelectorAll('[data-roteiro-lead], [data-roteiro-deal]').forEach((el) => {
-    if (!el.dataset.roteiroLead && !el.dataset.roteiroDeal) return;
-    el.style.cursor = 'pointer';
-    el.addEventListener('click', () => {
-      if (el.dataset.roteiroDeal) {
-        switchView('pipeline');
-        openDealDetail(el.dataset.roteiroDeal);
-      } else if (el.dataset.roteiroLead) {
-        switchView('leads');
-        openLeadDetail(el.dataset.roteiroLead);
-      }
-    });
+async function updateRoteiroItem(id, changes, quiet) {
+  const payload = { ...changes, outcomeUpdatedAt: new Date().toISOString(), outcomeBy: state.attendantId || null };
+  if (changes.progress) payload.done = changes.progress === 'concluida';
+  try {
+    const updated = await Api.updateActivity(id, payload);
+    const idx = state.rtData.items.findIndex((a) => a.id === id);
+    if (idx >= 0) {
+      state.rtData.items[idx] = enrichRoteiroItem({ ...state.rtData.items[idx], ...updated });
+      state.roteiroCache[id] = state.rtData.items[idx];
+    }
+    if (changes.progress) state.reminders = await Api.reminders();
+    if (quiet) showToast('Observação salva');
+    renderRoteiroWeek();
+    renderRoteiroDay();
+  } catch (err) {
+    showToast('Erro ao atualizar tarefa');
+  }
+}
+
+async function saveRoteiroNotes() {
+  const text = document.getElementById('rt-day-notes').value;
+  try {
+    const res = await Api.saveDailyNote({ date: state.rtDay, attendantId: state.attendantId || null, text });
+    const notes = state.rtData.notes.filter((n) => !(n.date === state.rtDay && (n.attendantId || null) === (state.attendantId || null)));
+    if (!res.removed) notes.push(res);
+    state.rtData.notes = notes;
+    showToast('Observações do dia salvas');
+    renderRoteiroWeek();
+    renderRoteiroDay();
+  } catch (err) {
+    showToast('Erro ao salvar observações');
+  }
+}
+
+// ============ Leads: importar / exportar planilha ============
+// Lê .xlsx/.xls/.csv no navegador (SheetJS) e reconhece os cabeçalhos mais comuns em
+// português e inglês. O servidor cria as empresas que faltarem e pula leads repetidos.
+const LEAD_COLUMN_ALIASES = {
+  name: ['nome', 'name', 'nome completo', 'contato', 'lead', 'cliente', 'responsavel'],
+  email: ['email', 'e-mail', 'e mail', 'mail', 'correio'],
+  phone: ['telefone', 'celular', 'whatsapp', 'whats', 'fone', 'phone', 'tel', 'numero'],
+  company: ['empresa', 'company', 'companhia', 'razao social', 'organizacao', 'loja', 'negocio'],
+  role: ['cargo', 'funcao', 'role', 'posicao'],
+  category: ['categoria', 'category', 'tipo'],
+  setor: ['setor', 'segmento', 'ramo', 'nicho'],
+  cnpj: ['cnpj'],
+  notes: ['observacoes', 'observacao', 'obs', 'notas', 'notes', 'comentarios']
+};
+const normHeader = (h) =>
+  String(h || '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[_.]/g, ' ')
+    .trim();
+
+function bindLeadsImportExport() {
+  const input = document.getElementById('leads-import-file');
+  document.getElementById('btn-import-leads').addEventListener('click', () => input.click());
+  input.addEventListener('change', () => {
+    if (input.files[0]) importLeadsFile(input.files[0]);
+    input.value = '';
   });
+  document.getElementById('btn-export-leads').addEventListener('click', exportLeadsExcel);
+}
+
+async function importLeadsFile(file) {
+  if (!window.XLSX) return showToast('Leitor de planilhas não carregou. Verifique a internet e recarregue a página.');
+  let rows;
+  try {
+    const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+    rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
+  } catch (err) {
+    return showToast('Não consegui ler essa planilha. Use .xlsx, .xls ou .csv.');
+  }
+  if (!rows.length) return showToast('A planilha está vazia.');
+  const headers = Object.keys(rows[0]);
+  const map = {};
+  for (const [field, aliases] of Object.entries(LEAD_COLUMN_ALIASES)) {
+    const h = headers.find((x) => aliases.includes(normHeader(x))) || headers.find((x) => aliases.some((a) => normHeader(x).includes(a)));
+    if (h) map[field] = h;
+  }
+  if (!map.name && !map.email) return showToast('Não achei a coluna de nome nem de e-mail. Use cabeçalhos como "Nome", "E-mail", "Telefone", "Empresa".');
+  const mapped = rows
+    .map((r) => {
+      const o = {};
+      for (const [field, h] of Object.entries(map)) o[field] = String(r[h] ?? '').trim();
+      return o;
+    })
+    .filter((o) => o.name || o.email);
+  const found = Object.entries(map)
+    .map(([f, h]) => `${h} → ${{ name: 'Nome', email: 'E-mail', phone: 'Telefone', company: 'Empresa', role: 'Cargo', category: 'Categoria', setor: 'Setor', cnpj: 'CNPJ', notes: 'Observações' }[f]}`)
+    .join('\n');
+  if (!confirm(`Importar ${mapped.length} leads de "${file.name}"?\n\nColunas reconhecidas:\n${found}\n\nLeads com e-mail ou telefone já cadastrados serão ignorados.`)) return;
+  try {
+    const res = await Api.importContacts({ rows: mapped, fileName: file.name, attendantId: state.attendantId || null, ownerId: state.attendantId || null });
+    [state.contacts, state.organizations] = await Promise.all([Api.contacts(), Api.organizations()]);
+    renderLeads();
+    const pl = (n, um, varios) => `${n} ${n === 1 ? um : varios}`;
+    showToast(`${pl(res.created, 'lead importado', 'leads importados')}${res.skipped ? `, ${pl(res.skipped, 'ignorado', 'ignorados')} (repetido ou sem nome)` : ''}${res.orgsCreated ? `, ${pl(res.orgsCreated, 'empresa criada', 'empresas criadas')}` : ''}.`);
+  } catch (err) {
+    showToast(err.message || 'Erro ao importar a planilha');
+  }
+}
+
+function exportLeadsExcel() {
+  if (!window.XLSX) return showToast('Gerador de planilhas não carregou. Verifique a internet e recarregue a página.');
+  const rows = state.contacts.map((c) => ({
+    Nome: c.name || '',
+    'E-mail': c.email || '',
+    Telefone: c.phone || '',
+    Empresa: c.orgId ? orgName(c.orgId) : '',
+    Categoria: (c.categories || []).join(', '),
+    Origem: c.source ? SOURCE_LABEL[c.source.channel] || c.source.channel : '',
+    Etiquetas: (c.tags || [])
+      .map((id) => (state.tags.find((t) => t.id === id) || {}).name)
+      .filter(Boolean)
+      .join(', '),
+    Responsável: c.ownerId ? userName(c.ownerId) : '',
+    Observações: c.notes || ''
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [{ wch: 28 }, { wch: 30 }, { wch: 18 }, { wch: 26 }, { wch: 18 }, { wch: 20 }, { wch: 24 }, { wch: 18 }, { wch: 40 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Leads');
+  XLSX.writeFile(wb, `leads-velocita-${dateKey(new Date())}.xlsx`);
 }
 
 // ============ Chat da Equipe (interno, somente entre admins/atendentes) ============
@@ -4240,13 +4522,17 @@ function bindCalendarioPage() {
   document.getElementById('btn-save-calendar-event').addEventListener('click', saveCalendarEvent);
 }
 
-function openCalendarEventModal(defaultType) {
+function openCalendarEventModal(defaultType, dayKey) {
+  if (typeof defaultType !== 'string') defaultType = null; // chamado direto pelo clique (recebe o evento)
   document.getElementById('cal-event-title').value = '';
   document.getElementById('cal-event-type').value = defaultType || 'meeting';
 
   const now = new Date();
   now.setMinutes(now.getMinutes() - now.getTimezoneOffset() + 60);
-  document.getElementById('cal-event-date').value = now.toISOString().slice(0, 16);
+  let dateVal = now.toISOString().slice(0, 16);
+  // dia escolhido no Roteiro (que não seja hoje): sugere 09:00 daquele dia
+  if (typeof dayKey === 'string' && dayKey !== dateKey(new Date())) dateVal = `${dayKey}T09:00`;
+  document.getElementById('cal-event-date').value = dateVal;
 
   const attendantSelect = document.getElementById('cal-event-attendant');
   attendantSelect.innerHTML =

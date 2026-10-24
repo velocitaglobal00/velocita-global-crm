@@ -164,15 +164,37 @@
         <!-- ===== ROTEIRO DO DIA ===== -->
         <section class="view" id="view-roteiro">
           <div class="pipeline-header">
-            <h2>Roteiro do Dia</h2>
+            <h2>Roteiro da Semana</h2>
             <button class="btn-primary" id="btn-add-roteiro-task">+ Nova Tarefa</button>
           </div>
-          <div class="table-toolbar">
+          <div class="table-toolbar roteiro-toolbar">
             <select id="roteiro-attendant-filter" class="filter-input" style="max-width:260px;">
               <option value="">Todos os atendentes</option>
             </select>
+            <div class="rt-weeknav">
+              <button class="btn-secondary" id="rt-prev" title="Semana anterior">‹</button>
+              <button class="btn-secondary" id="rt-today">Hoje</button>
+              <button class="btn-secondary" id="rt-next" title="Próxima semana">›</button>
+              <span class="rt-range" id="rt-range"></span>
+            </div>
           </div>
-          <div id="roteiro-list"></div>
+          <div class="rt-summary" id="rt-summary"></div>
+          <div class="rt-week" id="rt-week"></div>
+          <div class="rt-day">
+            <div class="rt-day-head">
+              <h3 id="rt-day-title">Hoje</h3>
+              <button class="btn-secondary" id="rt-add-day">+ Tarefa neste dia</button>
+            </div>
+            <div class="rt-day-grid">
+              <div id="roteiro-list"></div>
+              <aside class="rt-notes">
+                <label for="rt-day-notes">Observações do dia</label>
+                <textarea id="rt-day-notes" rows="8" placeholder="Como foi o dia: contatos, combinados, pendências, ideias..."></textarea>
+                <div class="rt-notes-foot"><span id="rt-notes-status"></span><button class="btn-primary" id="rt-save-notes">Salvar observações</button></div>
+                <div class="rt-notes-others" id="rt-notes-others"></div>
+              </aside>
+            </div>
+          </div>
         </section>
 
         <!-- ===== PIPELINE ===== -->
@@ -188,7 +210,12 @@
         <section class="view" id="view-leads">
           <div class="pipeline-header">
             <h2>Leads</h2>
-            <button class="btn-primary" id="btn-add-contact">+ Adicionar Lead</button>
+            <div class="header-actions">
+              <button class="btn-secondary" id="btn-export-leads" title="Baixar todos os leads em Excel">Exportar Excel</button>
+              <button class="btn-secondary" id="btn-import-leads" title="Anexar uma planilha Excel ou CSV com leads">Importar Excel</button>
+              <input type="file" id="leads-import-file" accept=".xlsx,.xls,.csv" hidden />
+              <button class="btn-primary" id="btn-add-contact">+ Adicionar Lead</button>
+            </div>
           </div>
           <div class="table-toolbar">
             <input type="text" class="filter-input" id="leads-filter" placeholder="Buscar por nome, e-mail ou empresa..." />
@@ -1317,6 +1344,7 @@
     </div>
   </div>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="/js/app.js"></script>
 </body>
 </html>
