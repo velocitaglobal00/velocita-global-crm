@@ -3252,43 +3252,16 @@ async function sendCommsMessage() {
 // ============ E-mail (caixa de entrada dedicada) ============
 function bindEmailInbox() {
   document.getElementById('email-inbox-filter').addEventListener('input', renderEmailInbox);
-  document.getElementById('btn-new-email-inbox').addEventListener('click', async () => {
-    const typedEmail = document.getElementById('email-inbox-new-typed').value.trim();
-    if (typedEmail) {
-      let contact = state.contacts.find((c) => (c.email || '').toLowerCase() === typedEmail.toLowerCase());
-      if (!contact) {
-        try {
-          contact = await Api.addContact({
-            name: typedEmail,
-            email: typedEmail,
-            ownerId: state.attendantId,
-            attendantId: state.attendantId,
-            source: { channel: 'organico', campaign: '' }
-          });
-          state.contacts.push(contact);
-        } catch (err) {
-          showToast(err.message || 'Erro ao criar contato para esse e-mail');
-          return;
-        }
-      }
-      document.getElementById('email-inbox-new-typed').value = '';
-      populateEmailNewSelect();
-      openEmailCompose(contact.id);
-      return;
-    }
-    const selected = document.getElementById('email-inbox-new-select').value || state.emailInboxLeadId;
-    if (selected) openEmailCompose(selected);
-    else showToast('Cadastre um lead com e-mail primeiro, ou digite um e-mail acima');
-  });
+  document.getElementById('btn-new-email-inbox').addEventListener('click', () => openEmailCompose(null));
   bindEmailTabs();
 }
 
+// Sugestões de endereço enquanto digita no "Para" (só sugere, nunca preenche sozinho)
 function populateEmailNewSelect() {
-  const select = document.getElementById('email-inbox-new-select');
-  const withEmail = state.contacts.filter((c) => c.email);
-  select.innerHTML = withEmail.length
-    ? withEmail.map((c) => `<option value="${c.id}">${escapeHtml(c.name)} — ${escapeHtml(c.email)}</option>`).join('')
-    : '<option value="">Nenhum lead com e-mail cadastrado</option>';
+  document.getElementById('gc-to-suggestions').innerHTML = state.contacts
+    .filter((c) => c.email)
+    .map((c) => `<option value="${escapeHtml(c.email)}">${escapeHtml(c.name)}</option>`)
+    .join('');
 }
 
 // ---------- Caixas Gmail: "my" (de quem está atendendo) e "gmail" (velocitaglobal@gmail.com) ----------
@@ -3855,8 +3828,8 @@ function bindEmailCompose() {
 }
 
 async function openEmailCompose(leadId) {
-  const lead = state.contacts.find((c) => c.id === leadId);
-  if (!lead) return;
+  const lead = leadId ? state.contacts.find((c) => c.id === leadId) : null;
+  if (leadId && !lead) return;
   if (!state.attendantId) {
     showToast('Selecione seu nome de atendente primeiro');
     openAttendantPicker();
@@ -3866,7 +3839,12 @@ async function openEmailCompose(leadId) {
   state.emailAttachments = [];
   state.emailSignatureInserted = false;
 
-  document.getElementById('gc-to').value = lead.email || '(sem e-mail cadastrado)';
+  const toInput = document.getElementById('gc-to');
+  // Sem lead definido (botão "Novo E-mail"): campo "Para" vazio e editável
+  toInput.readOnly = !!lead;
+  toInput.placeholder = lead ? '' : 'Para: digite o e-mail do destinatário';
+  toInput.value = lead ? lead.email || '(sem e-mail cadastrado)' : '';
+  if (!lead) populateEmailNewSelect();
   document.getElementById('gc-subject').value = '';
   document.getElementById('gc-textarea').value = '';
   renderAttachmentChips();
@@ -3878,6 +3856,10 @@ async function openEmailCompose(leadId) {
 
   const modeRow = document.getElementById('gc-reply-mode-row');
   modeRow.style.display = 'none';
+  if (!lead) {
+    toInput.focus();
+    return;
+  }
   try {
     const thread = await Api.leadMessages(leadId, 'email');
     if (thread.length) {
@@ -3965,9 +3947,33 @@ function renderAttachmentChips() {
 }
 
 async function sendComposedEmail() {
-  const leadId = state.emailComposeLeadId;
+  let leadId = state.emailComposeLeadId;
   const subject = document.getElementById('gc-subject').value.trim();
   const text = document.getElementById('gc-textarea').value.trim();
+  if (!leadId) {
+    const typed = document.getElementById('gc-to').value.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(typed)) {
+      showToast('Digite um e-mail válido no campo "Para"');
+      return;
+    }
+    if (!text) {
+      showToast('Escreva uma mensagem antes de enviar');
+      return;
+    }
+    // o e-mail fica guardado na conversa do contato; cria o contato se ainda não existir
+    let contact = state.contacts.find((c) => (c.email || '').toLowerCase() === typed.toLowerCase());
+    if (!contact) {
+      try {
+        contact = await Api.addContact({ name: typed, email: typed, ownerId: state.attendantId, attendantId: state.attendantId, source: { channel: 'organico', campaign: '' } });
+        state.contacts.push(contact);
+      } catch (err) {
+        showToast(err.message || 'Erro ao registrar o destinatário');
+        return;
+      }
+    }
+    leadId = contact.id;
+    state.emailComposeLeadId = leadId;
+  }
   if (!text) {
     showToast('Escreva uma mensagem antes de enviar');
     return;

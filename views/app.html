@@ -323,9 +323,6 @@
           <div id="email-tab-leads" class="settings-panel">
             <div class="comms-layout">
               <div class="comms-list-col">
-                <select id="email-inbox-new-select" style="width:100%; margin-bottom:6px; padding:9px 8px; border-radius:7px; border:1.5px solid var(--vg-border);"></select>
-                <div style="text-align:center; font-size:11px; color:var(--vg-text-muted); margin-bottom:6px;">— ou —</div>
-                <input type="email" id="email-inbox-new-typed" placeholder="Digite um e-mail (não precisa ser um lead)" style="width:100%; margin-bottom:6px; padding:9px 8px; border-radius:7px; border:1.5px solid var(--vg-border);" />
                 <button class="btn-primary" id="btn-new-email-inbox" style="width:100%; margin-bottom:10px;"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg> Novo E-mail</button>
                 <input type="text" class="filter-input" id="email-inbox-filter" placeholder="Buscar conversa..." style="width:100%; margin-bottom:10px;" />
                 <div id="email-inbox-list"></div>
@@ -1353,7 +1350,8 @@
     </div>
     <div class="gc-body" id="gc-body">
       <div class="gc-field">
-        <input type="text" id="gc-to" readonly />
+        <input type="text" id="gc-to" readonly list="gc-to-suggestions" autocomplete="off" />
+        <datalist id="gc-to-suggestions"></datalist>
       </div>
       <div id="gc-reply-mode-row" style="display:none; gap:8px; padding:8px 16px; border-bottom:1px solid var(--vg-border);">
         <button type="button" class="btn-secondary" id="gc-mode-reply" style="padding:5px 12px; font-size:12px;">↩ Responder</button>
