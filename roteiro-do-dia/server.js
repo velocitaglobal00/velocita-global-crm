@@ -498,9 +498,42 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // Global CRM (que já exige seu próprio login). Só escolhe o papel (Admin ou Afiliado):
 // Admin usa a conta de admin já existente; Afiliado usa uma conta compartilhada única,
 // criada automaticamente no primeiro uso.
+// Sócios do CRM disponíveis para entrar no Gerador (só para quem está logado no CRM).
+app.get('/api/crm-attendants', (req, res) => {
+  if (!req.crmAuthenticated) return res.status(401).json({ error: 'Entre no CRM primeiro.' });
+  res.json({ ok: true, users: (req.crmUsers || []).map((u) => ({ id: u.id, name: u.name })) });
+});
+
+// Conta do Gerador ligada a um sócio do CRM. Criada no primeiro uso, com acesso ao
+// painel admin, e reencontrada depois pelo e-mail interno crm+<id>@velocitaglobal.local.
+async function generatorUserForCrm(crmUser) {
+  const linkEmail = `crm+${crmUser.id}@velocitaglobal.local`;
+  let user = await db.findUserByEmail(linkEmail);
+  if (user) return user;
+  const base = String(crmUser.name || 'socio')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .trim().replace(/\s+/g, '.').replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 20) || 'socio';
+  let username = base.length >= 3 ? base : `${base}.vg`;
+  for (let i = 2; await db.findUserByUsername(username); i++) username = `${base.slice(0, 18)}.${i}`;
+  await db.createUser({ email: linkEmail, username, passHash: hashPassword(crypto.randomBytes(16).toString('hex')), role: 'admin', status: 'ativo', createdByAdmin: true });
+  return db.findUserByEmail(linkEmail);
+}
+
 app.post('/api/quick-login', async (req, res) => {
   try {
-    const { role } = req.body || {};
+    // Só entra quem já passou pelo login do CRM (antes qualquer um conseguia chamar esta rota).
+    if (!req.crmAuthenticated) return res.status(401).json({ error: 'Entre no CRM primeiro para usar o Gerador.' });
+    const { role, attendantId } = req.body || {};
+
+    if (attendantId) {
+      const crmUser = (req.crmUsers || []).find((u) => u.id === attendantId);
+      if (!crmUser) return res.status(404).json({ error: 'Sócio não encontrado no CRM.' });
+      const user = await generatorUserForCrm(crmUser);
+      if (user.status === 'banido' || user.status === 'suspenso') return res.status(403).json({ error: 'Conta suspensa no Gerador. Reative pelo painel admin.' });
+      const token = await signToken(user);
+      return res.json({ ok: true, token, role: user.role, username: user.username, displayName: crmUser.name, crmId: crmUser.id });
+    }
+
     if (!['admin', 'afiliado'].includes(role)) {
       return res.status(400).json({ error: 'Papel inválido.' });
     }

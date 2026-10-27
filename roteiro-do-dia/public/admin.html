@@ -212,6 +212,12 @@ function vgToggleTheme(){var d=document.documentElement.getAttribute('data-theme
 </div>
 
 <script>
+// Se no CRM foi escolhido outro sócio em "Atendendo como", entra de novo como ele
+(function(){
+  const crm = localStorage.getItem('vg_attendant_id');
+  const mine = localStorage.getItem('rd_crm_id');
+  if (crm && mine && crm !== mine) { window.location.href = './' + (location.pathname.endsWith('admin.html') ? '?ir=admin' : ''); }
+})();
 const token = localStorage.getItem('rd_token');
 const role = localStorage.getItem('rd_role');
 if(!token || (role !== 'admin' && role !== 'moderador')){ window.location.href = './'; }
@@ -232,7 +238,7 @@ function setTab(t){
 
 async function logout(){
   try{ await fetch('api/logout', { method:'POST', headers: authHeaders }); }catch(e){}
-  localStorage.clear(); window.location.href='./';
+  ['rd_token','rd_user','rd_role','rd_crm_id'].forEach(k=>localStorage.removeItem(k)); window.location.href='./';
 }
 
 function fmtTime(ts){
@@ -248,7 +254,7 @@ function esc(s){ const d=document.createElement('div'); d.textContent=s==null?''
 async function load(){
   try{
     const r = await fetch('api/admin/overview', { headers: authHeaders });
-    if(r.status === 401 || r.status === 403){ localStorage.clear(); window.location.href='./'; return; }
+    if(r.status === 401 || r.status === 403){ ['rd_token','rd_user','rd_role','rd_crm_id'].forEach(k=>localStorage.removeItem(k)); window.location.href='./'; return; }
     const data = await r.json();
     lastData = data;
     if(data.myRole){

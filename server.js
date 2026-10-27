@@ -2258,10 +2258,20 @@ app.get('/api/calendar/events', requireAuth, (req, res) => {
 });
 
 // ---------- Roteiro do Dia (gerador de roteiros virais para afiliados) ----------
-// Aplicação independente (login, banco e IA próprios), montada dentro do mesmo
-// site em /roteiro-do-dia. Não compartilha sessão nem dados com o CRM.
+// Aplicação com banco e IA próprios, montada dentro do mesmo site em /roteiro-do-dia.
+// Recebe do CRM só duas coisas: se a pessoa está logada no CRM e a lista de sócios,
+// para entrar no Gerador como o sócio escolhido em "Atendendo como" (assim cada roteiro
+// gerado fica no nome de quem gerou).
 const roteiroDoDia = require('./roteiro-do-dia/server');
-app.use('/roteiro-do-dia', roteiroDoDia.app);
+app.use(
+  '/roteiro-do-dia',
+  (req, res, next) => {
+    req.crmAuthenticated = restoreFromCookie(req);
+    req.crmUsers = req.crmAuthenticated ? db.read().users.map((u) => ({ id: u.id, name: u.name, email: u.email || u.googleEmail || '' })) : [];
+    next();
+  },
+  roteiroDoDia.app
+);
 
 (async () => {
   try {

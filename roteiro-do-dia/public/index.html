@@ -127,11 +127,13 @@ function vgToggleTheme(){var d=document.documentElement.getAttribute('data-theme
   <h1>Gerador de Roteiros (IA)</h1>
   <p class="sub">Conteúdo viral pronto para o seu link de afiliado.</p>
 
-  <label>Entrar como</label>
+  <label for="socio">Quem está gerando</label>
+  <select id="socio" style="width:100%; padding:11px 12px; border-radius:10px; border:1px solid var(--border); font:inherit; font-size:14px; margin-bottom:12px;"></select>
   <div class="roles">
-    <button type="button" class="role-btn" id="btnAfiliado" onclick="quickLogin('afiliado')">Afiliado</button>
-    <button type="button" class="role-btn" id="btnAdmin" onclick="quickLogin('admin')">Admin</button>
+    <button type="button" class="role-btn" id="btnGerar" onclick="enter('app')">Gerar roteiros</button>
+    <button type="button" class="role-btn" id="btnPainel" onclick="enter('admin')">Painel admin</button>
   </div>
+  <p class="sub" style="margin-top:12px; font-size:12px;">Vem do “Atendendo como” do CRM. Cada roteiro fica registrado no nome de quem gerou.</p>
   <div class="msg" id="msgLogin"></div>
 </div>
 
@@ -140,33 +142,51 @@ function setMsg(el, type, html){
   el.className = 'msg ' + type;
   el.innerHTML = html;
 }
+const params = new URLSearchParams(location.search);
 
-async function quickLogin(role){
+async function loadSocios(){
+  const msg = document.getElementById('msgLogin');
+  try{
+    const r = await fetch('api/crm-attendants');
+    if(r.status === 401){ setMsg(msg, 'err', 'Entre no CRM primeiro. <a href="/app">Abrir o CRM</a>'); return; }
+    const data = await r.json();
+    const sel = document.getElementById('socio');
+    sel.innerHTML = data.users.map(u => `<option value="${u.id}">${u.name.replace(/</g,'&lt;')}</option>`).join('');
+    const fromCrm = localStorage.getItem('vg_attendant_id');
+    if(fromCrm && data.users.some(u => u.id === fromCrm)) sel.value = fromCrm;
+    // vindo do CRM com um sócio escolhido: entra direto, sem clique
+    if(fromCrm && sel.value === fromCrm && !params.has('trocar')) enter(params.get('ir') === 'admin' ? 'admin' : 'app');
+  }catch(e){
+    setMsg(msg, 'err', 'Falha de conexão com o servidor.');
+  }
+}
+
+async function enter(target){
   const msg = document.getElementById('msgLogin');
   msg.className = 'msg';
-  document.getElementById('btnAfiliado').disabled = true;
-  document.getElementById('btnAdmin').disabled = true;
+  const attendantId = document.getElementById('socio').value;
+  if(!attendantId){ setMsg(msg, 'err', 'Escolha quem está gerando.'); return; }
+  ['btnGerar','btnPainel'].forEach(id => document.getElementById(id).disabled = true);
   try{
     const r = await fetch('api/quick-login', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ role })
+      body: JSON.stringify({ attendantId })
     });
     const data = await r.json();
-    if(!r.ok){
-      setMsg(msg, 'err', data.error || 'Erro ao entrar.');
-      return;
-    }
+    if(!r.ok){ setMsg(msg, 'err', data.error || 'Erro ao entrar.'); return; }
     localStorage.setItem('rd_token', data.token);
-    localStorage.setItem('rd_user', data.username);
+    localStorage.setItem('rd_user', data.displayName || data.username);
     localStorage.setItem('rd_role', data.role);
-    window.location.href = data.role === 'admin' ? 'admin.html' : 'app.html';
+    localStorage.setItem('rd_crm_id', data.crmId || '');
+    localStorage.setItem('vg_attendant_id', attendantId); // mantém o CRM e o Gerador com a mesma pessoa
+    window.location.href = target === 'admin' ? 'admin.html' : 'app.html';
   }catch(e){
     setMsg(msg, 'err', 'Falha de conexão com o servidor.');
   }finally{
-    document.getElementById('btnAfiliado').disabled = false;
-    document.getElementById('btnAdmin').disabled = false;
+    ['btnGerar','btnPainel'].forEach(id => document.getElementById(id).disabled = false);
   }
 }
+loadSocios();
 </script>
 </body>
 </html>
