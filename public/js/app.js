@@ -3705,10 +3705,31 @@ async function loadNotifDropdown() {
       if (n) n.read = true;
       updateNotifBadges();
       document.getElementById('notif-dropdown').classList.remove('show');
-      switchView('comunicacoes');
-      setTimeout(() => openCommsThread(btn.dataset.notifLead, btn.dataset.notifChannel), 50);
+      openNotificationTarget(btn.dataset.notifLead, btn.dataset.notifChannel);
     });
   });
+}
+
+// Abre a conversa da notificação dentro do próprio lead (aba do canal certo).
+// A antiga tela "Comunicações" saiu do menu, então não é mais usada aqui.
+function openNotificationTarget(leadId, channel) {
+  const lead = state.contacts.find((c) => c.id === leadId);
+  if (!lead) {
+    showToast('Esse lead foi removido do CRM');
+    switchView('mensagens');
+    return;
+  }
+  if (channel === 'email') {
+    switchView('email');
+    openEmailThread(leadId);
+    return;
+  }
+  switchView('leads');
+  openLeadDetail(leadId);
+  setTimeout(() => {
+    const tab = document.querySelector(`#lead-tabs [data-ldtab="${channel}"]`);
+    if (tab) tab.click();
+  }, 80);
 }
 
 function renderMensagens() {
@@ -3738,8 +3759,7 @@ function renderMensagens() {
       if (n) n.read = true;
       updateNotifBadges();
       renderMensagens();
-      switchView('comunicacoes');
-      setTimeout(() => openCommsThread(row.dataset.msgLead, row.dataset.msgChannel), 50);
+      openNotificationTarget(row.dataset.msgLead, row.dataset.msgChannel);
     });
   });
 }
@@ -3774,8 +3794,7 @@ function showBrowserNotification(n) {
   });
   notif.onclick = () => {
     window.focus();
-    switchView('comunicacoes');
-    openCommsThread(n.leadId, n.channel);
+    openNotificationTarget(n.leadId, n.channel);
   };
 }
 
