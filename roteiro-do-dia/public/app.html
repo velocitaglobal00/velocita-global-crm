@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Roteiro do Dia — Gerador</title>
+<title>Gerador de Roteiros (IA) — Velocita Global</title>
 <link rel="icon" href="assets/logo-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -168,11 +168,14 @@
   .tags span{font-size:12.5px; background:rgba(147,162,196,.12); border:1px solid var(--border); color:var(--muted); padding:4px 10px; border-radius:999px}
   .dur{font-size:12px; color:var(--muted); margin-bottom:14px}
 </style>
+<link rel="stylesheet" href="vg-theme.css">
+<script>try{document.documentElement.setAttribute('data-theme',localStorage.getItem('vg_theme')==='dark'?'dark':'light')}catch(e){}
+function vgToggleTheme(){var d=document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',d);try{localStorage.setItem('vg_theme',d)}catch(e){}}</script>
 </head>
 <body>
 <header>
-  <div class="logo"><div class="mark"><img src="assets/logo-icon.png" alt="Velocita Global"></div>Roteiro do Dia</div>
-  <div class="userbox"><a class="out" href="/app" style="text-decoration:none; display:inline-block;">&larr; Voltar ao CRM</a><span>Olá, <b id="who">...</b></span><button class="out" onclick="logout()">Sair</button></div>
+  <div class="logo"><div class="mark"><img src="assets/logo-icon.png" alt="Velocita Global"></div>Gerador de Roteiros (IA)</div>
+  <div class="userbox"><button class="vg-theme-btn" onclick="vgToggleTheme()" title="Modo claro/escuro">&#9681;</button><a class="out" href="/app" style="text-decoration:none; display:inline-block;">&larr; Voltar ao CRM</a><span>Olá, <b id="who">...</b></span><button class="out" onclick="logout()">Sair</button></div>
 </header>
 
 <main>

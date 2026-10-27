@@ -5,6 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Velocita Global | CRM</title>
 <link rel="icon" href="/img/logo.webp" />
+<link rel="manifest" href="/manifest.webmanifest" />
+<meta name="theme-color" content="#F4821F" />
+<link rel="apple-touch-icon" href="/img/apple-touch-icon.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="Velocita" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <link rel="stylesheet" href="/css/style.css" />
 <script>
   try {
@@ -120,6 +127,18 @@
 
         <!-- ===== DASHBOARD ===== -->
         <section class="view active" id="view-dashboard">
+          <div class="pwa-card">
+            <img src="/img/icon-192.png" alt="" class="pwa-icon" />
+            <div class="pwa-text">
+              <strong>App no celular e notificações</strong>
+              <div id="pwa-status">Verificando...</div>
+            </div>
+            <div class="pwa-actions">
+              <button class="btn-secondary" id="btn-pwa-install" style="display:none;">Instalar app</button>
+              <button class="btn-primary" id="btn-pwa-toggle">Ativar notificações</button>
+              <button class="btn-link" id="btn-pwa-test" style="display:none;">Enviar teste</button>
+            </div>
+          </div>
           <div class="stat-grid">
             <div class="stat-card">
               <div class="label">Negócios em aberto</div>
@@ -324,40 +343,57 @@
           </div>
 
           <div id="email-tab-my" class="settings-panel" style="display:none;">
-            <div class="comms-layout">
-              <div class="comms-list-col">
-                <div class="tab-pills gmail-folder-pills" data-folderfor="my">
-                  <button class="tab-pill active" data-folder="INBOX">Recebidos</button>
-                  <button class="tab-pill" data-folder="SENT">Enviados</button>
-                  <button class="tab-pill" data-folder="SPAM">Spam</button>
-                  <button class="tab-pill" data-folder="TRASH">Lixeira</button>
+            <div class="mail-shell" data-mailbox="my">
+              <div class="mail-topbar">
+                <div class="mail-account" id="mail-my-account"></div>
+                <div class="mail-top-actions">
+                  <button class="btn-secondary btn-sm" data-mail-refresh>Atualizar</button>
+                  <button class="btn-primary btn-sm" data-mail-compose>Escrever</button>
                 </div>
-                <div id="my-inbox-status" class="empty-state" style="text-align:left; padding:0 0 12px;"></div>
-                <div id="my-inbox-list"></div>
               </div>
-              <div class="comms-chat-col">
-                <div id="my-message-view" class="empty-state" style="padding:60px 10px;">Selecione uma mensagem à esquerda.</div>
+              <div class="mail-cols">
+                <div class="mail-list-col">
+                  <div class="mail-folders">
+                    <button class="mail-folder active" data-folder="INBOX">Recebidos</button>
+                    <button class="mail-folder" data-folder="SENT">Enviados</button>
+                    <button class="mail-folder" data-folder="SPAM">Spam</button>
+                    <button class="mail-folder" data-folder="TRASH">Lixeira</button>
+                  </div>
+                  <input type="search" class="filter-input mail-search" placeholder="Buscar e-mails (remetente, assunto, texto)..." />
+                  <div class="mail-list" id="mail-my-list"></div>
+                  <button class="btn-secondary btn-sm mail-more" id="mail-my-more" style="display:none;">Carregar mais</button>
+                </div>
+                <div class="mail-view" id="mail-my-view"><div class="empty-state" style="padding:60px 10px;">Selecione uma mensagem à esquerda.</div></div>
               </div>
             </div>
           </div>
 
           <div id="email-tab-gmail" class="settings-panel" style="display:none;">
-            <div class="comms-layout">
-              <div class="comms-list-col">
-                <div class="tab-pills gmail-folder-pills" data-folderfor="gmail">
-                  <button class="tab-pill active" data-folder="INBOX">Recebidos</button>
-                  <button class="tab-pill" data-folder="SENT">Enviados</button>
-                  <button class="tab-pill" data-folder="SPAM">Spam</button>
-                  <button class="tab-pill" data-folder="TRASH">Lixeira</button>
+            <div class="mail-shell" data-mailbox="gmail">
+              <div class="mail-topbar">
+                <div class="mail-account" id="mail-gmail-account"></div>
+                <div class="mail-top-actions">
+                  <button class="btn-secondary btn-sm" data-mail-refresh>Atualizar</button>
+                  <button class="btn-primary btn-sm" data-mail-compose>Escrever</button>
                 </div>
-                <div id="gmail-inbox-status" class="empty-state" style="text-align:left; padding:0 0 12px;"></div>
-                <div id="gmail-inbox-list"></div>
               </div>
-              <div class="comms-chat-col">
-                <div id="gmail-message-view" class="empty-state" style="padding:60px 10px;">Selecione uma mensagem à esquerda.</div>
+              <div class="mail-cols">
+                <div class="mail-list-col">
+                  <div class="mail-folders">
+                    <button class="mail-folder active" data-folder="INBOX">Recebidos</button>
+                    <button class="mail-folder" data-folder="SENT">Enviados</button>
+                    <button class="mail-folder" data-folder="SPAM">Spam</button>
+                    <button class="mail-folder" data-folder="TRASH">Lixeira</button>
+                  </div>
+                  <input type="search" class="filter-input mail-search" placeholder="Buscar e-mails (remetente, assunto, texto)..." />
+                  <div class="mail-list" id="mail-gmail-list"></div>
+                  <button class="btn-secondary btn-sm mail-more" id="mail-gmail-more" style="display:none;">Carregar mais</button>
+                </div>
+                <div class="mail-view" id="mail-gmail-view"><div class="empty-state" style="padding:60px 10px;">Selecione uma mensagem à esquerda.</div></div>
               </div>
             </div>
           </div>
+
         </section>
 
         <!-- ===== NOTIFICAÇÕES (mensagens recebidas em todos os canais) ===== -->
@@ -1341,6 +1377,25 @@
         </div>
       </div>
       <button id="gc-btn-discard" class="gc-icon-btn" title="Descartar"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg></button>
+    </div>
+  </div>
+
+  <!-- ===== Escrever e-mail pelas caixas Gmail (Minha Caixa / compartilhada) ===== -->
+  <div id="mail-compose" class="gmail-compose" style="display:none;">
+    <div class="gc-header">
+      <span id="mc-title">Nova mensagem</span>
+      <div class="gc-header-actions"><button id="mc-close" title="Fechar">&times;</button></div>
+    </div>
+    <div class="gc-body">
+      <div class="gc-field mc-from" id="mc-from"></div>
+      <div class="gc-field"><input type="text" id="mc-to" placeholder="Para (separe vários com vírgula)" list="mc-to-suggestions" /></div>
+      <datalist id="mc-to-suggestions"></datalist>
+      <div class="gc-field"><input type="text" id="mc-cc" placeholder="Cc (opcional)" /></div>
+      <div class="gc-field"><input type="text" id="mc-subject" placeholder="Assunto" /></div>
+      <textarea id="mc-text" placeholder="Escreva sua mensagem..."></textarea>
+    </div>
+    <div class="gc-footer">
+      <div class="gc-footer-left"><button id="mc-send" class="gc-send-btn">Enviar</button><span id="mc-status" class="mc-status"></span></div>
     </div>
   </div>
 

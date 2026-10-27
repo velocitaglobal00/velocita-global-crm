@@ -143,8 +143,10 @@ async function api(url, options = {}) {
     throw new Error('unauthorized');
   }
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'Erro' }));
-    throw new Error(err.error || 'Erro na requisição');
+    const body = await res.json().catch(() => ({ error: 'Erro' }));
+    const err = new Error(body.error || 'Erro na requisição');
+    err.code = body.code || null;
+    throw err;
   }
   if (res.status === 204) return null;
   return res.json();
@@ -271,8 +273,10 @@ async function init() {
   bindCalendarioPage();
   bindGoalEdit();
   bindAjuda();
+  bindPwa();
 
   ensureAttendant();
+  openViewFromHash();
   pollNotifications();
   setInterval(pollNotifications, 25000);
   pollTeamChatBadge();
@@ -298,6 +302,141 @@ async function loadAllData() {
   state.settings = settings;
   state.tags = tags;
   state.reminders = reminders;
+}
+
+
+// ============ App no celular (PWA) + notificações ============
+// O service worker (/sw.js) recebe as notificações do servidor mesmo com o app fechado.
+// Cada aparelho fica ligado ao atendente escolhido em "Atendendo como".
+const PWA_VIEWS = ['dashboard', 'roteiro', 'pipeline', 'leads', 'orgs', 'email', 'mensagens', 'bi', 'calendario', 'chatequipe', 'settings', 'ajuda'];
+
+function openViewFromHash(hash) {
+  const v = String(hash || location.hash || '').replace('#', '');
+  if (PWA_VIEWS.includes(v) && document.getElementById(`view-${v}`)) switchView(v);
+}
+
+function urlB64ToUint8Array(b64) {
+  const pad = '='.repeat((4 - (b64.length % 4)) % 4);
+  const raw = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+  return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
+}
+
+const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent);
+
+async function bindPwa() {
+  if ('serviceWorker' in navigator) {
+    try {
+      state.swReg = await navigator.serviceWorker.register('/sw.js');
+    } catch (e) {
+      // sem service worker o CRM funciona normalmente, só sem notificações em segundo plano
+    }
+    navigator.serviceWorker.addEventListener('message', (ev) => {
+      if (ev.data && ev.data.navigate) openViewFromHash(new URL(ev.data.navigate, location.origin).hash);
+    });
+  }
+  window.addEventListener('hashchange', () => openViewFromHash());
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    state.installPrompt = e;
+    renderPwaCard();
+  });
+  document.getElementById('btn-pwa-toggle').addEventListener('click', togglePushNotifications);
+  document.getElementById('btn-pwa-install').addEventListener('click', installPwa);
+  document.getElementById('btn-pwa-test').addEventListener('click', async () => {
+    await api('/api/push/test', { method: 'POST', body: JSON.stringify({ attendantId: state.attendantId }) });
+    showToast('Notificação de teste enviada');
+  });
+  renderPwaCard();
+}
+
+async function currentPushSubscription() {
+  if (!state.swReg || !('PushManager' in window)) return null;
+  return state.swReg.pushManager.getSubscription();
+}
+
+async function renderPwaCard() {
+  const status = document.getElementById('pwa-status');
+  if (!status) return;
+  const installBtn = document.getElementById('btn-pwa-install');
+  const toggleBtn = document.getElementById('btn-pwa-toggle');
+  const testBtn = document.getElementById('btn-pwa-test');
+  installBtn.style.display = !isStandalone() && (state.installPrompt || isIOS()) ? '' : 'none';
+  if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+    status.textContent = isIOS() && !isStandalone()
+      ? 'No iPhone, primeiro instale o app: toque em Compartilhar e depois em "Adicionar à Tela de Início". Abra o app pela tela inicial e ative aqui.'
+      : 'Este navegador não suporta notificações. Use o Chrome no Android ou no computador.';
+    toggleBtn.style.display = 'none';
+    testBtn.style.display = 'none';
+    return;
+  }
+  const sub = await currentPushSubscription();
+  const on = !!sub && Notification.permission === 'granted';
+  status.innerHTML = on
+    ? `<span class="pwa-on">● Ativadas neste aparelho</span> para <b>${escapeHtml((currentAttendant() || {}).name || '—')}</b>: chat, tarefas do Roteiro, mensagens de leads e alterações do time.`
+    : Notification.permission === 'denied'
+      ? 'As notificações estão bloqueadas neste navegador. Libere em Configurações do site (cadeado ao lado do endereço) e tente de novo.'
+      : 'Receba no celular as mensagens do chat, tarefas do Roteiro, mensagens de leads e alterações feitas pelo time.';
+  toggleBtn.style.display = '';
+  toggleBtn.textContent = on ? 'Desativar neste aparelho' : 'Ativar notificações';
+  toggleBtn.className = on ? 'btn-secondary' : 'btn-primary';
+  testBtn.style.display = on ? '' : 'none';
+}
+
+async function togglePushNotifications() {
+  const sub = await currentPushSubscription();
+  if (sub && Notification.permission === 'granted') {
+    await api('/api/push/unsubscribe', { method: 'POST', body: JSON.stringify({ endpoint: sub.endpoint }) });
+    await sub.unsubscribe();
+    showToast('Notificações desativadas neste aparelho');
+    return renderPwaCard();
+  }
+  if (!state.attendantId) {
+    showToast('Escolha quem está atendendo primeiro');
+    return openAttendantPicker();
+  }
+  const perm = await Notification.requestPermission();
+  if (perm !== 'granted') {
+    showToast('Permissão de notificação não concedida');
+    return renderPwaCard();
+  }
+  try {
+    await subscribePush();
+    showToast('Notificações ativadas!');
+  } catch (e) {
+    showToast('Não foi possível ativar: ' + (e.message || e));
+  }
+  renderPwaCard();
+}
+
+async function subscribePush() {
+  const { publicKey } = await api('/api/push/public-key');
+  let sub = await currentPushSubscription();
+  if (!sub) sub = await state.swReg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64ToUint8Array(publicKey) });
+  await api('/api/push/subscribe', {
+    method: 'POST',
+    body: JSON.stringify({ subscription: sub.toJSON(), attendantId: state.attendantId, device: navigator.userAgent })
+  });
+}
+
+async function syncPushSubscription() {
+  try {
+    const sub = await currentPushSubscription();
+    if (sub && Notification.permission === 'granted') await subscribePush();
+  } catch (e) {
+    // sem conexão: tenta de novo na próxima troca de atendente
+  }
+  renderPwaCard();
+}
+
+async function installPwa() {
+  if (state.installPrompt) {
+    state.installPrompt.prompt();
+    await state.installPrompt.userChoice;
+    state.installPrompt = null;
+    return renderPwaCard();
+  }
+  if (isIOS()) showToast('No iPhone: toque em Compartilhar (quadrado com seta) e depois em "Adicionar à Tela de Início".');
 }
 
 // ============ Navigation ============
@@ -455,6 +594,7 @@ function bindAttendant() {
     localStorage.setItem(ATTENDANT_KEY, id);
     updateAttendantTopbar();
     closeModal('modal-attendant');
+    syncPushSubscription(); // o celular passa a receber as notificações deste atendente
   });
 }
 
@@ -3151,7 +3291,18 @@ function populateEmailNewSelect() {
     : '<option value="">Nenhum lead com e-mail cadastrado</option>';
 }
 
-state.gmailFolder = { my: 'INBOX', gmail: 'INBOX' };
+// ---------- Caixas Gmail: "my" (de quem está atendendo) e "gmail" (velocitaglobal@gmail.com) ----------
+// Mesmo cliente de e-mail para as duas: pastas, busca, ler, responder, encaminhar,
+// enviar, mover para a lixeira e marcar como não lida. Tudo pela API do Gmail, então o
+// que é enviado aqui aparece em "Enviados" — no CRM e no próprio Gmail.
+state.mail = {
+  my: { folder: 'INBOX', q: '', messages: [], next: null, current: null },
+  gmail: { folder: 'INBOX', q: '', messages: [], next: null, current: null }
+};
+
+function mailAttendantQuery() {
+  return `attendantId=${encodeURIComponent(state.attendantId || '')}`;
+}
 
 function bindEmailTabs() {
   document.querySelectorAll('#view-email .settings-tab').forEach((tab) => {
@@ -3167,125 +3318,273 @@ function bindEmailTabs() {
     });
   });
 
-  document.querySelectorAll('.gmail-folder-pills').forEach((row) => {
-    const forInbox = row.dataset.folderfor;
-    row.querySelectorAll('[data-folder]').forEach((pill) => {
-      pill.addEventListener('click', () => {
-        row.querySelectorAll('[data-folder]').forEach((p) => p.classList.remove('active'));
-        pill.classList.add('active');
-        state.gmailFolder[forInbox] = pill.dataset.folder;
-        if (forInbox === 'my') renderMyInbox();
-        else renderGmailInbox();
-      });
+  document.querySelectorAll('.mail-shell').forEach((shell) => {
+    const box = shell.dataset.mailbox;
+    shell.querySelectorAll('.mail-folder').forEach((btn) =>
+      btn.addEventListener('click', () => {
+        shell.querySelectorAll('.mail-folder').forEach((b) => b.classList.toggle('active', b === btn));
+        state.mail[box].folder = btn.dataset.folder;
+        loadMailList(box);
+      })
+    );
+    let t;
+    shell.querySelector('.mail-search').addEventListener('input', (e) => {
+      clearTimeout(t);
+      t = setTimeout(() => {
+        state.mail[box].q = e.target.value.trim();
+        loadMailList(box);
+      }, 450);
     });
+    shell.querySelector('[data-mail-refresh]').addEventListener('click', () => loadMailList(box));
+    shell.querySelector('[data-mail-compose]').addEventListener('click', () => openMailCompose(box));
+    document.getElementById(`mail-${box}-more`).addEventListener('click', () => loadMailList(box, true));
   });
-}
 
-// Caixas de e-mail baseadas no Gmail: a compartilhada (velocitaglobal@gmail.com) e a
-// pessoal de quem está "Atendendo como X". Mesma UI, fontes de dados diferentes.
-async function renderGenericGmailInbox(opts) {
-  const status = document.getElementById(opts.statusId);
-  const list = document.getElementById(opts.listId);
-  status.innerHTML = '';
-  list.innerHTML = '<div class="empty-state">Carregando...</div>';
-  try {
-    const { email, messages } = await opts.fetchMessages();
-    status.innerHTML = opts.connectedStatusHtml(email);
-    if (opts.bindDisconnect) opts.bindDisconnect();
-
-    if (!messages.length) {
-      list.innerHTML = '<div class="empty-state">Nenhuma mensagem na caixa de entrada.</div>';
-      return;
-    }
-    list.innerHTML = messages
-      .map(
-        (m) => `
-      <div class="list-row clickable" data-inbox-msg="${m.id}" style="align-items:flex-start; ${m.unread ? 'font-weight:700;' : ''}">
-        <div>
-          <div class="name">${escapeHtml(m.from)}</div>
-          <div style="font-size:12px;">${escapeHtml(m.subject)}</div>
-          <div style="font-size:11px; color:var(--vg-text-muted); font-weight:400;">${escapeHtml(m.snippet)}</div>
-        </div>
-      </div>
-    `
-      )
-      .join('');
-    list.querySelectorAll('[data-inbox-msg]').forEach((row) => {
-      row.addEventListener('click', () => loadGenericGmailMessage(opts, row.dataset.inboxMsg));
-    });
-  } catch (err) {
-    status.innerHTML = '';
-    list.innerHTML = `
-      <div class="empty-state" style="text-align:left;">
-        ${escapeHtml(err.message || 'Caixa de entrada não conectada.')}
-      </div>
-      ${opts.connectButtonHtml || ''}
-    `;
-    if (opts.bindConnect) opts.bindConnect();
-  }
-}
-
-async function loadGenericGmailMessage(opts, id) {
-  const view = document.getElementById(opts.viewId);
-  view.innerHTML = '<div class="empty-state">Carregando...</div>';
-  try {
-    const msg = await opts.fetchMessage(id);
-    view.innerHTML = `
-      <div style="padding:16px;">
-        <h3 style="margin:0 0 6px;">${escapeHtml(msg.subject)}</h3>
-        <div style="font-size:12px; color:var(--vg-text-muted); margin-bottom:14px;">
-          De: ${escapeHtml(msg.from)}<br/>Para: ${escapeHtml(msg.to)}<br/>${escapeHtml(msg.date)}
-        </div>
-        <iframe id="gmail-msg-frame" sandbox="" style="width:100%; min-height:400px; border:1px solid var(--vg-border); border-radius:8px; background:#fff;"></iframe>
-      </div>
-    `;
-    // srcdoc vai via propriedade JS, não como atributo HTML interpolado: o corpo do
-    // e-mail quase sempre tem aspas (atributos HTML), e escapeHtml não escapa aspas
-    // (só é seguro para texto solto), o que cortava o atributo srcdoc="..." no meio.
-    document.getElementById('gmail-msg-frame').srcdoc = msg.body || '(sem conteúdo)';
-  } catch (err) {
-    view.innerHTML = `<div class="empty-state">${escapeHtml(err.message || 'Erro ao carregar mensagem')}</div>`;
-  }
+  document.getElementById('mc-close').addEventListener('click', () => (document.getElementById('mail-compose').style.display = 'none'));
+  document.getElementById('mc-send').addEventListener('click', sendMailCompose);
 }
 
 function renderGmailInbox() {
-  return renderGenericGmailInbox({
-    statusId: 'gmail-inbox-status',
-    listId: 'gmail-inbox-list',
-    viewId: 'gmail-message-view',
-    fetchMessages: () => Api.gmailInboxMessages(state.gmailFolder.gmail),
-    fetchMessage: (id) => Api.gmailInboxMessage(id),
-    connectedStatusHtml: (email) =>
-      `${svgIcon('calendar')} Conectado: <strong>${escapeHtml(email)}</strong> <button class="icon-btn danger" id="btn-gmail-disconnect" title="Desconectar" style="margin-left:6px;">${svgIcon('trash')}</button>`,
-    bindDisconnect: () => {
-      document.getElementById('btn-gmail-disconnect').addEventListener('click', async () => {
-        if (!confirm('Desconectar a caixa de entrada do Gmail?')) return;
-        await Api.gmailInboxDisconnect();
-        renderGmailInbox();
-      });
-    },
-    connectButtonHtml: '<button class="btn-primary" id="btn-gmail-connect" style="width:100%; margin-top:10px;">Conectar Gmail</button>',
-    bindConnect: () => {
-      document.getElementById('btn-gmail-connect').addEventListener('click', () => {
-        window.open('/api/google/gmail-oauth-start', 'gmail-connect', 'width=520,height=650');
-      });
-    }
-  });
+  return loadMailList('gmail');
 }
 
 function renderMyInbox() {
   const attendant = state.users.find((u) => u.id === state.attendantId);
   document.getElementById('email-my-tab-name').textContent = attendant ? attendant.name : '-';
-  return renderGenericGmailInbox({
-    statusId: 'my-inbox-status',
-    listId: 'my-inbox-list',
-    viewId: 'my-message-view',
-    fetchMessages: () => Api.myInboxMessages(state.attendantId, state.gmailFolder.my),
-    fetchMessage: (id) => Api.myInboxMessage(state.attendantId, id),
-    connectedStatusHtml: (email) => `${svgIcon('calendar')} Conectado: <strong>${escapeHtml(email)}</strong>`,
-    connectButtonHtml:
-      '<p style="font-size:12px; color:var(--vg-text-muted);">Conecte sua conta Google em Configurações &gt; Usuários (o mesmo botão usado para o Google Calendar já dá acesso à sua caixa de entrada).</p>'
+  return loadMailList('my');
+}
+
+function mailConnectUrl(box) {
+  return box === 'gmail' ? '/api/google/gmail-oauth-start' : `/api/google/oauth-start?userId=${encodeURIComponent(state.attendantId || '')}`;
+}
+
+function renderMailConnectCard(box, message, reconnect) {
+  const who = box === 'gmail' ? 'a caixa velocitaglobal@gmail.com' : 'a sua conta Google';
+  document.getElementById(`mail-${box}-account`).innerHTML = '';
+  document.getElementById(`mail-${box}-more`).style.display = 'none';
+  document.getElementById(`mail-${box}-list`).innerHTML = `
+    <div class="mail-connect">
+      <div class="mail-connect-icon">${svgIcon('email')}</div>
+      <strong>${reconnect ? 'Conexão com o Google expirada' : 'Conta Google não conectada'}</strong>
+      <p>${escapeHtml(message || `Conecte ${who} para ver e enviar e-mails pelo CRM.`)}</p>
+      <button class="btn-primary" data-mail-connect>${reconnect ? 'Reconectar Google' : 'Conectar Google'}</button>
+      <small>Abre uma janela do Google. Autorize com ${box === 'gmail' ? 'velocitaglobal@gmail.com' : 'o seu e-mail'} e volte para cá.</small>
+    </div>`;
+  document.querySelector(`#mail-${box}-list [data-mail-connect]`).addEventListener('click', () => {
+    if (box === 'my' && !state.attendantId) {
+      showToast('Selecione seu nome de atendente primeiro');
+      return openAttendantPicker();
+    }
+    window.open(mailConnectUrl(box), 'google-connect', 'width=520,height=680');
   });
+}
+
+function mailShortDate(m) {
+  const d = m.internalDate ? new Date(m.internalDate) : new Date(m.date);
+  if (isNaN(d)) return '';
+  const today = new Date();
+  return d.toDateString() === today.toDateString()
+    ? d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    : d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '');
+}
+const mailName = (addr) => (addr || '').replace(/<[^>]+>/, '').replace(/"/g, '').trim() || addr || '';
+
+async function loadMailList(box, more) {
+  const st = state.mail[box];
+  const list = document.getElementById(`mail-${box}-list`);
+  if (box === 'my' && !state.attendantId) {
+    list.innerHTML = '<div class="empty-state">Escolha quem está atendendo (botão “Trocar” no topo) para ver a sua caixa.</div>';
+    return;
+  }
+  if (!more) list.innerHTML = '<div class="empty-state">Carregando...</div>';
+  const params = new URLSearchParams({ folder: st.folder });
+  if (st.q) params.set('q', st.q);
+  if (more && st.next) params.set('pageToken', st.next);
+  try {
+    const res = await api(`/api/mail/${box}/messages?${params}&${mailAttendantQuery()}`);
+    st.messages = more ? st.messages.concat(res.messages) : res.messages;
+    st.next = res.nextPageToken;
+    st.email = res.email;
+    document.getElementById(`mail-${box}-account`).innerHTML = `<span class="mail-dot"></span> ${escapeHtml(res.email || '')}${
+      box === 'gmail' ? ` <button class="btn-link" id="mail-gmail-disconnect">Desconectar</button>` : ''
+    }`;
+    const dc = document.getElementById('mail-gmail-disconnect');
+    if (dc)
+      dc.onclick = async () => {
+        if (!confirm('Desconectar a caixa velocitaglobal@gmail.com do CRM?')) return;
+        await Api.gmailInboxDisconnect();
+        loadMailList('gmail');
+      };
+    renderMailList(box);
+  } catch (err) {
+    renderMailConnectCard(box, err.message, err.code === 'GOOGLE_RECONNECT');
+  }
+}
+
+function renderMailList(box) {
+  const st = state.mail[box];
+  const list = document.getElementById(`mail-${box}-list`);
+  document.getElementById(`mail-${box}-more`).style.display = st.next ? '' : 'none';
+  if (!st.messages.length) {
+    list.innerHTML = `<div class="empty-state">${st.q ? 'Nada encontrado para essa busca.' : 'Nenhuma mensagem nesta pasta.'}</div>`;
+    return;
+  }
+  const sentLike = st.folder === 'SENT';
+  list.innerHTML = st.messages
+    .map(
+      (m) => `
+      <button class="mail-row ${m.unread ? 'unread' : ''} ${st.current === m.id ? 'active' : ''}" data-mail-id="${m.id}">
+        <div class="mail-row-top"><span class="mail-who">${escapeHtml(sentLike ? 'Para: ' + mailName(m.to) : mailName(m.from))}</span><span class="mail-date">${mailShortDate(m)}</span></div>
+        <div class="mail-subj">${escapeHtml(m.subject)}</div>
+        <div class="mail-snip">${escapeHtml(m.snippet)}</div>
+      </button>`
+    )
+    .join('');
+  list.querySelectorAll('[data-mail-id]').forEach((row) => row.addEventListener('click', () => openMailMessage(box, row.dataset.mailId)));
+}
+
+async function openMailMessage(box, id) {
+  const st = state.mail[box];
+  st.current = id;
+  document.querySelectorAll(`#mail-${box}-list .mail-row`).forEach((r) => r.classList.toggle('active', r.dataset.mailId === id));
+  const view = document.getElementById(`mail-${box}-view`);
+  view.innerHTML = '<div class="empty-state">Carregando...</div>';
+  try {
+    const msg = await api(`/api/mail/${box}/messages/${id}?${mailAttendantQuery()}`);
+    const item = st.messages.find((m) => m.id === id);
+    if (item) item.unread = false;
+    renderMailList(box);
+    const inTrash = st.folder === 'TRASH';
+    view.innerHTML = `
+      <div class="mail-actions">
+        <button class="btn-secondary btn-sm" data-act="reply">↩ Responder</button>
+        <button class="btn-secondary btn-sm" data-act="replyall">↩ Responder a todos</button>
+        <button class="btn-secondary btn-sm" data-act="forward">↪ Encaminhar</button>
+        <button class="btn-secondary btn-sm" data-act="unread">Marcar como não lida</button>
+        <button class="btn-secondary btn-sm danger" data-act="trash">${inTrash ? 'Restaurar' : 'Excluir'}</button>
+        <a class="btn-link" href="https://mail.google.com/mail/?authuser=${encodeURIComponent(st.email || '')}#all/${encodeURIComponent(msg.threadId || id)}" target="_blank" rel="noopener">Abrir no Gmail</a>
+      </div>
+      <div class="mail-head">
+        <h3>${escapeHtml(msg.subject)}</h3>
+        <div class="mail-meta"><b>De:</b> ${escapeHtml(msg.from)}<br/><b>Para:</b> ${escapeHtml(msg.to)}${msg.cc ? `<br/><b>Cc:</b> ${escapeHtml(msg.cc)}` : ''}<br/>${escapeHtml(msg.date)}</div>
+      </div>
+      <iframe class="mail-frame" sandbox="allow-popups allow-popups-to-escape-sandbox"></iframe>`;
+    // srcdoc via propriedade (não atributo): o HTML do e-mail tem aspas que quebrariam o atributo
+    const frame = view.querySelector('.mail-frame');
+    frame.srcdoc = `<base target="_blank"><style>body{font-family:Arial,sans-serif;font-size:14px;color:#1f2937;margin:12px;word-wrap:break-word}img{max-width:100%;height:auto}</style>${msg.body || '(sem conteúdo)'}`;
+    view.querySelectorAll('[data-act]').forEach((b) =>
+      b.addEventListener('click', async () => {
+        const act = b.dataset.act;
+        if (act === 'reply' || act === 'replyall' || act === 'forward') return openMailCompose(box, msg, act);
+        try {
+          if (act === 'unread') {
+            await api(`/api/mail/${box}/messages/${id}/unread`, { method: 'POST', body: JSON.stringify({ attendantId: state.attendantId }) });
+            if (item) item.unread = true;
+            renderMailList(box);
+            showToast('Marcada como não lida');
+          } else if (act === 'trash') {
+            await api(`/api/mail/${box}/messages/${id}/trash`, { method: 'POST', body: JSON.stringify({ attendantId: state.attendantId, restore: inTrash }) });
+            st.messages = st.messages.filter((m) => m.id !== id);
+            st.current = null;
+            renderMailList(box);
+            view.innerHTML = `<div class="empty-state" style="padding:60px 10px;">${inTrash ? 'Mensagem restaurada para a caixa de entrada.' : 'Mensagem movida para a lixeira.'}</div>`;
+          }
+        } catch (err) {
+          if (err.code === 'GOOGLE_RECONNECT') renderMailConnectCard(box, err.message, true);
+          else showToast(err.message || 'Erro ao executar a ação');
+        }
+      })
+    );
+  } catch (err) {
+    if (err.code === 'GOOGLE_RECONNECT') renderMailConnectCard(box, err.message, true);
+    view.innerHTML = `<div class="empty-state">${escapeHtml(err.message || 'Erro ao carregar mensagem')}</div>`;
+  }
+}
+
+function openMailCompose(box, msg, mode) {
+  state.mailCompose = { box, threadId: null, inReplyTo: null, references: null };
+  const st = state.mail[box];
+  const me = (st.email || '').toLowerCase();
+  const strip = (s) => (s || '').toLowerCase();
+  document.getElementById('mc-from').textContent = `De: ${st.email || (box === 'gmail' ? 'velocitaglobal@gmail.com' : 'sua conta Google')}`;
+  document.getElementById('mc-to-suggestions').innerHTML = state.contacts
+    .filter((c) => c.email)
+    .map((c) => `<option value="${escapeHtml(c.email)}">${escapeHtml(c.name)}</option>`)
+    .join('');
+  let to = '';
+  let cc = '';
+  let subject = '';
+  let text = '';
+  if (msg) {
+    const quoted = `\n\n\nEm ${msg.date}, ${msg.from} escreveu:\n`;
+    const plain = (msg.body || '').replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>/gi, '\n').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim();
+    if (mode === 'forward') {
+      subject = /^(fwd?|enc):/i.test(msg.subject) ? msg.subject : `Enc: ${msg.subject}`;
+      text = `\n\n---------- Mensagem encaminhada ----------\nDe: ${msg.from}\nData: ${msg.date}\nAssunto: ${msg.subject}\nPara: ${msg.to}\n\n${plain}`;
+    } else {
+      const sentByMe = strip(msg.from).includes(me);
+      to = sentByMe ? msg.to : msg.from;
+      if (mode === 'replyall') {
+        cc = [msg.to, msg.cc]
+          .join(',')
+          .split(',')
+          .map((x) => x.trim())
+          .filter((x) => x && !strip(x).includes(me) && !strip(to).includes(strip(x)))
+          .join(', ');
+      }
+      subject = /^re:/i.test(msg.subject) ? msg.subject : `Re: ${msg.subject}`;
+      text = quoted + plain.split('\n').map((l) => '> ' + l).join('\n');
+      Object.assign(state.mailCompose, { threadId: msg.threadId, inReplyTo: msg.messageId, references: [msg.references, msg.messageId].filter(Boolean).join(' ') });
+    }
+  }
+  document.getElementById('mc-title').textContent = mode === 'forward' ? 'Encaminhar' : mode ? 'Responder' : 'Nova mensagem';
+  document.getElementById('mc-to').value = to;
+  document.getElementById('mc-cc').value = cc;
+  document.getElementById('mc-subject').value = subject;
+  const ta = document.getElementById('mc-text');
+  ta.value = text;
+  document.getElementById('mc-status').textContent = '';
+  const panel = document.getElementById('mail-compose');
+  panel.style.display = 'flex';
+  panel.style.flexDirection = 'column';
+  (to ? ta : document.getElementById('mc-to')).focus();
+  if (to) ta.setSelectionRange(0, 0);
+}
+
+async function sendMailCompose() {
+  const c = state.mailCompose;
+  if (!c) return;
+  const to = document.getElementById('mc-to').value.trim();
+  if (!to.includes('@')) return showToast('Informe o destinatário');
+  const btn = document.getElementById('mc-send');
+  btn.disabled = true;
+  document.getElementById('mc-status').textContent = 'Enviando...';
+  try {
+    await api(`/api/mail/${c.box}/send`, {
+      method: 'POST',
+      body: JSON.stringify({
+        attendantId: state.attendantId,
+        to,
+        cc: document.getElementById('mc-cc').value.trim(),
+        subject: document.getElementById('mc-subject').value.trim(),
+        text: document.getElementById('mc-text').value,
+        threadId: c.threadId,
+        inReplyTo: c.inReplyTo,
+        references: c.references
+      })
+    });
+    document.getElementById('mail-compose').style.display = 'none';
+    showToast('E-mail enviado');
+    if (state.mail[c.box].folder === 'SENT') loadMailList(c.box);
+  } catch (err) {
+    document.getElementById('mc-status').textContent = '';
+    if (err.code === 'GOOGLE_RECONNECT') {
+      document.getElementById('mail-compose').style.display = 'none';
+      renderMailConnectCard(c.box, err.message, true);
+    } else showToast(err.message || 'Erro ao enviar');
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 async function renderEmailInbox() {
@@ -4503,7 +4802,8 @@ function bindGoogleCalendarPopup() {
     if (ev.data.googleCalendarConnected) {
       state.users = await Api.users();
       renderSettings();
-      showToast(`Google Calendar conectado (${ev.data.email})`);
+      showToast(`Conta Google conectada (${ev.data.email})`);
+      if (document.getElementById('view-email').classList.contains('active')) renderMyInbox();
     } else if (ev.data.gmailInboxConnected) {
       showToast(`Caixa de entrada do Gmail conectada (${ev.data.email})`);
       if (document.getElementById('view-email').classList.contains('active')) renderGmailInbox();
@@ -4563,6 +4863,7 @@ async function saveCalendarEvent() {
     text: title,
     date: new Date(dateVal).toISOString(),
     attendantId: document.getElementById('cal-event-attendant').value || null,
+    createdBy: state.attendantId || null,
     done: false,
     dealId: linkType === 'deal' ? linkId : null,
     leadId: linkType === 'lead' ? linkId : null

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Roteiro do Dia — Velocita Global</title>
+<title>Gerador de Roteiros (IA) — Velocita Global</title>
 <link rel="icon" href="assets/logo-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -116,12 +116,15 @@
   .msg a.contact:hover{opacity:.85}
   .hidden{display:none}
 </style>
+<link rel="stylesheet" href="vg-theme.css">
+<script>try{document.documentElement.setAttribute('data-theme',localStorage.getItem('vg_theme')==='dark'?'dark':'light')}catch(e){}
+function vgToggleTheme(){var d=document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',d);try{localStorage.setItem('vg_theme',d)}catch(e){}}</script>
 </head>
 <body>
 <div class="card">
   <a class="back-link" href="/app">&larr; Voltar ao CRM</a>
   <div class="brand"><div class="brand-plate"><img src="assets/logo-full.png" alt="Velocita Global"></div></div>
-  <h1>Roteiro do Dia</h1>
+  <h1>Gerador de Roteiros (IA)</h1>
   <p class="sub">Conteúdo viral pronto para o seu link de afiliado.</p>
 
   <label>Entrar como</label>
