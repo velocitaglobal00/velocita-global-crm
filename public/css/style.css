@@ -375,6 +375,42 @@ body {
   padding: 16px 0;
 }
 
+/* topo do menu lateral com o botão de ocultar (principalmente no celular / PWA) */
+.sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px 10px 12px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--vg-border);
+  white-space: nowrap;
+}
+.sidebar-head span {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--vg-text-muted);
+}
+.sidebar-close {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1.5px solid var(--vg-border);
+  background: var(--vg-surface);
+  color: var(--vg-heading);
+  border-radius: 999px;
+  padding: 6px 12px 6px 8px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.sidebar-close:hover {
+  border-color: var(--vg-orange);
+  color: var(--vg-orange-dark);
+}
+
 .sidebar-link {
   display: flex;
   align-items: center;
@@ -2617,6 +2653,8 @@ table.data-table tr.clickable:hover {
     width: 240px;
     padding: 16px 10px;
     box-shadow: 6px 0 30px var(--vg-shadow);
+    padding-top: calc(16px + env(safe-area-inset-top, 0px));
+    overflow-y: auto;
     transform: translateX(0);
     transition: transform 0.2s ease;
   }

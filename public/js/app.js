@@ -504,6 +504,7 @@ function bindSidebarToggle() {
   });
 
   document.getElementById('sidebar-backdrop').addEventListener('click', () => setSidebarOpen(false));
+  document.getElementById('sidebar-close').addEventListener('click', () => setSidebarOpen(false));
 }
 
 // Tema claro/escuro — chave compartilhada com o Gerador de Roteiros (mesmo site).
