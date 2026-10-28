@@ -5502,37 +5502,31 @@ var AJUDA_SCENES = [
   }
 ];
 
-var ajudaState = { idx: 0, isPlaying: false, isMuted: false, voice: null };
-var ajudaSynth = typeof window !== 'undefined' && 'speechSynthesis' in window ? window.speechSynthesis : null;
+var ajudaState = { idx: 0, isPlaying: false, isMuted: false };
 
-function ajudaPickVoice() {
-  if (!ajudaSynth) return;
-  var voices = ajudaSynth.getVoices() || [];
-  if (!voices.length) return;
-  // Prioriza vozes em português do Brasil que rodam "na nuvem" (localService:
-  // false) — no Chrome, essas costumam ser as vozes do Google, bem mais
-  // naturais que a voz local do sistema operacional (a robótica de sempre).
-  var ptBR = voices.filter((v) => /pt-BR/i.test(v.lang));
-  var scored = (ptBR.length ? ptBR : voices.filter((v) => /^pt/i.test(v.lang))).slice();
-  scored.sort((a, b) => {
-    const score = (v) => (v.localService ? 0 : 2) + (/google/i.test(v.name) ? 1 : 0);
-    return score(b) - score(a);
+// Narração gravada com voz neural (mesma do vídeo de integração), um arquivo por
+// capítulo em /audio/ajuda/NN.mp3 — soa igual em qualquer celular ou computador,
+// sem depender da voz robótica do sistema.
+var ajudaAudio = typeof Audio !== 'undefined' ? new Audio() : null;
+if (ajudaAudio) {
+  ajudaAudio.preload = 'auto';
+  ajudaAudio.addEventListener('ended', () => {
+    if (ajudaState.isPlaying) window._ajudaTimer = setTimeout(ajudaAdvance, 700);
   });
-  ajudaState.voice = scored[0] || voices.find((v) => /^pt/i.test(v.lang)) || voices[0];
-  const statusEl = document.getElementById('ajuda-voice-status');
-  if (statusEl && ajudaState.voice) statusEl.textContent = 'Voz: ' + ajudaState.voice.name;
+  ajudaAudio.addEventListener('timeupdate', ajudaHighlightCaption);
+  ajudaAudio.addEventListener('error', () => {
+    if (ajudaState.isPlaying) showToast('Não foi possível tocar a narração. Verifique a conexão.');
+  });
 }
+const AJUDA_ICONS = {
+  prev: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5"></line></svg>',
+  next: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19"></line></svg>',
+  play: '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>',
+  pause: '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><rect x="5" y="4" width="5" height="16" rx="1"></rect><rect x="14" y="4" width="5" height="16" rx="1"></rect></svg>',
+  sound: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.5 8.5a5 5 0 0 1 0 7"></path><path d="M18.5 5.5a9 9 0 0 1 0 13"></path></svg>',
+  muted: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="22" y1="9" x2="16" y2="15"></line><line x1="16" y1="9" x2="22" y2="15"></line></svg>'
+};
 
-if (ajudaSynth) {
-  ajudaPickVoice();
-  ajudaSynth.addEventListener && ajudaSynth.addEventListener('voiceschanged', ajudaPickVoice);
-  ajudaSynth.onvoiceschanged = ajudaPickVoice;
-}
-
-// Quebra a narração em frases e fala uma de cada vez, com uma pausa curta entre
-// elas — soa bem mais natural do que jogar o parágrafo inteiro como um único
-// utterance (que tende a sair apressado e monótono nos motores de voz do
-// navegador), e evita o corte que alguns navegadores dão em falas muito longas.
 function ajudaSplitSentences(text) {
   return text
     .split(/(?<=[.!?])\s+/)
@@ -5540,43 +5534,55 @@ function ajudaSplitSentences(text) {
     .filter(Boolean);
 }
 
+// Legenda acompanha a fala: destaca a frase que está sendo dita (estimada pelo
+// tamanho de cada frase em relação ao áudio inteiro).
+function ajudaRenderCaption(activeIdx) {
+  const sentences = ajudaSplitSentences(AJUDA_SCENES[ajudaState.idx].narration);
+  document.getElementById('ajuda-caption-text').innerHTML = sentences
+    .map((t, i) => `<span class="${i === activeIdx ? 'on' : i < activeIdx ? 'past' : ''}">${escapeHtml(t)}</span>`)
+    .join(' ');
+}
+function ajudaHighlightCaption() {
+  if (!ajudaAudio || !ajudaAudio.duration) return;
+  const sentences = ajudaSplitSentences(AJUDA_SCENES[ajudaState.idx].narration);
+  const total = sentences.reduce((n, t) => n + t.length, 0);
+  const pos = (ajudaAudio.currentTime / ajudaAudio.duration) * total;
+  let acc = 0;
+  let idx = sentences.length - 1;
+  for (let i = 0; i < sentences.length; i++) {
+    acc += sentences[i].length;
+    if (pos <= acc) {
+      idx = i;
+      break;
+    }
+  }
+  if (idx !== ajudaState.captionIdx) {
+    ajudaState.captionIdx = idx;
+    ajudaRenderCaption(idx);
+  }
+  const chapterPct = ajudaAudio.currentTime / ajudaAudio.duration;
+  const pct = ((ajudaState.idx + chapterPct) / AJUDA_SCENES.length) * 100;
+  document.getElementById('ajuda-scrubber-fill').style.width = pct + '%';
+}
+
 function ajudaSpeakScene(sceneIdx) {
-  if (!ajudaSynth || ajudaState.isMuted) {
-    if (ajudaState.isPlaying) {
-      window._ajudaTimer = setTimeout(ajudaAdvance, 6000);
-    }
-    return;
-  }
-  ajudaSynth.cancel();
-  const sentences = ajudaSplitSentences(AJUDA_SCENES[sceneIdx].narration);
-  const rate = parseFloat(document.getElementById('ajuda-rate-select').value || '1');
-  let i = 0;
-  function speakNext() {
-    if (i >= sentences.length) {
-      if (ajudaState.isPlaying && sceneIdx === ajudaState.idx) ajudaAdvance();
-      return;
-    }
-    const utter = new SpeechSynthesisUtterance(sentences[i]);
-    if (ajudaState.voice) utter.voice = ajudaState.voice;
-    utter.lang = ajudaState.voice ? ajudaState.voice.lang : 'pt-BR';
-    utter.rate = rate * 0.95;
-    utter.pitch = 1;
-    i++;
-    utter.onend = () => {
-      if (sceneIdx !== ajudaState.idx) return; // usuário já pulou de capítulo
-      window._ajudaTimer = setTimeout(speakNext, 160);
-    };
-    utter.onerror = () => {
-      if (sceneIdx !== ajudaState.idx) return;
-      window._ajudaTimer = setTimeout(speakNext, 300);
-    };
-    ajudaSynth.speak(utter);
-  }
-  speakNext();
+  ajudaStopSpeaking();
+  if (!ajudaAudio) return;
+  ajudaAudio.src = `/audio/ajuda/${String(sceneIdx + 1).padStart(2, '0')}.mp3`;
+  ajudaAudio.playbackRate = parseFloat(document.getElementById('ajuda-rate-select').value || '1');
+  ajudaAudio.muted = ajudaState.isMuted;
+  ajudaState.captionIdx = -1;
+  const p = ajudaAudio.play();
+  if (p && p.catch)
+    p.catch(() => {
+      // o navegador bloqueou o som (precisa de um toque do usuário): volta para "pausado"
+      ajudaState.isPlaying = false;
+      ajudaUpdatePlayButton();
+    });
 }
 
 function ajudaStopSpeaking() {
-  if (ajudaSynth) ajudaSynth.cancel();
+  if (ajudaAudio) ajudaAudio.pause();
   if (window._ajudaTimer) clearTimeout(window._ajudaTimer);
 }
 
@@ -5584,6 +5590,7 @@ function ajudaAdvance() {
   if (ajudaState.idx < AJUDA_SCENES.length - 1) {
     ajudaState.idx++;
     ajudaRenderScene();
+    if (ajudaState.isPlaying) ajudaSpeakScene(ajudaState.idx);
   } else {
     ajudaState.isPlaying = false;
     ajudaUpdatePlayButton();
@@ -5595,17 +5602,41 @@ function ajudaGoTo(i) {
   ajudaStopSpeaking();
   ajudaRenderScene();
   if (ajudaState.isPlaying) ajudaSpeakScene(ajudaState.idx);
+  document.querySelector('#view-ajuda .ajuda-player').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function ajudaUpdatePlayButton() {
-  document.getElementById('ajuda-btn-play').innerHTML = ajudaState.isPlaying ? '⏸ Pausar' : '▶ Reproduzir';
+  document.getElementById('ajuda-btn-play').innerHTML = ajudaState.isPlaying ? `${AJUDA_ICONS.pause} Pausar` : `${AJUDA_ICONS.play} Reproduzir`;
 }
 
 function ajudaTogglePlay() {
   ajudaState.isPlaying = !ajudaState.isPlaying;
   ajudaUpdatePlayButton();
-  if (ajudaState.isPlaying) ajudaSpeakScene(ajudaState.idx);
-  else ajudaStopSpeaking();
+  if (ajudaState.isPlaying) {
+    // retoma de onde parou se for o mesmo capítulo
+    if (ajudaAudio && ajudaAudio.src && ajudaAudio.src.endsWith(`/${String(ajudaState.idx + 1).padStart(2, '0')}.mp3`) && ajudaAudio.currentTime > 0 && !ajudaAudio.ended) {
+      ajudaAudio.play().catch(() => {});
+    } else ajudaSpeakScene(ajudaState.idx);
+  } else ajudaStopSpeaking();
+}
+
+// Os quadros de exemplo foram desenhados para tela de computador: no celular eles
+// são reduzidos proporcionalmente para caber inteiros, sem barra de rolagem lateral.
+function ajudaFitVisual(visual) {
+  const frame = visual.querySelector('.mock-frame');
+  visual.style.height = '';
+  if (!frame) return;
+  frame.style.transform = '';
+  frame.style.width = '';
+  const base = 720;
+  const cs = getComputedStyle(visual);
+  const have = visual.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  if (have >= base) return;
+  const scale = have / base;
+  frame.style.width = base + 'px';
+  frame.style.transformOrigin = 'top left';
+  frame.style.transform = `scale(${scale})`;
+  visual.style.height = Math.ceil(frame.offsetHeight * scale + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom)) + "px";
 }
 
 function ajudaRenderScene() {
@@ -5614,8 +5645,9 @@ function ajudaRenderScene() {
   document.getElementById('ajuda-scene-title').textContent = s.title;
   const visual = document.getElementById('ajuda-scene-visual');
   visual.innerHTML = s.visual;
-  document.getElementById('ajuda-caption-text').textContent = s.narration;
-  const pct = (ajudaState.idx / (AJUDA_SCENES.length - 1)) * 100;
+  ajudaFitVisual(visual);
+  ajudaRenderCaption(-1);
+  const pct = (ajudaState.idx / AJUDA_SCENES.length) * 100;
   document.getElementById('ajuda-scrubber-fill').style.width = pct + '%';
   document.querySelectorAll('.ajuda-chapter-card').forEach((btn, i) => {
     btn.classList.toggle('active', i === ajudaState.idx);
@@ -5697,13 +5729,24 @@ function bindAjuda() {
   document.getElementById('ajuda-btn-play').addEventListener('click', ajudaTogglePlay);
   document.getElementById('ajuda-btn-prev').addEventListener('click', () => ajudaGoTo(ajudaState.idx - 1));
   document.getElementById('ajuda-btn-next').addEventListener('click', () => ajudaGoTo(ajudaState.idx + 1));
-  document.getElementById('ajuda-btn-mute').addEventListener('click', (e) => {
+  const muteBtn = document.getElementById('ajuda-btn-mute');
+  muteBtn.addEventListener('click', () => {
     ajudaState.isMuted = !ajudaState.isMuted;
-    e.target.textContent = ajudaState.isMuted ? '🔇' : '🔊';
-    if (ajudaState.isMuted) ajudaStopSpeaking();
+    if (ajudaAudio) ajudaAudio.muted = ajudaState.isMuted;
+    muteBtn.innerHTML = ajudaState.isMuted ? AJUDA_ICONS.muted : AJUDA_ICONS.sound;
+    muteBtn.title = ajudaState.isMuted ? 'Ativar som' : 'Silenciar';
   });
-  document.getElementById('ajuda-rate-select').addEventListener('change', () => {
-    if (ajudaState.isPlaying) ajudaSpeakScene(ajudaState.idx);
+  document.getElementById('ajuda-rate-select').addEventListener('change', (e) => {
+    if (ajudaAudio) ajudaAudio.playbackRate = parseFloat(e.target.value || '1');
+  });
+  document.getElementById('ajuda-btn-prev').innerHTML = AJUDA_ICONS.prev;
+  document.getElementById('ajuda-btn-next').innerHTML = AJUDA_ICONS.next;
+  muteBtn.innerHTML = AJUDA_ICONS.sound;
+  ajudaUpdatePlayButton();
+  document.getElementById('ajuda-voice-status').textContent = 'Narração com voz neural';
+  window.addEventListener('resize', () => {
+    const v = document.getElementById('ajuda-scene-visual');
+    if (v && document.getElementById('view-ajuda').classList.contains('active')) ajudaFitVisual(v);
   });
 }
 

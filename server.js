@@ -96,8 +96,16 @@ app.get('/', (req, res) => {
   return res.redirect('/login.html');
 });
 
+// Cada deploy muda a versão dos arquivos de estilo/script na página, então o navegador
+// (e o app instalado no celular) sempre pega a versão nova em vez de uma cópia antiga.
+const ASSET_VERSION = (process.env.RENDER_GIT_COMMIT || String(Date.now())).slice(0, 12);
 app.get('/app', requirePageAuth, (req, res) => {
-  res.sendFile(path.join(__dirname, 'views', 'app.html'));
+  const html = require('fs')
+    .readFileSync(path.join(__dirname, 'views', 'app.html'), 'utf-8')
+    .replace('/css/style.css"', `/css/style.css?v=${ASSET_VERSION}"`)
+    .replace('/js/app.js"', `/js/app.js?v=${ASSET_VERSION}"`);
+  res.set('Cache-Control', 'no-cache');
+  res.type('html').send(html);
 });
 
 // ---------- API helpers ----------
