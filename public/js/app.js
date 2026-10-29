@@ -201,6 +201,9 @@ const Api = {
   unreadCount: () => api('/api/notifications/unread-count'),
   markNotifRead: (id) => api(`/api/notifications/${id}/read`, { method: 'POST' }),
   markAllNotifRead: () => api('/api/notifications/read-all', { method: 'POST' }),
+  apagarNotif: (id) => api(`/api/notifications/${id}`, { method: 'DELETE' }),
+  limparNotifs: (escopo, dias) =>
+    api('/api/notifications/clear', { method: 'POST', body: JSON.stringify({ escopo, dias }) }),
   allActivities: () => api('/api/activities'),
   dailyNotes: (from, to) => api(`/api/daily-notes?from=${from}&to=${to}`),
   saveDailyNote: (payload) => api('/api/daily-notes', { method: 'PUT', body: JSON.stringify(payload) }),
@@ -3661,6 +3664,39 @@ function bindNotifications() {
     updateNotifBadges();
   });
 
+  // Limpeza das notificacoes: lidas, antigas (7 dias) ou todas.
+  const limparNotificacoes = async (escopo, rotulo) => {
+    try {
+      const r = await Api.limparNotifs(escopo, 7);
+      state.notifications = await Api.notifications();
+      updateNotifBadges();
+      renderMensagens();
+      showToast(r.removidas ? `${r.removidas} ${rotulo}` : 'Não havia nada para limpar');
+    } catch (err) {
+      showToast('Não consegui limpar: ' + err.message);
+    }
+  };
+  document
+    .getElementById('btn-limpar-lidas')
+    .addEventListener('click', () => limparNotificacoes('lidas', 'notificações lidas removidas'));
+  document
+    .getElementById('btn-limpar-antigas')
+    .addEventListener('click', () => limparNotificacoes('antigas', 'notificações antigas removidas'));
+  document.getElementById('btn-limpar-todas').addEventListener('click', () => {
+    if (!confirm('Apagar TODAS as notificações, lidas e não lidas? Não dá para desfazer.')) return;
+    limparNotificacoes('todas', 'notificações removidas');
+  });
+
+  document.querySelectorAll('[data-notiffiltro]').forEach((bt) => {
+    bt.addEventListener('click', () => {
+      notifFiltro = bt.dataset.notiffiltro;
+      document
+        .querySelectorAll('[data-notiffiltro]')
+        .forEach((o) => o.classList.toggle('active', o === bt));
+      renderMensagens();
+    });
+  });
+
   if ('Notification' in window && Notification.permission === 'default') {
     Notification.requestPermission();
   }
@@ -3733,13 +3769,23 @@ function openNotificationTarget(leadId, channel) {
   }, 80);
 }
 
+// Filtro da aba Notificacoes: 'todas' ou 'naolidas'.
+let notifFiltro = 'todas';
+
 function renderMensagens() {
   const container = document.getElementById('mensagens-list');
-  if (state.notifications.length === 0) {
-    container.innerHTML = '<div class="empty-state">Nenhuma mensagem recebida ainda.</div>';
+  const lista =
+    notifFiltro === 'naolidas' ? state.notifications.filter((n) => !n.read) : state.notifications;
+
+  if (lista.length === 0) {
+    container.innerHTML = `<div class="empty-state">${
+      notifFiltro === 'naolidas'
+        ? 'Nenhuma notificação não lida.'
+        : 'Nenhuma notificação por aqui.'
+    }</div>`;
     return;
   }
-  container.innerHTML = state.notifications
+  container.innerHTML = lista
     .map(
       (n) => `
     <div class="message-row ${n.read ? '' : 'unread'}" data-msg-id="${n.id}" data-msg-lead="${n.leadId}" data-msg-channel="${n.channel}">
@@ -3747,11 +3793,25 @@ function renderMensagens() {
         <div class="ni-lead">${escapeHtml(n.leadName)} · ${CHANNEL_LABEL[n.channel] || n.channel}</div>
         <div class="ni-preview">${escapeHtml(n.preview)}</div>
       </div>
-      <div class="ni-time">${fmtDateTime(n.timestamp)}</div>
+      <div class="ni-dir">
+        <div class="ni-time">${fmtDateTime(n.timestamp)}</div>
+        <button type="button" class="ni-x" data-msg-apagar="${n.id}" title="Descartar" aria-label="Descartar notificação">&#10005;</button>
+      </div>
     </div>
   `
     )
     .join('');
+
+  container.querySelectorAll('[data-msg-apagar]').forEach((bt) => {
+    bt.addEventListener('click', async (ev) => {
+      ev.stopPropagation();
+      const id = bt.dataset.msgApagar;
+      await Api.apagarNotif(id);
+      state.notifications = state.notifications.filter((n) => n.id !== id);
+      updateNotifBadges();
+      renderMensagens();
+    });
+  });
 
   container.querySelectorAll('[data-msg-id]').forEach((row) => {
     row.addEventListener('click', async () => {

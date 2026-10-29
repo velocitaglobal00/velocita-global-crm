@@ -3542,3 +3542,18 @@ table.data-table tr.clickable:hover {
   .mg-det-linha { grid-template-columns: 1fr auto; }
   .mg-det-porque { grid-column: 1 / -1; order: 3; }
 }
+
+
+/* --- aba Notificações: ações de limpeza, filtro e descarte individual ----- */
+.notif-acoes { display: flex; flex-wrap: wrap; gap: 8px; }
+.notif-filtros { display: flex; gap: 8px; margin: 12px 0; }
+.ni-dir { display: flex; align-items: center; gap: 10px; flex: none; }
+.ni-x {
+  flex: none; width: 30px; height: 30px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--vg-border); background: var(--vg-surface);
+  color: var(--vg-text-muted); font-size: 13px; line-height: 1;
+}
+.ni-x:hover { border-color: var(--vg-red); color: var(--vg-red); }
+@media (max-width: 720px) {
+  .notif-acoes button { flex: 1 1 calc(50% - 4px); }
+}

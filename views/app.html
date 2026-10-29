@@ -409,7 +409,16 @@
           <h2 style="color:var(--vg-navy); margin-top:0;">Notificações</h2>
           <div class="pipeline-header">
             <p class="empty-state" style="text-align:left; padding:0;">Mensagens recebidas em todos os canais.</p>
-            <button class="btn-secondary" id="btn-mark-all-messages">Marcar todas como lidas</button>
+            <div class="notif-acoes">
+              <button class="btn-secondary" id="btn-mark-all-messages">Marcar todas como lidas</button>
+              <button class="btn-secondary" id="btn-limpar-lidas">Limpar lidas</button>
+              <button class="btn-secondary" id="btn-limpar-antigas">Limpar com mais de 7 dias</button>
+              <button class="btn-danger" id="btn-limpar-todas">Limpar todas</button>
+            </div>
+          </div>
+          <div class="notif-filtros" id="notif-filtros">
+            <button class="settings-tab active" data-notiffiltro="todas">Todas</button>
+            <button class="settings-tab" data-notiffiltro="naolidas">Não lidas</button>
           </div>
           <div id="mensagens-list"></div>
         </section>

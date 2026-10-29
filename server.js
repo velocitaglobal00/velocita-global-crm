@@ -1092,6 +1092,33 @@ app.post('/api/notifications/read-all', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
+// Descarta uma notificacao especifica.
+app.delete('/api/notifications/:id', requireAuth, (req, res) => {
+  const data = db.read();
+  data.notifications = (data.notifications || []).filter((n) => n.id !== req.params.id);
+  db.write(data);
+  res.json({ ok: true });
+});
+
+// Limpeza em lote. escopo: 'lidas' (padrao), 'antigas' (acima de `dias`) ou 'todas'.
+app.post('/api/notifications/clear', requireAuth, (req, res) => {
+  const escopo = (req.body || {}).escopo || 'lidas';
+  const dias = Number((req.body || {}).dias) || 7;
+  const limite = Date.now() - dias * 24 * 60 * 60 * 1000;
+  const data = db.read();
+  const antes = (data.notifications || []).length;
+  data.notifications = (data.notifications || []).filter((n) => {
+    if (escopo === 'todas') return false;
+    if (escopo === 'antigas') {
+      const quando = new Date(n.timestamp).getTime();
+      return !(Number.isFinite(quando) && quando < limite);
+    }
+    return !n.read; // 'lidas'
+  });
+  db.write(data);
+  res.json({ ok: true, removidas: antes - data.notifications.length });
+});
+
 // ---------- Chat interno da equipe (somente entre admins/atendentes, não visível ao lead) ----------
 // Mensagens "gerais" (sem recipientId) vão para todo mundo; mensagens privadas só
 // aparecem para o remetente e o destinatário escolhido.
