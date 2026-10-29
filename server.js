@@ -3,6 +3,8 @@ const session = require('express-session');
 const crypto = require('crypto');
 const path = require('path');
 const nodemailer = require('nodemailer');
+const webpush = require('web-push');
+const jwt = require('jsonwebtoken');
 const db = require('./db');
 
 const APP_PASSWORD = 'Velocita1';
@@ -26,13 +28,43 @@ app.use(
 );
 
 // ---------- Auth ----------
+// A sessão fica em memória e some quando a Render reinicia o servidor. Para o app no
+// celular (PWA) não pedir a senha toda hora, o login também grava um cookie assinado
+// de 60 dias; se a sessão sumir, ele a recria sozinho.
+const REMEMBER_COOKIE = 'vg_remember';
+function authSecret() {
+  if (process.env.SESSION_SECRET) return process.env.SESSION_SECRET;
+  const data = db.read();
+  if (!data.settings.authSecret) {
+    data.settings.authSecret = crypto.randomBytes(32).toString('hex');
+    db.write(data);
+  }
+  return data.settings.authSecret;
+}
+function readCookie(req, name) {
+  const m = (req.headers.cookie || '').split(/;\s*/).find((c) => c.startsWith(name + '='));
+  return m ? decodeURIComponent(m.slice(name.length + 1)) : null;
+}
+function restoreFromCookie(req) {
+  if (req.session && req.session.authenticated) return true;
+  const token = readCookie(req, REMEMBER_COOKIE);
+  if (!token) return false;
+  try {
+    jwt.verify(token, authSecret());
+    req.session.authenticated = true;
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
 function requireAuth(req, res, next) {
-  if (req.session && req.session.authenticated) return next();
+  if (restoreFromCookie(req)) return next();
   return res.status(401).json({ error: 'Não autenticado' });
 }
 
 function requirePageAuth(req, res, next) {
-  if (req.session && req.session.authenticated) return next();
+  if (restoreFromCookie(req)) return next();
   return res.redirect('/login.html');
 }
 
@@ -40,29 +72,40 @@ app.post('/api/login', (req, res) => {
   const { password } = req.body || {};
   if (password === APP_PASSWORD) {
     req.session.authenticated = true;
+    const token = jwt.sign({ ok: 1 }, authSecret(), { expiresIn: '60d' });
+    res.cookie(REMEMBER_COOKIE, token, { httpOnly: true, sameSite: 'lax', secure: req.secure, maxAge: 60 * 24 * 60 * 60 * 1000 });
     return res.json({ ok: true });
   }
   return res.status(401).json({ error: 'Senha incorreta' });
 });
 
 app.post('/api/logout', (req, res) => {
+  res.clearCookie(REMEMBER_COOKIE);
   req.session.destroy(() => res.json({ ok: true }));
 });
 
 app.get('/api/session', (req, res) => {
-  res.json({ authenticated: !!(req.session && req.session.authenticated) });
+  res.json({ authenticated: restoreFromCookie(req) });
 });
 
 // ---------- Static assets (public, non-sensitive) ----------
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/', (req, res) => {
-  if (req.session && req.session.authenticated) return res.redirect('/app');
+  if (restoreFromCookie(req)) return res.redirect('/app');
   return res.redirect('/login.html');
 });
 
+// Cada deploy muda a versão dos arquivos de estilo/script na página, então o navegador
+// (e o app instalado no celular) sempre pega a versão nova em vez de uma cópia antiga.
+const ASSET_VERSION = (process.env.RENDER_GIT_COMMIT || String(Date.now())).slice(0, 12);
 app.get('/app', requirePageAuth, (req, res) => {
-  res.sendFile(path.join(__dirname, 'views', 'app.html'));
+  const html = require('fs')
+    .readFileSync(path.join(__dirname, 'views', 'app.html'), 'utf-8')
+    .replace('/css/style.css"', `/css/style.css?v=${ASSET_VERSION}"`)
+    .replace('/js/app.js"', `/js/app.js?v=${ASSET_VERSION}"`);
+  res.set('Cache-Control', 'no-cache');
+  res.type('html').send(html);
 });
 
 // ---------- API helpers ----------
@@ -84,7 +127,106 @@ function logHistory(data, entityType, entityId, attendantId, action, summary) {
     summary,
     timestamp: new Date().toISOString()
   });
+  const what = { lead: 'Lead', org: 'Empresa', deal: 'Negócio' }[entityType] || 'CRM';
+  pushToTeam(data, {
+    except: attendantId,
+    title: `${attendant ? attendant.name : 'Alguém'} · ${what}`,
+    body: summary,
+    url: entityType === 'org' ? '/app#orgs' : entityType === 'deal' ? '/app#pipeline' : '/app#leads',
+    tag: `${entityType}-${entityId}`
+  });
 }
+
+// ---------- Notificações no celular (Web Push / PWA) ----------
+// Chaves VAPID geradas uma vez e guardadas nas configurações (persistem no Turso).
+// Cada aparelho que ativa as notificações vira uma "inscrição" ligada a um atendente.
+function vapidKeys(data) {
+  if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+    return { publicKey: process.env.VAPID_PUBLIC_KEY, privateKey: process.env.VAPID_PRIVATE_KEY };
+  }
+  if (!data.settings.webPush || !data.settings.webPush.publicKey) {
+    data.settings.webPush = webpush.generateVAPIDKeys();
+    db.write(data);
+  }
+  return data.settings.webPush;
+}
+
+// Envia em segundo plano; quem fez a ação (except) não recebe a própria notificação.
+// only: lista de atendentes que devem receber (null = time todo).
+function pushToTeam(data, { except, only, title, body, url, tag }) {
+  const subs = (data.pushSubscriptions || []).filter(
+    (s) => (!except || s.attendantId !== except) && (!only || only.length === 0 || only.includes(s.attendantId))
+  );
+  if (!subs.length) return;
+  const keys = vapidKeys(data);
+  webpush.setVapidDetails('mailto:velocitaglobal@gmail.com', keys.publicKey, keys.privateKey);
+  const payload = JSON.stringify({ title, body: String(body || '').slice(0, 240), url: url || '/app', tag: tag || undefined });
+  setImmediate(async () => {
+    const dead = [];
+    await Promise.all(
+      subs.map((s) =>
+        webpush.sendNotification(s.subscription, payload, { TTL: 60 * 60 * 24 }).catch((err) => {
+          if (err.statusCode === 404 || err.statusCode === 410) dead.push(s.subscription.endpoint);
+        })
+      )
+    );
+    if (dead.length) {
+      const fresh = db.read();
+      fresh.pushSubscriptions = (fresh.pushSubscriptions || []).filter((s) => !dead.includes(s.subscription.endpoint));
+      db.write(fresh);
+    }
+  });
+}
+
+app.get('/api/push/public-key', requireAuth, (req, res) => {
+  res.json({ publicKey: vapidKeys(db.read()).publicKey });
+});
+
+app.post('/api/push/subscribe', requireAuth, (req, res) => {
+  const { subscription, attendantId, device } = req.body || {};
+  if (!subscription || !subscription.endpoint) return res.status(400).json({ error: 'Inscrição inválida' });
+  const data = db.read();
+  if (!data.pushSubscriptions) data.pushSubscriptions = [];
+  data.pushSubscriptions = data.pushSubscriptions.filter((s) => s.subscription.endpoint !== subscription.endpoint);
+  data.pushSubscriptions.push({ subscription, attendantId: attendantId || null, device: String(device || '').slice(0, 120), createdAt: new Date().toISOString() });
+  db.write(data);
+  res.json({ ok: true });
+});
+
+app.post('/api/push/unsubscribe', requireAuth, (req, res) => {
+  const data = db.read();
+  data.pushSubscriptions = (data.pushSubscriptions || []).filter((s) => s.subscription.endpoint !== (req.body || {}).endpoint);
+  db.write(data);
+  res.json({ ok: true });
+});
+
+app.post('/api/push/test', requireAuth, (req, res) => {
+  const data = db.read();
+  const user = data.users.find((u) => u.id === req.body.attendantId);
+  pushToTeam(data, { only: req.body.attendantId ? [req.body.attendantId] : null, title: 'Velocita Global', body: `Notificações ativadas${user ? ` para ${user.name}` : ''}. Tudo certo!`, url: '/app', tag: 'teste' });
+  res.json({ ok: true });
+});
+
+// Lembrete 15 minutos antes de reuniões, ligações e tarefas do Roteiro.
+// (No plano gratuito da Render o servidor dorme sem uso; nesse caso o lembrete sai
+// quando ele acordar, se ainda estiver dentro da janela.)
+setInterval(() => {
+  const data = db.read();
+  if (!(data.pushSubscriptions || []).length) return;
+  const now = Date.now();
+  let changed = false;
+  for (const a of data.activities) {
+    if (!['task', 'meeting', 'call'].includes(a.type) || a.done || a.reminderPushedAt) continue;
+    const t = new Date(a.date).getTime();
+    if (t - now <= 15 * 60 * 1000 && t - now > -5 * 60 * 1000) {
+      a.reminderPushedAt = new Date().toISOString();
+      changed = true;
+      const hora = new Date(a.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
+      pushToTeam(data, { only: a.attendantId ? [a.attendantId] : null, title: `Daqui a pouco, às ${hora}`, body: a.text || 'Compromisso do Roteiro', url: '/app#roteiro', tag: `lembrete-${a.id}` });
+    }
+  }
+  if (changed) db.write(data);
+}, 60 * 1000);
 
 const FIELD_LABELS = {
   name: 'nome', email: 'e-mail', phone: 'telefone', orgId: 'empresa', notes: 'notas',
@@ -258,6 +400,98 @@ app.post('/api/contacts', requireAuth, (req, res) => {
   res.status(201).json(contact);
 });
 
+// Importação em lote (planilha Excel/CSV lida no navegador). Cria a empresa pelo nome
+// quando ela ainda não existe e pula leads repetidos (mesmo e-mail ou telefone).
+app.post('/api/contacts/import', requireAuth, (req, res) => {
+  const rows = Array.isArray(req.body.rows) ? req.body.rows.slice(0, 5000) : [];
+  if (!rows.length) return res.status(400).json({ error: 'Nenhuma linha para importar' });
+  const data = db.read();
+  const digits = (s) => String(s || '').replace(/\D/g, '');
+  const emails = new Set(data.contacts.map((c) => (c.email || '').trim().toLowerCase()).filter(Boolean));
+  const phones = new Set(data.contacts.map((c) => digits(c.phone)).filter((p) => p.length >= 8));
+  let created = 0;
+  let skipped = 0;
+  let orgsCreated = 0;
+  for (const r of rows) {
+    const name = String(r.name || '').trim();
+    const email = String(r.email || '').trim();
+    const phone = String(r.phone || '').trim();
+    if (!name && !email) { skipped++; continue; }
+    const emailKey = email.toLowerCase();
+    const phoneKey = digits(phone);
+    if ((emailKey && emails.has(emailKey)) || (phoneKey.length >= 8 && phones.has(phoneKey))) { skipped++; continue; }
+    let orgId = null;
+    const company = String(r.company || '').trim();
+    if (company) {
+      let org = data.organizations.find((o) => (o.name || '').trim().toLowerCase() === company.toLowerCase());
+      if (!org) {
+        org = { id: newId('org'), name: company, cnpj: String(r.cnpj || ''), razaoSocial: '', setor: String(r.setor || ''), phone: '', mobile: '', address: '', notes: '', tags: [], ownerId: req.body.ownerId || null, extraInfo: [] };
+        data.organizations.push(org);
+        orgsCreated++;
+      }
+      orgId = org.id;
+    }
+    const contact = {
+      id: newId('c'),
+      name: name || email,
+      email,
+      phone,
+      orgId,
+      notes: String(r.notes || ''),
+      categories: r.category ? [String(r.category)] : [],
+      tags: [],
+      ownerId: req.body.ownerId || null,
+      extraInfo: r.role ? [{ id: newId('x'), label: 'Cargo', value: String(r.role) }] : [],
+      source: { channel: String(r.channel || 'importacao'), campaign: String(r.campaign || req.body.fileName || '') },
+      channels: { whatsapp: phone, facebookPsid: '', instagramId: '' }
+    };
+    data.contacts.push(contact);
+    if (emailKey) emails.add(emailKey);
+    if (phoneKey.length >= 8) phones.add(phoneKey);
+    created++;
+  }
+  logHistory(data, 'lead', 'import', req.body.attendantId, 'created', `Importação de planilha: ${created} leads`);
+  db.write(data);
+  res.json({ created, skipped, orgsCreated });
+});
+
+// ---------- Observações do dia (Roteiro) ----------
+// Uma anotação por dia e por atendente (attendantId null = observação geral do time).
+app.get('/api/daily-notes', requireAuth, (req, res) => {
+  const { from, to } = req.query;
+  let notes = db.read().dailyNotes || [];
+  if (from) notes = notes.filter((n) => n.date >= from);
+  if (to) notes = notes.filter((n) => n.date <= to);
+  res.json(notes);
+});
+
+app.put('/api/daily-notes', requireAuth, (req, res) => {
+  const { date, attendantId, text } = req.body || {};
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) return res.status(400).json({ error: 'Data inválida' });
+  const data = db.read();
+  if (!data.dailyNotes) data.dailyNotes = [];
+  const who = attendantId || null;
+  const idx = data.dailyNotes.findIndex((n) => n.date === date && (n.attendantId || null) === who);
+  const clean = String(text || '').trim();
+  if (!clean) {
+    if (idx >= 0) data.dailyNotes.splice(idx, 1);
+    db.write(data);
+    return res.json({ ok: true, removed: true });
+  }
+  const note = {
+    id: idx >= 0 ? data.dailyNotes[idx].id : newId('dn'),
+    date,
+    attendantId: who,
+    attendantName: (data.users.find((u) => u.id === who) || {}).name || null,
+    text: clean,
+    updatedAt: new Date().toISOString()
+  };
+  if (idx >= 0) data.dailyNotes[idx] = note;
+  else data.dailyNotes.push(note);
+  db.write(data);
+  res.json(note);
+});
+
 app.put('/api/contacts/:id', requireAuth, (req, res) => {
   const data = db.read();
   const contact = data.contacts.find((c) => c.id === req.params.id);
@@ -372,6 +606,7 @@ app.post('/api/activities', requireAuth, (req, res) => {
   db.write(data);
   res.status(201).json(activity);
   maybeNotifyActivity(data, activity);
+  pushNewActivity(data, activity, req.body.createdBy);
 });
 
 app.get('/api/deals/:id/activities', requireAuth, (req, res) => {
@@ -395,6 +630,7 @@ app.post('/api/deals/:id/activities', requireAuth, (req, res) => {
   db.write(data);
   res.status(201).json(activity);
   maybeNotifyActivity(data, activity);
+  pushNewActivity(data, activity, req.body.createdBy);
 });
 
 // Atividades gerais do lead (não vinculadas a um negócio específico)
@@ -419,16 +655,49 @@ app.post('/api/leads/:id/activities', requireAuth, (req, res) => {
   db.write(data);
   res.status(201).json(activity);
   maybeNotifyActivity(data, activity);
+  pushNewActivity(data, activity, req.body.createdBy);
 });
 
 app.put('/api/activities/:id', requireAuth, (req, res) => {
   const data = db.read();
   const activity = data.activities.find((a) => a.id === req.params.id);
   if (!activity) return res.status(404).json({ error: 'Atividade não encontrada' });
+  const before = { progress: activity.progress, contacted: activity.contacted, outcomeNotes: activity.outcomeNotes, done: activity.done };
   Object.assign(activity, req.body);
   db.write(data);
   res.json(activity);
+  // avisa o time quando o andamento de uma tarefa do Roteiro muda
+  const parts = [];
+  const PROG = { pendente: 'Pendente', andamento: 'Em andamento', concluida: 'Concluída' };
+  if (req.body.progress && req.body.progress !== before.progress) parts.push(PROG[req.body.progress] || req.body.progress);
+  else if (req.body.done !== undefined && req.body.done !== before.done) parts.push(req.body.done ? 'Concluída' : 'Reaberta');
+  if (req.body.contacted !== undefined && req.body.contacted !== before.contacted && req.body.contacted !== null) parts.push(req.body.contacted ? 'contato feito' : 'sem contato');
+  if (req.body.outcomeNotes && req.body.outcomeNotes !== before.outcomeNotes) parts.push(`obs.: ${req.body.outcomeNotes}`);
+  if (parts.length && ['task', 'meeting', 'call'].includes(activity.type)) {
+    const who = data.users.find((u) => u.id === req.body.outcomeBy);
+    pushToTeam(data, {
+      except: req.body.outcomeBy,
+      title: `${who ? who.name : 'Roteiro'} atualizou uma tarefa`,
+      body: `${activity.text}: ${parts.join(' · ')}`,
+      url: '/app#roteiro',
+      tag: `act-${activity.id}`
+    });
+  }
 });
+
+function pushNewActivity(data, activity, createdBy) {
+  if (!['task', 'meeting', 'call'].includes(activity.type)) return;
+  const LABEL = { task: 'Nova tarefa', meeting: 'Nova reunião', call: 'Nova ligação' };
+  const quando = new Date(activity.date).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
+  pushToTeam(data, {
+    except: createdBy,
+    only: activity.attendantId ? [activity.attendantId] : null,
+    title: `${LABEL[activity.type]} no Roteiro`,
+    body: `${activity.text} · ${quando}${activity.attendantName ? ' · ' + activity.attendantName : ' · Geral'}`,
+    url: '/app#roteiro',
+    tag: `act-${activity.id}`
+  });
+}
 
 app.delete('/api/activities/:id', requireAuth, (req, res) => {
   const data = db.read();
@@ -627,6 +896,12 @@ function pushMessage(data, msg) {
       read: false
     });
     data.notifications = data.notifications.slice(0, 100);
+    pushToTeam(data, {
+      title: `Nova mensagem de ${lead ? lead.name : 'um lead'}`,
+      body: full.text || 'Mensagem recebida',
+      url: '/app#mensagens',
+      tag: `msg-${full.leadId}`
+    });
   }
   return full;
 }
@@ -858,6 +1133,14 @@ app.post('/api/team-chat', requireAuth, (req, res) => {
   data.teamChat = data.teamChat.slice(-500);
   db.write(data);
   res.status(201).json(message);
+  pushToTeam(data, {
+    except: attendantId,
+    only: recipientId ? [recipientId] : null,
+    title: `${message.senderName}${recipientId ? ' (privado)' : ' · Chat da Equipe'}`,
+    body: trimmedText || (message.attachment ? `Enviou ${message.attachment.kind === 'audio' ? 'um áudio' : message.attachment.kind === 'image' ? 'uma foto' : 'um arquivo'}` : ''),
+    url: '/app#chatequipe',
+    tag: recipientId ? `chat-${attendantId}` : 'chat-equipe'
+  });
 });
 
 // Registra o "flash de visualização" (quem já abriu/viu a mensagem).
@@ -1456,7 +1739,7 @@ app.get('/api/google/oauth-start', requireAuth, (req, res) => {
     response_type: 'code',
     access_type: 'offline',
     prompt: 'consent',
-    scope: 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/userinfo.email',
+    scope: 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/userinfo.email',
     state: user.id
   });
   res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
@@ -1479,7 +1762,7 @@ app.get('/api/google/gmail-oauth-start', requireAuth, (req, res) => {
     response_type: 'code',
     access_type: 'offline',
     prompt: 'consent',
-    scope: 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/userinfo.email',
+    scope: 'https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/userinfo.email',
     state: 'gmail-inbox'
   });
   res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
@@ -1565,8 +1848,158 @@ async function getGoogleAccessTokenGeneric(gcal, refreshToken, label) {
     })
   });
   const result = await response.json();
-  if (!response.ok) throw new Error(`Falha ao renovar token do Google: ` + (result.error_description || result.error));
+  if (!response.ok) {
+    // invalid_grant = autorização expirada/revogada. Acontece a cada 7 dias enquanto o
+    // app OAuth do Google estiver em modo "Teste" — a solução é reconectar a conta.
+    const err = new Error(
+      result.error === 'invalid_grant' || response.status === 400
+        ? `A conexão de ${label || 'esta conta'} com o Google expirou. Clique em "Reconectar Google" para autorizar de novo.`
+        : `Falha ao renovar token do Google: ${result.error_description || result.error}`
+    );
+    err.code = 'GOOGLE_RECONNECT';
+    throw err;
+  }
   return result.access_token;
+}
+
+// ---------- E-mail (Gmail API) — caixas "gmail" (compartilhada) e "my" (do atendente) ----------
+function resolveMailbox(data, box, attendantId) {
+  const gcal = data.settings.integrations.googleCalendar || {};
+  if (box === 'gmail') {
+    const inbox = data.settings.integrations.gmailInbox || {};
+    return { gcal, refreshToken: inbox.refreshToken, email: inbox.email || '', label: inbox.email || 'a caixa compartilhada' };
+  }
+  const user = data.users.find((u) => u.id === attendantId);
+  return { gcal, refreshToken: user && user.googleRefreshToken, email: (user && user.googleEmail) || '', label: user ? user.name : 'este usuário', user };
+}
+
+function mailError(res, err) {
+  res.status(err.code === 'GOOGLE_RECONNECT' ? 409 : 400).json({ error: err.message, code: err.code || null });
+}
+
+async function gmailApi(accessToken, pathAndQuery, options = {}) {
+  const r = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/${pathAndQuery}`, {
+    ...options,
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json', ...(options.headers || {}) }
+  });
+  const j = r.status === 204 ? {} : await r.json();
+  if (!r.ok) {
+    const err = new Error(j.error?.message || 'Erro na API do Gmail');
+    // escopo insuficiente: conta conectada antes de existir envio/exclusão no CRM
+    if (r.status === 403 || r.status === 401) {
+      err.code = 'GOOGLE_RECONNECT';
+      err.message = 'Essa conta foi conectada com permissões antigas. Clique em "Reconectar Google" para liberar envio e organização dos e-mails.';
+    }
+    throw err;
+  }
+  return j;
+}
+
+// Cabeçalho com acento/emoji precisa ir codificado (RFC 2047)
+const mimeWord = (s) => (/^[\x20-\x7e]*$/.test(s || '') ? s || '' : `=?UTF-8?B?${Buffer.from(s, 'utf8').toString('base64')}?=`);
+
+function buildRawEmail({ from, to, cc, subject, html, inReplyTo, references }) {
+  const lines = [`From: ${from}`, `To: ${to}`];
+  if (cc) lines.push(`Cc: ${cc}`);
+  lines.push(`Subject: ${mimeWord(subject || '(sem assunto)')}`, 'MIME-Version: 1.0', 'Content-Type: text/html; charset=UTF-8', 'Content-Transfer-Encoding: base64');
+  if (inReplyTo) lines.push(`In-Reply-To: ${inReplyTo}`, `References: ${references || inReplyTo}`);
+  const body = Buffer.from(html || '', 'utf8').toString('base64').replace(/.{76}/g, '$&\r\n');
+  return Buffer.from(lines.join('\r\n') + '\r\n\r\n' + body, 'utf8').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+app.get('/api/mail/:box/messages', requireAuth, async (req, res) => {
+  const data = db.read();
+  const mb = resolveMailbox(data, req.params.box, req.query.attendantId);
+  try {
+    const token = await getGoogleAccessTokenGeneric(mb.gcal, mb.refreshToken, mb.label);
+    const folder = GMAIL_FOLDERS.includes(req.query.folder) ? req.query.folder : 'INBOX';
+    const params = new URLSearchParams({ maxResults: '30', labelIds: folder });
+    if (req.query.q) params.set('q', String(req.query.q));
+    if (req.query.pageToken) params.set('pageToken', String(req.query.pageToken));
+    if (folder === 'TRASH' || folder === 'SPAM') params.set('includeSpamTrash', 'true');
+    const list = await gmailApi(token, `messages?${params}`);
+    const messages = await Promise.all(
+      (list.messages || []).map(async (m) => {
+        const j = await gmailApi(token, `messages/${m.id}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Subject&metadataHeaders=Date`);
+        const h = (n) => ((j.payload && j.payload.headers) || []).find((x) => x.name === n)?.value || '';
+        return { id: m.id, threadId: j.threadId, from: h('From'), to: h('To'), subject: h('Subject') || '(sem assunto)', date: h('Date'), internalDate: Number(j.internalDate) || 0, snippet: j.snippet || '', unread: (j.labelIds || []).includes('UNREAD') };
+      })
+    );
+    res.json({ email: mb.email, messages, nextPageToken: list.nextPageToken || null });
+  } catch (err) {
+    mailError(res, err);
+  }
+});
+
+app.get('/api/mail/:box/messages/:id', requireAuth, async (req, res) => {
+  const data = db.read();
+  const mb = resolveMailbox(data, req.params.box, req.query.attendantId);
+  try {
+    const token = await getGoogleAccessTokenGeneric(mb.gcal, mb.refreshToken, mb.label);
+    const j = await gmailApi(token, `messages/${req.params.id}?format=full`);
+    const h = (n) => ((j.payload && j.payload.headers) || []).find((x) => x.name.toLowerCase() === n.toLowerCase())?.value || '';
+    const msg = {
+      id: j.id, threadId: j.threadId, from: h('From'), to: h('To'), cc: h('Cc'), subject: h('Subject') || '(sem assunto)', date: h('Date'),
+      messageId: h('Message-ID'), references: h('References'), unread: (j.labelIds || []).includes('UNREAD'),
+      body: await extractGmailBody(j.payload, token, j.id)
+    };
+    // abrir = marcar como lida (falha silenciosa se a conta ainda não tem permissão de modificar)
+    if (msg.unread) gmailApi(token, `messages/${j.id}/modify`, { method: 'POST', body: JSON.stringify({ removeLabelIds: ['UNREAD'] }) }).catch(() => {});
+    res.json(msg);
+  } catch (err) {
+    mailError(res, err);
+  }
+});
+
+app.post('/api/mail/:box/messages/:id/trash', requireAuth, async (req, res) => {
+  const data = db.read();
+  const mb = resolveMailbox(data, req.params.box, req.body.attendantId);
+  try {
+    const token = await getGoogleAccessTokenGeneric(mb.gcal, mb.refreshToken, mb.label);
+    await gmailApi(token, `messages/${req.params.id}/${req.body.restore ? 'untrash' : 'trash'}`, { method: 'POST' });
+    res.json({ ok: true });
+  } catch (err) {
+    mailError(res, err);
+  }
+});
+
+app.post('/api/mail/:box/messages/:id/unread', requireAuth, async (req, res) => {
+  const data = db.read();
+  const mb = resolveMailbox(data, req.params.box, req.body.attendantId);
+  try {
+    const token = await getGoogleAccessTokenGeneric(mb.gcal, mb.refreshToken, mb.label);
+    await gmailApi(token, `messages/${req.params.id}/modify`, { method: 'POST', body: JSON.stringify({ addLabelIds: ['UNREAD'] }) });
+    res.json({ ok: true });
+  } catch (err) {
+    mailError(res, err);
+  }
+});
+
+app.post('/api/mail/:box/send', requireAuth, async (req, res) => {
+  const data = db.read();
+  const mb = resolveMailbox(data, req.params.box, req.body.attendantId);
+  const { to, cc, subject, text, html, inReplyTo, references, threadId } = req.body || {};
+  if (!to || !String(to).includes('@')) return res.status(400).json({ error: 'Informe pelo menos um destinatário válido.' });
+  try {
+    const token = await getGoogleAccessTokenGeneric(mb.gcal, mb.refreshToken, mb.label);
+    const from = mb.user ? `${mimeWord(mb.user.name)} <${mb.email}>` : `Velocita Global <${mb.email}>`;
+    const bodyHtml = html || escapeHtmlServer(String(text || '')).replace(/\n/g, '<br>');
+    const raw = buildRawEmail({ from, to, cc, subject, html: `<div style="font-family:Arial,sans-serif;font-size:14px;">${bodyHtml}</div>`, inReplyTo, references });
+    const sent = await gmailApi(token, 'messages/send', { method: 'POST', body: JSON.stringify(threadId ? { raw, threadId } : { raw }) });
+    // se o destinatário for um lead do CRM, registra na linha do tempo dele
+    const lead = data.contacts.find((c) => c.email && String(to).toLowerCase().includes(c.email.toLowerCase()));
+    if (lead) {
+      logHistory(data, 'lead', lead.id, req.body.attendantId, 'updated', `E-mail enviado por ${mb.email}: ${subject || '(sem assunto)'}`);
+      db.write(data);
+    }
+    res.json({ ok: true, id: sent.id });
+  } catch (err) {
+    mailError(res, err);
+  }
+});
+
+function escapeHtmlServer(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function decodeGmailBase64Url(str) {
@@ -1833,10 +2266,20 @@ app.get('/api/calendar/events', requireAuth, (req, res) => {
 });
 
 // ---------- Roteiro do Dia (gerador de roteiros virais para afiliados) ----------
-// Aplicação independente (login, banco e IA próprios), montada dentro do mesmo
-// site em /roteiro-do-dia. Não compartilha sessão nem dados com o CRM.
+// Aplicação com banco e IA próprios, montada dentro do mesmo site em /roteiro-do-dia.
+// Recebe do CRM só duas coisas: se a pessoa está logada no CRM e a lista de sócios,
+// para entrar no Gerador como o sócio escolhido em "Atendendo como" (assim cada roteiro
+// gerado fica no nome de quem gerou).
 const roteiroDoDia = require('./roteiro-do-dia/server');
-app.use('/roteiro-do-dia', roteiroDoDia.app);
+app.use(
+  '/roteiro-do-dia',
+  (req, res, next) => {
+    req.crmAuthenticated = restoreFromCookie(req);
+    req.crmUsers = req.crmAuthenticated ? db.read().users.map((u) => ({ id: u.id, name: u.name, email: u.email || u.googleEmail || '' })) : [];
+    next();
+  },
+  roteiroDoDia.app
+);
 
 (async () => {
   try {

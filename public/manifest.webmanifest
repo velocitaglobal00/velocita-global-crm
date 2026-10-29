@@ -1,0 +1,23 @@
+{
+  "name": "Velocita Global CRM",
+  "short_name": "Velocita",
+  "description": "CRM da Velocita Global: roteiro, pipeline, chat da equipe e notificações.",
+  "id": "/app",
+  "start_url": "/app",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1B2A4E",
+  "theme_color": "#F4821F",
+  "lang": "pt-BR",
+  "icons": [
+    { "src": "/img/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/img/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/img/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Roteiro", "url": "/app#roteiro", "icons": [{ "src": "/img/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Chat da Equipe", "url": "/app#chatequipe", "icons": [{ "src": "/img/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Pipeline", "url": "/app#pipeline", "icons": [{ "src": "/img/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

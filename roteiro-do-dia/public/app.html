@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Roteiro do Dia — Gerador</title>
+<title>Gerador de Roteiros (IA) — Velocita Global</title>
 <link rel="icon" href="assets/logo-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -168,11 +168,14 @@
   .tags span{font-size:12.5px; background:rgba(147,162,196,.12); border:1px solid var(--border); color:var(--muted); padding:4px 10px; border-radius:999px}
   .dur{font-size:12px; color:var(--muted); margin-bottom:14px}
 </style>
+<link rel="stylesheet" href="vg-theme.css">
+<script>try{document.documentElement.setAttribute('data-theme',localStorage.getItem('vg_theme')==='dark'?'dark':'light')}catch(e){}
+function vgToggleTheme(){var d=document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',d);try{localStorage.setItem('vg_theme',d)}catch(e){}}</script>
 </head>
 <body>
 <header>
-  <div class="logo"><div class="mark"><img src="assets/logo-icon.png" alt="Velocita Global"></div>Roteiro do Dia</div>
-  <div class="userbox"><a class="out" href="/app" style="text-decoration:none; display:inline-block;">&larr; Voltar ao CRM</a><span>Olá, <b id="who">...</b></span><button class="out" onclick="logout()">Sair</button></div>
+  <div class="logo"><div class="mark"><img src="assets/logo-icon.png" alt="Velocita Global"></div>Gerador de Roteiros (IA)</div>
+  <div class="userbox"><button class="vg-theme-btn" onclick="vgToggleTheme()" title="Modo claro/escuro">&#9681;</button><a class="out" href="/app" style="text-decoration:none; display:inline-block;">&larr; Voltar ao CRM</a><span>Gerando como <b id="who">...</b></span><a class="out" href="./?trocar=1" style="text-decoration:none; display:inline-block;">Trocar</a><button class="out" onclick="logout()">Sair</button></div>
 </header>
 
 <main>
@@ -243,6 +246,12 @@
 </main>
 
 <script>
+// Se no CRM foi escolhido outro sócio em "Atendendo como", entra de novo como ele
+(function(){
+  const crm = localStorage.getItem('vg_attendant_id');
+  const mine = localStorage.getItem('rd_crm_id');
+  if (crm && mine && crm !== mine) { window.location.href = './' + (location.pathname.endsWith('admin.html') ? '?ir=admin' : ''); }
+})();
 const token = localStorage.getItem('rd_token');
 if(!token){ window.location.href = './'; }
 document.getElementById('who').textContent = localStorage.getItem('rd_user') || '';
@@ -251,14 +260,14 @@ const authHeaders = { 'Content-Type':'application/json', 'Authorization':'Bearer
 
 // valida sessão ao abrir
 fetch('api/me', { headers: authHeaders }).then(async r=>{
-  if(!r.ok){ localStorage.clear(); window.location.href='./'; }
+  if(!r.ok){ ['rd_token','rd_user','rd_role','rd_crm_id'].forEach(k=>localStorage.removeItem(k)); window.location.href='./'; }
 });
 
 loadHistory();
 
 async function logout(){
   try{ await fetch('api/logout', { method:'POST', headers: authHeaders }); }catch(e){}
-  localStorage.clear();
+  ['rd_token','rd_user','rd_role','rd_crm_id'].forEach(k=>localStorage.removeItem(k));
   window.location.href = './';
 }
 
@@ -384,7 +393,7 @@ async function generate(){
       })
     });
     const data = await r.json();
-    if(r.status === 401){ localStorage.clear(); window.location.href='./'; return; }
+    if(r.status === 401){ ['rd_token','rd_user','rd_role','rd_crm_id'].forEach(k=>localStorage.removeItem(k)); window.location.href='./'; return; }
     if(!r.ok){ err.textContent = data.error || 'Erro ao gerar.'; err.style.display='block'; return; }
     render(data);
     loadHistory(document.getElementById('histSearch').value.trim());
@@ -462,7 +471,7 @@ async function loadHistory(q){
   try{
     const url = 'api/history' + (q ? `?q=${encodeURIComponent(q)}` : '');
     const r = await fetch(url, { headers: authHeaders });
-    if(r.status === 401){ localStorage.clear(); window.location.href='./'; return; }
+    if(r.status === 401){ ['rd_token','rd_user','rd_role','rd_crm_id'].forEach(k=>localStorage.removeItem(k)); window.location.href='./'; return; }
     const data = await r.json();
     const items = data.items || [];
     count.textContent = items.length ? `${items.length} gerado${items.length>1?'s':''}` : '';

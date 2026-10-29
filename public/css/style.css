@@ -375,6 +375,42 @@ body {
   padding: 16px 0;
 }
 
+/* topo do menu lateral com o botão de ocultar (principalmente no celular / PWA) */
+.sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px 10px 12px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--vg-border);
+  white-space: nowrap;
+}
+.sidebar-head span {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--vg-text-muted);
+}
+.sidebar-close {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1.5px solid var(--vg-border);
+  background: var(--vg-surface);
+  color: var(--vg-heading);
+  border-radius: 999px;
+  padding: 6px 12px 6px 8px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.sidebar-close:hover {
+  border-color: var(--vg-orange);
+  color: var(--vg-orange-dark);
+}
+
 .sidebar-link {
   display: flex;
   align-items: center;
@@ -2064,6 +2100,195 @@ table.data-table tr.clickable:hover {
   color: var(--vg-text-muted);
 }
 
+/* ---------- Roteiro da Semana ---------- */
+.header-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.btn-link {
+  background: none;
+  border: none;
+  color: var(--vg-orange-dark);
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0 4px;
+}
+.btn-link:hover { text-decoration: underline; }
+.btn-sm { padding: 6px 12px; font-size: 12px; }
+
+.roteiro-toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.rt-weeknav { display: flex; gap: 6px; align-items: center; }
+.rt-weeknav .btn-secondary { padding: 8px 14px; }
+.rt-range { margin-left: 8px; font-weight: 700; color: var(--vg-heading); font-size: 14px; }
+
+.rt-summary { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; margin: 6px 0 14px; }
+.rt-tile {
+  background: var(--vg-surface);
+  border: 1px solid var(--vg-border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+}
+.rt-tile b { font-size: 22px; color: var(--vg-heading); line-height: 1.1; font-variant-numeric: tabular-nums; }
+.rt-tile span { font-size: 11.5px; color: var(--vg-text-muted); font-weight: 600; }
+.rt-tile.ok b { color: var(--vg-green); }
+.rt-tile.mid b { color: var(--vg-orange-dark); }
+.rt-tile.bad b { color: var(--vg-red); }
+
+.rt-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; margin-bottom: 18px; }
+.rt-daycol {
+  text-align: left;
+  background: var(--vg-surface);
+  border: 1.5px solid var(--vg-border);
+  border-radius: 12px;
+  padding: 10px;
+  min-height: 170px;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+  min-width: 0;
+}
+.rt-daycol:hover { box-shadow: 0 6px 16px var(--vg-shadow); transform: translateY(-1px); }
+.rt-daycol.today { border-color: var(--vg-orange); }
+.rt-daycol.selected { border-color: var(--vg-heading); box-shadow: 0 0 0 3px rgba(244, 130, 31, 0.25); }
+.rt-dayhead { display: flex; align-items: baseline; gap: 6px; }
+.rt-dayhead span { font-size: 12px; font-weight: 700; color: var(--vg-text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.rt-dayhead b { font-size: 20px; color: var(--vg-heading); }
+.rt-daycol.today .rt-dayhead b { color: var(--vg-orange-dark); }
+.rt-note-flag { margin-left: auto; color: var(--vg-orange-dark); font-style: normal; display: inline-flex; }
+.rt-note-flag svg { width: 14px; height: 14px; }
+.rt-daycount { font-size: 11px; color: var(--vg-text-muted); font-weight: 600; }
+.rt-minis { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.rt-mini { display: flex; align-items: center; gap: 5px; font-size: 11.5px; min-width: 0; }
+.rt-mini .rt-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--vg-text-muted); flex-shrink: 0; }
+.rt-mini.andamento .rt-dot { background: var(--vg-orange); }
+.rt-mini.concluida .rt-dot { background: var(--vg-green); }
+.rt-mini.concluida .rt-mini-title { text-decoration: line-through; opacity: 0.6; }
+.rt-mini-time { font-weight: 700; color: var(--vg-heading); flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.rt-mini-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--vg-text); }
+.rt-more { font-size: 11px; color: var(--vg-orange-dark); font-weight: 700; }
+
+.rt-day-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.rt-day-head h3 { margin: 0; color: var(--vg-heading); font-size: 17px; }
+.rt-day-grid { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
+.rt-notes {
+  background: var(--vg-surface);
+  border: 1px solid var(--vg-border);
+  border-radius: 12px;
+  padding: 14px;
+  position: sticky;
+  top: 12px;
+}
+.rt-notes label { display: block; font-weight: 700; color: var(--vg-heading); font-size: 13.5px; margin-bottom: 8px; }
+.rt-notes textarea, .rt-obs {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1.5px solid var(--vg-border);
+  border-radius: 8px;
+  padding: 9px 10px;
+  font: inherit;
+  font-size: 13px;
+  background: var(--vg-bg);
+  color: var(--vg-text);
+  resize: vertical;
+}
+.rt-notes textarea:focus, .rt-obs:focus { outline: none; border-color: var(--vg-orange); }
+.rt-notes-foot, .rt-obs-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
+.rt-notes-foot span, .rt-saved { font-size: 11px; color: var(--vg-text-muted); }
+.rt-notes-others { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.rt-other-note { border-top: 1px dashed var(--vg-border); padding-top: 8px; font-size: 12.5px; }
+.rt-other-note b { color: var(--vg-heading); font-size: 12px; }
+.rt-other-note p { margin: 4px 0 0; white-space: pre-wrap; color: var(--vg-text); }
+
+.roteiro-item.rt-full { cursor: default; }
+.roteiro-item.rt-full:hover { transform: none; }
+.roteiro-item.rt-full .roteiro-item-body { flex: 1; min-width: 0; }
+.roteiro-item.rt-full.concluida { opacity: 1; border-left: 4px solid var(--vg-green); }
+.roteiro-item.rt-full.andamento { border-left: 4px solid var(--vg-orange); }
+.roteiro-item.rt-full.late { border-left: 4px solid var(--vg-red); }
+.roteiro-item.rt-full.concluida .ri-title { text-decoration: line-through; opacity: 0.65; }
+.rt-late { font-size: 10.5px; font-weight: 700; color: var(--vg-red); background: var(--vg-danger-bg); border: 1px solid var(--vg-danger-border); border-radius: 999px; padding: 1px 8px; margin-left: 6px; text-decoration: none; display: inline-block; }
+.rt-controls { display: flex; flex-wrap: wrap; gap: 10px; margin: 10px 0 8px; }
+.rt-seg { display: inline-flex; align-items: center; border: 1.5px solid var(--vg-border); border-radius: 8px; overflow: hidden; }
+.rt-seg button { background: var(--vg-surface); color: var(--vg-text); border: none; border-left: 1px solid var(--vg-border); padding: 6px 11px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.rt-seg button:first-of-type { border-left: none; }
+.rt-seg button:hover { background: var(--vg-highlight-bg); }
+.rt-seg button.on.pendente { background: var(--vg-heading); color: var(--vg-surface); }
+.rt-seg button.on.andamento { background: var(--vg-orange); color: #fff; }
+.rt-seg button.on.concluida { background: var(--vg-green); color: #fff; }
+.rt-seg button.on.bad { background: var(--vg-red); color: #fff; }
+.rt-seg-label { font-size: 12px; font-weight: 700; color: var(--vg-text-muted); padding: 0 10px; }
+.rt-seg-label + button { border-left: 1px solid var(--vg-border); }
+
+@media (max-width: 1100px) {
+  .rt-week { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .rt-summary { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .rt-day-grid { grid-template-columns: 1fr; }
+  .rt-notes { position: static; }
+}
+@media (max-width: 640px) {
+  .rt-week, .rt-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* ---------- Caixas Gmail (Minha Caixa / compartilhada) ---------- */
+.mail-shell { display: flex; flex-direction: column; gap: 10px; }
+.mail-topbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.mail-account { font-size: 13px; color: var(--vg-text-muted); display: flex; align-items: center; gap: 6px; min-width: 0; }
+.mail-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--vg-green); display: inline-block; }
+.mail-top-actions { display: flex; gap: 8px; }
+.mail-cols { display: grid; grid-template-columns: minmax(280px, 380px) minmax(0, 1fr); gap: 14px; min-height: 560px; }
+.mail-list-col { background: var(--vg-surface); border: 1px solid var(--vg-border); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.mail-folders { display: flex; flex-wrap: wrap; gap: 6px; }
+.mail-folder { border: 1.5px solid var(--vg-border); background: var(--vg-bg); color: var(--vg-text); border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.mail-folder.active { background: var(--vg-heading); border-color: var(--vg-heading); color: var(--vg-surface); }
+.mail-search { width: 100%; box-sizing: border-box; flex: 0 0 auto !important; }
+.mail-list { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; max-height: 62vh; }
+.mail-row { text-align: left; border: none; background: transparent; border-radius: 8px; padding: 9px 10px; cursor: pointer; font: inherit; color: var(--vg-text); border-left: 3px solid transparent; }
+.mail-row:hover { background: var(--vg-bg); }
+.mail-row.active { background: var(--vg-highlight-bg); border-left-color: var(--vg-orange); }
+.mail-row-top { display: flex; justify-content: space-between; gap: 8px; }
+.mail-who { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mail-date { font-size: 11px; color: var(--vg-text-muted); flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.mail-subj { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px; }
+.mail-snip { font-size: 11.5px; color: var(--vg-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mail-row.unread .mail-who, .mail-row.unread .mail-subj { font-weight: 800; color: var(--vg-heading); }
+.mail-row.unread .mail-who::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--vg-orange); margin-right: 6px; vertical-align: 1px; }
+.mail-more { align-self: center; }
+.mail-view { background: var(--vg-surface); border: 1px solid var(--vg-border); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; min-width: 0; }
+.mail-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding-bottom: 12px; border-bottom: 1px solid var(--vg-border); }
+.mail-actions .danger { color: var(--vg-red); border-color: var(--vg-danger-border); }
+.mail-head h3 { margin: 12px 0 6px; color: var(--vg-heading); font-size: 17px; }
+.mail-meta { font-size: 12px; color: var(--vg-text-muted); line-height: 1.6; margin-bottom: 10px; word-break: break-word; }
+.mail-frame { width: 100%; flex: 1; min-height: 420px; border: 1px solid var(--vg-border); border-radius: 8px; background: #fff; }
+.mail-connect { text-align: center; padding: 26px 10px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.mail-connect-icon { width: 46px; height: 46px; border-radius: 50%; background: var(--vg-highlight-bg); color: var(--vg-orange-dark); display: grid; place-items: center; }
+.mail-connect strong { color: var(--vg-heading); }
+.mail-connect p { margin: 0; font-size: 12.5px; color: var(--vg-text-muted); }
+.mail-connect small { font-size: 11px; color: var(--vg-text-muted); }
+#mail-compose .mc-from { padding: 8px 16px; font-size: 12px; color: var(--vg-text-muted); }
+#mail-compose input { width: 100%; }
+.mc-status { font-size: 12px; color: var(--vg-text-muted); margin-left: 10px; }
+@media (max-width: 900px) {
+  .mail-cols { grid-template-columns: 1fr; }
+  .mail-list { max-height: 40vh; }
+}
+
+/* ---------- App no celular (PWA) ---------- */
+.pwa-card { display: flex; align-items: center; gap: 14px; background: var(--vg-surface); border: 1px solid var(--vg-border); border-left: 4px solid var(--vg-orange); border-radius: 12px; padding: 12px 16px; margin-bottom: 16px; flex-wrap: wrap; }
+.pwa-icon { width: 44px; height: 44px; border-radius: 10px; flex-shrink: 0; }
+.pwa-text { flex: 1; min-width: 220px; font-size: 12.5px; color: var(--vg-text-muted); }
+.pwa-text strong { display: block; color: var(--vg-heading); font-size: 14px; margin-bottom: 2px; }
+.pwa-on { color: var(--vg-green); font-weight: 700; }
+.pwa-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
 /* ---------- Gmail-style email compose ---------- */
 .gmail-compose {
   position: fixed;
@@ -2428,6 +2653,8 @@ table.data-table tr.clickable:hover {
     width: 240px;
     padding: 16px 10px;
     box-shadow: 6px 0 30px var(--vg-shadow);
+    padding-top: calc(16px + env(safe-area-inset-top, 0px));
+    overflow-y: auto;
     transform: translateX(0);
     transition: transform 0.2s ease;
   }
@@ -2959,6 +3186,137 @@ table.data-table tr.clickable:hover {
   z-index: 2;
 }
 
+/* ==========================================================================
+   Celular / app instalado (PWA): tela sempre enquadrada, sem "aspecto de zoom".
+   - nada pode ficar mais largo que a tela (grids com minmax(0, 1fr))
+   - campos com 16px: abaixo disso o iPhone dá zoom sozinho ao tocar no campo
+   - janelas (negócio, lead, empresa, formulários) viram tela cheia, com o
+     cabeçalho e os botões de salvar sempre à vista
+   ========================================================================== */
+@media (max-width: 900px) {
+  html, body { overflow-x: hidden; max-width: 100%; }
+  body { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  .main-content, .view { min-width: 0; max-width: 100vw; }
+
+  input, select, textarea,
+  .form-group input, .form-group select, .form-group textarea,
+  .filter-input, .search-box input { font-size: 16px !important; }
+  .form-group input, .form-group select, .form-group textarea { padding: 11px 12px; }
+
+  .modal-overlay { padding: 0 !important; align-items: stretch; justify-content: stretch; }
+  .modal, .modal.wide {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    height: 100dvh;
+    max-height: 100dvh !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .modal-header {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: var(--vg-surface);
+    padding: calc(12px + env(safe-area-inset-top, 0px)) 16px 12px;
+  }
+  .modal-header h3 { font-size: 17px; overflow-wrap: anywhere; }
+  .modal-close { font-size: 28px; padding: 4px 8px; }
+  .modal-body { padding: 16px; }
+  .modal-footer {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    background: var(--vg-surface);
+    margin-top: auto;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+  .modal-footer > * { flex: 1; min-height: 44px; }
+  .form-row { flex-direction: column; gap: 0; }
+
+  /* detalhe do negócio: uma coluna, tudo dentro da largura */
+  .deal-detail-grid { grid-template-columns: minmax(0, 1fr) !important; }
+  .deal-detail-grid > *, .dd-col { min-width: 0; max-width: 100%; }
+  .dd-col { padding: 16px; }
+  .dd-actions { flex-wrap: wrap; }
+  .dd-actions > * { flex: 1 1 140px; min-height: 44px; }
+  .activity-tabs, .comms-channel-tabs, .settings-tabs, .tab-pills {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .activity-tabs > *, .settings-tabs > *, .tab-pills > * { flex-shrink: 0; }
+  .tag-chip-group { flex-wrap: wrap; }
+  .dd-col textarea, .dd-col input, .dd-col select { max-width: 100%; }
+
+  /* pipeline: colunas deslizam de lado e encaixam uma por vez */
+  .kanban-board { scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; }
+  .kanban-column { width: 82vw; max-width: 320px; scroll-snap-align: start; }
+
+  /* tabelas largas rolam dentro delas mesmas, sem empurrar a tela */
+  .data-table { display: block; overflow-x: auto; white-space: nowrap; }
+
+  /* toques confortáveis */
+  .btn-primary, .btn-secondary, .btn-danger { min-height: 42px; }
+  .pipeline-header { flex-wrap: wrap; gap: 10px; }
+  .header-actions { width: 100%; }
+  .header-actions > * { flex: 1 1 auto; }
+}
+
+@media (max-width: 900px) {
+  .comms-layout { grid-template-columns: minmax(0, 1fr) !important; height: auto; }
+  .comms-list-col, .comms-chat-col { min-width: 0; }
+  .comms-list-col { max-height: 40vh; }
+  .comms-chat-col { min-height: 60vh; }
+  .table-toolbar { flex-wrap: wrap; }
+  .table-toolbar > * { max-width: 100% !important; flex: 1 1 100%; }
+  .funnel-label { width: 92px; }
+  .funnel-count, .funnel-count.wide { width: auto; min-width: 54px; }
+  .funnel-row { gap: 8px; }
+}
+
+/* Roteiro no celular: hora, ícone e texto em cima; status, contato e observações embaixo,
+   ocupando a largura toda (antes os botões ficavam cortados na direita) */
+@media (max-width: 640px) {
+  .roteiro-item.rt-full { flex-wrap: wrap; gap: 8px 10px; padding: 12px; }
+  .roteiro-item.rt-full .roteiro-item-body { flex: 1 1 100%; }
+  .rt-controls { flex-direction: column; gap: 8px; }
+  .rt-seg { width: 100%; }
+  .rt-seg button { flex: 1; padding: 9px 6px; }
+  .rt-seg-label { flex: 0 0 auto; }
+  .rt-day-head { flex-wrap: wrap; }
+  .rt-day-head .btn-secondary { flex: 1 1 100%; }
+  .rt-weeknav { flex-wrap: wrap; }
+  .rt-range { flex: 1 1 100%; margin: 4px 0 0; }
+  .rt-obs-foot { flex-wrap: wrap; }
+  .rt-obs-foot .btn-secondary { flex: 1 1 100%; }
+}
+
+/* ---------- Ajuda: player no padrão do CRM (ícones, sem emojis) ---------- */
+.ajuda-transport { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ajuda-transport .ajuda-icon-btn { width: 44px; height: 42px; padding: 0; display: inline-grid; place-items: center; }
+.ajuda-transport .ajuda-play-btn { display: inline-flex; align-items: center; gap: 8px; min-width: 140px; justify-content: center; }
+.ajuda-transport .ajuda-rate { height: 42px; padding: 0 10px; }
+#ajuda-caption-text span { transition: color 0.2s, background 0.2s; border-radius: 4px; }
+#ajuda-caption-text span.past { color: var(--vg-text-muted); }
+#ajuda-caption-text span.on { color: var(--vg-heading); background: var(--vg-highlight-bg); box-shadow: 0 0 0 3px var(--vg-highlight-bg); font-weight: 600; }
+.ajuda-visual { overflow: hidden; }
+@media (max-width: 640px) {
+  .ajuda-visual { padding: 10px; }
+  .ajuda-transport .ajuda-play-btn { flex: 1; }
+  .ajuda-captions { padding: 12px; font-size: 14px; }
+  .ajuda-captions .ajuda-mic { display: none; }
+  .ajuda-chapters { grid-template-columns: minmax(0, 1fr) !important; }
+  #view-ajuda .pipeline-header { flex-direction: column; align-items: flex-start; gap: 4px; }
+}
+@media (max-width: 900px) {
+  /* espaço no fim da página para o botão do Velo-Cito não cobrir o último botão */
+  .main-content { padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
+
 
 /* ===========================================================================
    Calculadora de Margem (aba "margem"). Tudo prefixado com .mg- para não
@@ -3082,10 +3440,11 @@ table.data-table tr.clickable:hover {
 }
 .mg-extras-grid label { display: block; font-size: 11.5px; color: var(--vg-text-muted); }
 .mg-extras-grid input {
-  width: 100%; min-height: 38px; margin-top: 3px; padding: 4px 9px;
+  width: 100%; min-height: 42px; margin-top: 3px; padding: 4px 9px;
   border: 1px solid var(--vg-border); border-radius: 7px;
   background: var(--vg-bg); color: var(--vg-text);
-  font-size: 14px; font-variant-numeric: tabular-nums; text-align: right;
+  /* 16px e o minimo: abaixo disso o iPhone da zoom sozinho ao tocar no campo */
+  font-size: 16px; font-variant-numeric: tabular-nums; text-align: right;
 }
 
 .mg-detalhe-wrap {

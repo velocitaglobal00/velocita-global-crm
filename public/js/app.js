@@ -84,7 +84,8 @@ const SOURCE_LABEL = {
   tiktok_ads: 'TikTok Ads / Spark Ads',
   whatsapp: 'WhatsApp',
   indicacao: 'Indicação',
-  organico: 'Orgânico / Site'
+  organico: 'Orgânico / Site',
+  importacao: 'Importação (planilha)'
 };
 const TRAFEGO_PAGO_CHANNELS = ['facebook_ads', 'instagram_ads', 'google_ads', 'tiktok_ads'];
 const MARKETPLACE_PLATFORMS = ['Mercado Livre', 'Shopee', 'Amazon', 'TikTok Shop'];
@@ -142,8 +143,10 @@ async function api(url, options = {}) {
     throw new Error('unauthorized');
   }
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'Erro' }));
-    throw new Error(err.error || 'Erro na requisição');
+    const body = await res.json().catch(() => ({ error: 'Erro' }));
+    const err = new Error(body.error || 'Erro na requisição');
+    err.code = body.code || null;
+    throw err;
   }
   if (res.status === 204) return null;
   return res.json();
@@ -199,6 +202,9 @@ const Api = {
   markNotifRead: (id) => api(`/api/notifications/${id}/read`, { method: 'POST' }),
   markAllNotifRead: () => api('/api/notifications/read-all', { method: 'POST' }),
   allActivities: () => api('/api/activities'),
+  dailyNotes: (from, to) => api(`/api/daily-notes?from=${from}&to=${to}`),
+  saveDailyNote: (payload) => api('/api/daily-notes', { method: 'PUT', body: JSON.stringify(payload) }),
+  importContacts: (payload) => api('/api/contacts/import', { method: 'POST', body: JSON.stringify(payload) }),
   leadActivities: (leadId) => api(`/api/leads/${leadId}/activities`),
   addLeadActivity: (leadId, payload) => api(`/api/leads/${leadId}/activities`, { method: 'POST', body: JSON.stringify(payload) }),
   syncCalendar: (activityId) => api(`/api/activities/${activityId}/sync-calendar`, { method: 'POST' }),
@@ -246,6 +252,7 @@ async function init() {
   bindLeadDetailModal();
   bindSettingsPanel();
   bindLeadsPage();
+  bindLeadsImportExport();
   bindOrgsPage();
   bindLogout();
   bindModalCloseButtons();
@@ -266,8 +273,10 @@ async function init() {
   bindCalendarioPage();
   bindGoalEdit();
   bindAjuda();
+  bindPwa();
 
   ensureAttendant();
+  openViewFromHash();
   pollNotifications();
   setInterval(pollNotifications, 25000);
   pollTeamChatBadge();
@@ -293,6 +302,141 @@ async function loadAllData() {
   state.settings = settings;
   state.tags = tags;
   state.reminders = reminders;
+}
+
+
+// ============ App no celular (PWA) + notificações ============
+// O service worker (/sw.js) recebe as notificações do servidor mesmo com o app fechado.
+// Cada aparelho fica ligado ao atendente escolhido em "Atendendo como".
+const PWA_VIEWS = ['dashboard', 'roteiro', 'pipeline', 'leads', 'orgs', 'email', 'mensagens', 'bi', 'calendario', 'chatequipe', 'settings', 'ajuda'];
+
+function openViewFromHash(hash) {
+  const v = String(hash || location.hash || '').replace('#', '');
+  if (PWA_VIEWS.includes(v) && document.getElementById(`view-${v}`)) switchView(v);
+}
+
+function urlB64ToUint8Array(b64) {
+  const pad = '='.repeat((4 - (b64.length % 4)) % 4);
+  const raw = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+  return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
+}
+
+const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent);
+
+async function bindPwa() {
+  if ('serviceWorker' in navigator) {
+    try {
+      state.swReg = await navigator.serviceWorker.register('/sw.js');
+    } catch (e) {
+      // sem service worker o CRM funciona normalmente, só sem notificações em segundo plano
+    }
+    navigator.serviceWorker.addEventListener('message', (ev) => {
+      if (ev.data && ev.data.navigate) openViewFromHash(new URL(ev.data.navigate, location.origin).hash);
+    });
+  }
+  window.addEventListener('hashchange', () => openViewFromHash());
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    state.installPrompt = e;
+    renderPwaCard();
+  });
+  document.getElementById('btn-pwa-toggle').addEventListener('click', togglePushNotifications);
+  document.getElementById('btn-pwa-install').addEventListener('click', installPwa);
+  document.getElementById('btn-pwa-test').addEventListener('click', async () => {
+    await api('/api/push/test', { method: 'POST', body: JSON.stringify({ attendantId: state.attendantId }) });
+    showToast('Notificação de teste enviada');
+  });
+  renderPwaCard();
+}
+
+async function currentPushSubscription() {
+  if (!state.swReg || !('PushManager' in window)) return null;
+  return state.swReg.pushManager.getSubscription();
+}
+
+async function renderPwaCard() {
+  const status = document.getElementById('pwa-status');
+  if (!status) return;
+  const installBtn = document.getElementById('btn-pwa-install');
+  const toggleBtn = document.getElementById('btn-pwa-toggle');
+  const testBtn = document.getElementById('btn-pwa-test');
+  installBtn.style.display = !isStandalone() && (state.installPrompt || isIOS()) ? '' : 'none';
+  if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+    status.textContent = isIOS() && !isStandalone()
+      ? 'No iPhone, primeiro instale o app: toque em Compartilhar e depois em "Adicionar à Tela de Início". Abra o app pela tela inicial e ative aqui.'
+      : 'Este navegador não suporta notificações. Use o Chrome no Android ou no computador.';
+    toggleBtn.style.display = 'none';
+    testBtn.style.display = 'none';
+    return;
+  }
+  const sub = await currentPushSubscription();
+  const on = !!sub && Notification.permission === 'granted';
+  status.innerHTML = on
+    ? `<span class="pwa-on">● Ativadas neste aparelho</span> para <b>${escapeHtml((currentAttendant() || {}).name || '—')}</b>: chat, tarefas do Roteiro, mensagens de leads e alterações do time.`
+    : Notification.permission === 'denied'
+      ? 'As notificações estão bloqueadas neste navegador. Libere em Configurações do site (cadeado ao lado do endereço) e tente de novo.'
+      : 'Receba no celular as mensagens do chat, tarefas do Roteiro, mensagens de leads e alterações feitas pelo time.';
+  toggleBtn.style.display = '';
+  toggleBtn.textContent = on ? 'Desativar neste aparelho' : 'Ativar notificações';
+  toggleBtn.className = on ? 'btn-secondary' : 'btn-primary';
+  testBtn.style.display = on ? '' : 'none';
+}
+
+async function togglePushNotifications() {
+  const sub = await currentPushSubscription();
+  if (sub && Notification.permission === 'granted') {
+    await api('/api/push/unsubscribe', { method: 'POST', body: JSON.stringify({ endpoint: sub.endpoint }) });
+    await sub.unsubscribe();
+    showToast('Notificações desativadas neste aparelho');
+    return renderPwaCard();
+  }
+  if (!state.attendantId) {
+    showToast('Escolha quem está atendendo primeiro');
+    return openAttendantPicker();
+  }
+  const perm = await Notification.requestPermission();
+  if (perm !== 'granted') {
+    showToast('Permissão de notificação não concedida');
+    return renderPwaCard();
+  }
+  try {
+    await subscribePush();
+    showToast('Notificações ativadas!');
+  } catch (e) {
+    showToast('Não foi possível ativar: ' + (e.message || e));
+  }
+  renderPwaCard();
+}
+
+async function subscribePush() {
+  const { publicKey } = await api('/api/push/public-key');
+  let sub = await currentPushSubscription();
+  if (!sub) sub = await state.swReg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64ToUint8Array(publicKey) });
+  await api('/api/push/subscribe', {
+    method: 'POST',
+    body: JSON.stringify({ subscription: sub.toJSON(), attendantId: state.attendantId, device: navigator.userAgent })
+  });
+}
+
+async function syncPushSubscription() {
+  try {
+    const sub = await currentPushSubscription();
+    if (sub && Notification.permission === 'granted') await subscribePush();
+  } catch (e) {
+    // sem conexão: tenta de novo na próxima troca de atendente
+  }
+  renderPwaCard();
+}
+
+async function installPwa() {
+  if (state.installPrompt) {
+    state.installPrompt.prompt();
+    await state.installPrompt.userChoice;
+    state.installPrompt = null;
+    return renderPwaCard();
+  }
+  if (isIOS()) showToast('No iPhone: toque em Compartilhar (quadrado com seta) e depois em "Adicionar à Tela de Início".');
 }
 
 // ============ Navigation ============
@@ -360,6 +504,7 @@ function bindSidebarToggle() {
   });
 
   document.getElementById('sidebar-backdrop').addEventListener('click', () => setSidebarOpen(false));
+  document.getElementById('sidebar-close').addEventListener('click', () => setSidebarOpen(false));
 }
 
 // Tema claro/escuro — chave compartilhada com o Gerador de Roteiros (mesmo site).
@@ -450,6 +595,7 @@ function bindAttendant() {
     localStorage.setItem(ATTENDANT_KEY, id);
     updateAttendantTopbar();
     closeModal('modal-attendant');
+    syncPushSubscription(); // o celular passa a receber as notificações deste atendente
   });
 }
 
@@ -1210,7 +1356,7 @@ async function toggleRoteiroDone(activityId) {
   const item = state.roteiroCache && state.roteiroCache[activityId];
   if (!item) return;
   try {
-    await Api.updateActivity(activityId, { done: !item.done });
+    await Api.updateActivity(activityId, { done: !item.done, progress: item.done ? 'pendente' : 'concluida' });
     state.reminders = await Api.reminders();
     renderRoteiro();
   } catch (err) {
@@ -3107,46 +3253,30 @@ async function sendCommsMessage() {
 // ============ E-mail (caixa de entrada dedicada) ============
 function bindEmailInbox() {
   document.getElementById('email-inbox-filter').addEventListener('input', renderEmailInbox);
-  document.getElementById('btn-new-email-inbox').addEventListener('click', async () => {
-    const typedEmail = document.getElementById('email-inbox-new-typed').value.trim();
-    if (typedEmail) {
-      let contact = state.contacts.find((c) => (c.email || '').toLowerCase() === typedEmail.toLowerCase());
-      if (!contact) {
-        try {
-          contact = await Api.addContact({
-            name: typedEmail,
-            email: typedEmail,
-            ownerId: state.attendantId,
-            attendantId: state.attendantId,
-            source: { channel: 'organico', campaign: '' }
-          });
-          state.contacts.push(contact);
-        } catch (err) {
-          showToast(err.message || 'Erro ao criar contato para esse e-mail');
-          return;
-        }
-      }
-      document.getElementById('email-inbox-new-typed').value = '';
-      populateEmailNewSelect();
-      openEmailCompose(contact.id);
-      return;
-    }
-    const selected = document.getElementById('email-inbox-new-select').value || state.emailInboxLeadId;
-    if (selected) openEmailCompose(selected);
-    else showToast('Cadastre um lead com e-mail primeiro, ou digite um e-mail acima');
-  });
+  document.getElementById('btn-new-email-inbox').addEventListener('click', () => openEmailCompose(null));
   bindEmailTabs();
 }
 
+// Sugestões de endereço enquanto digita no "Para" (só sugere, nunca preenche sozinho)
 function populateEmailNewSelect() {
-  const select = document.getElementById('email-inbox-new-select');
-  const withEmail = state.contacts.filter((c) => c.email);
-  select.innerHTML = withEmail.length
-    ? withEmail.map((c) => `<option value="${c.id}">${escapeHtml(c.name)} — ${escapeHtml(c.email)}</option>`).join('')
-    : '<option value="">Nenhum lead com e-mail cadastrado</option>';
+  document.getElementById('gc-to-suggestions').innerHTML = state.contacts
+    .filter((c) => c.email)
+    .map((c) => `<option value="${escapeHtml(c.email)}">${escapeHtml(c.name)}</option>`)
+    .join('');
 }
 
-state.gmailFolder = { my: 'INBOX', gmail: 'INBOX' };
+// ---------- Caixas Gmail: "my" (de quem está atendendo) e "gmail" (velocitaglobal@gmail.com) ----------
+// Mesmo cliente de e-mail para as duas: pastas, busca, ler, responder, encaminhar,
+// enviar, mover para a lixeira e marcar como não lida. Tudo pela API do Gmail, então o
+// que é enviado aqui aparece em "Enviados" — no CRM e no próprio Gmail.
+state.mail = {
+  my: { folder: 'INBOX', q: '', messages: [], next: null, current: null },
+  gmail: { folder: 'INBOX', q: '', messages: [], next: null, current: null }
+};
+
+function mailAttendantQuery() {
+  return `attendantId=${encodeURIComponent(state.attendantId || '')}`;
+}
 
 function bindEmailTabs() {
   document.querySelectorAll('#view-email .settings-tab').forEach((tab) => {
@@ -3162,125 +3292,273 @@ function bindEmailTabs() {
     });
   });
 
-  document.querySelectorAll('.gmail-folder-pills').forEach((row) => {
-    const forInbox = row.dataset.folderfor;
-    row.querySelectorAll('[data-folder]').forEach((pill) => {
-      pill.addEventListener('click', () => {
-        row.querySelectorAll('[data-folder]').forEach((p) => p.classList.remove('active'));
-        pill.classList.add('active');
-        state.gmailFolder[forInbox] = pill.dataset.folder;
-        if (forInbox === 'my') renderMyInbox();
-        else renderGmailInbox();
-      });
+  document.querySelectorAll('.mail-shell').forEach((shell) => {
+    const box = shell.dataset.mailbox;
+    shell.querySelectorAll('.mail-folder').forEach((btn) =>
+      btn.addEventListener('click', () => {
+        shell.querySelectorAll('.mail-folder').forEach((b) => b.classList.toggle('active', b === btn));
+        state.mail[box].folder = btn.dataset.folder;
+        loadMailList(box);
+      })
+    );
+    let t;
+    shell.querySelector('.mail-search').addEventListener('input', (e) => {
+      clearTimeout(t);
+      t = setTimeout(() => {
+        state.mail[box].q = e.target.value.trim();
+        loadMailList(box);
+      }, 450);
     });
+    shell.querySelector('[data-mail-refresh]').addEventListener('click', () => loadMailList(box));
+    shell.querySelector('[data-mail-compose]').addEventListener('click', () => openMailCompose(box));
+    document.getElementById(`mail-${box}-more`).addEventListener('click', () => loadMailList(box, true));
   });
-}
 
-// Caixas de e-mail baseadas no Gmail: a compartilhada (velocitaglobal@gmail.com) e a
-// pessoal de quem está "Atendendo como X". Mesma UI, fontes de dados diferentes.
-async function renderGenericGmailInbox(opts) {
-  const status = document.getElementById(opts.statusId);
-  const list = document.getElementById(opts.listId);
-  status.innerHTML = '';
-  list.innerHTML = '<div class="empty-state">Carregando...</div>';
-  try {
-    const { email, messages } = await opts.fetchMessages();
-    status.innerHTML = opts.connectedStatusHtml(email);
-    if (opts.bindDisconnect) opts.bindDisconnect();
-
-    if (!messages.length) {
-      list.innerHTML = '<div class="empty-state">Nenhuma mensagem na caixa de entrada.</div>';
-      return;
-    }
-    list.innerHTML = messages
-      .map(
-        (m) => `
-      <div class="list-row clickable" data-inbox-msg="${m.id}" style="align-items:flex-start; ${m.unread ? 'font-weight:700;' : ''}">
-        <div>
-          <div class="name">${escapeHtml(m.from)}</div>
-          <div style="font-size:12px;">${escapeHtml(m.subject)}</div>
-          <div style="font-size:11px; color:var(--vg-text-muted); font-weight:400;">${escapeHtml(m.snippet)}</div>
-        </div>
-      </div>
-    `
-      )
-      .join('');
-    list.querySelectorAll('[data-inbox-msg]').forEach((row) => {
-      row.addEventListener('click', () => loadGenericGmailMessage(opts, row.dataset.inboxMsg));
-    });
-  } catch (err) {
-    status.innerHTML = '';
-    list.innerHTML = `
-      <div class="empty-state" style="text-align:left;">
-        ${escapeHtml(err.message || 'Caixa de entrada não conectada.')}
-      </div>
-      ${opts.connectButtonHtml || ''}
-    `;
-    if (opts.bindConnect) opts.bindConnect();
-  }
-}
-
-async function loadGenericGmailMessage(opts, id) {
-  const view = document.getElementById(opts.viewId);
-  view.innerHTML = '<div class="empty-state">Carregando...</div>';
-  try {
-    const msg = await opts.fetchMessage(id);
-    view.innerHTML = `
-      <div style="padding:16px;">
-        <h3 style="margin:0 0 6px;">${escapeHtml(msg.subject)}</h3>
-        <div style="font-size:12px; color:var(--vg-text-muted); margin-bottom:14px;">
-          De: ${escapeHtml(msg.from)}<br/>Para: ${escapeHtml(msg.to)}<br/>${escapeHtml(msg.date)}
-        </div>
-        <iframe id="gmail-msg-frame" sandbox="" style="width:100%; min-height:400px; border:1px solid var(--vg-border); border-radius:8px; background:#fff;"></iframe>
-      </div>
-    `;
-    // srcdoc vai via propriedade JS, não como atributo HTML interpolado: o corpo do
-    // e-mail quase sempre tem aspas (atributos HTML), e escapeHtml não escapa aspas
-    // (só é seguro para texto solto), o que cortava o atributo srcdoc="..." no meio.
-    document.getElementById('gmail-msg-frame').srcdoc = msg.body || '(sem conteúdo)';
-  } catch (err) {
-    view.innerHTML = `<div class="empty-state">${escapeHtml(err.message || 'Erro ao carregar mensagem')}</div>`;
-  }
+  document.getElementById('mc-close').addEventListener('click', () => (document.getElementById('mail-compose').style.display = 'none'));
+  document.getElementById('mc-send').addEventListener('click', sendMailCompose);
 }
 
 function renderGmailInbox() {
-  return renderGenericGmailInbox({
-    statusId: 'gmail-inbox-status',
-    listId: 'gmail-inbox-list',
-    viewId: 'gmail-message-view',
-    fetchMessages: () => Api.gmailInboxMessages(state.gmailFolder.gmail),
-    fetchMessage: (id) => Api.gmailInboxMessage(id),
-    connectedStatusHtml: (email) =>
-      `${svgIcon('calendar')} Conectado: <strong>${escapeHtml(email)}</strong> <button class="icon-btn danger" id="btn-gmail-disconnect" title="Desconectar" style="margin-left:6px;">${svgIcon('trash')}</button>`,
-    bindDisconnect: () => {
-      document.getElementById('btn-gmail-disconnect').addEventListener('click', async () => {
-        if (!confirm('Desconectar a caixa de entrada do Gmail?')) return;
-        await Api.gmailInboxDisconnect();
-        renderGmailInbox();
-      });
-    },
-    connectButtonHtml: '<button class="btn-primary" id="btn-gmail-connect" style="width:100%; margin-top:10px;">Conectar Gmail</button>',
-    bindConnect: () => {
-      document.getElementById('btn-gmail-connect').addEventListener('click', () => {
-        window.open('/api/google/gmail-oauth-start', 'gmail-connect', 'width=520,height=650');
-      });
-    }
-  });
+  return loadMailList('gmail');
 }
 
 function renderMyInbox() {
   const attendant = state.users.find((u) => u.id === state.attendantId);
   document.getElementById('email-my-tab-name').textContent = attendant ? attendant.name : '-';
-  return renderGenericGmailInbox({
-    statusId: 'my-inbox-status',
-    listId: 'my-inbox-list',
-    viewId: 'my-message-view',
-    fetchMessages: () => Api.myInboxMessages(state.attendantId, state.gmailFolder.my),
-    fetchMessage: (id) => Api.myInboxMessage(state.attendantId, id),
-    connectedStatusHtml: (email) => `${svgIcon('calendar')} Conectado: <strong>${escapeHtml(email)}</strong>`,
-    connectButtonHtml:
-      '<p style="font-size:12px; color:var(--vg-text-muted);">Conecte sua conta Google em Configurações &gt; Usuários (o mesmo botão usado para o Google Calendar já dá acesso à sua caixa de entrada).</p>'
+  return loadMailList('my');
+}
+
+function mailConnectUrl(box) {
+  return box === 'gmail' ? '/api/google/gmail-oauth-start' : `/api/google/oauth-start?userId=${encodeURIComponent(state.attendantId || '')}`;
+}
+
+function renderMailConnectCard(box, message, reconnect) {
+  const who = box === 'gmail' ? 'a caixa velocitaglobal@gmail.com' : 'a sua conta Google';
+  document.getElementById(`mail-${box}-account`).innerHTML = '';
+  document.getElementById(`mail-${box}-more`).style.display = 'none';
+  document.getElementById(`mail-${box}-list`).innerHTML = `
+    <div class="mail-connect">
+      <div class="mail-connect-icon">${svgIcon('email')}</div>
+      <strong>${reconnect ? 'Conexão com o Google expirada' : 'Conta Google não conectada'}</strong>
+      <p>${escapeHtml(message || `Conecte ${who} para ver e enviar e-mails pelo CRM.`)}</p>
+      <button class="btn-primary" data-mail-connect>${reconnect ? 'Reconectar Google' : 'Conectar Google'}</button>
+      <small>Abre uma janela do Google. Autorize com ${box === 'gmail' ? 'velocitaglobal@gmail.com' : 'o seu e-mail'} e volte para cá.</small>
+    </div>`;
+  document.querySelector(`#mail-${box}-list [data-mail-connect]`).addEventListener('click', () => {
+    if (box === 'my' && !state.attendantId) {
+      showToast('Selecione seu nome de atendente primeiro');
+      return openAttendantPicker();
+    }
+    window.open(mailConnectUrl(box), 'google-connect', 'width=520,height=680');
   });
+}
+
+function mailShortDate(m) {
+  const d = m.internalDate ? new Date(m.internalDate) : new Date(m.date);
+  if (isNaN(d)) return '';
+  const today = new Date();
+  return d.toDateString() === today.toDateString()
+    ? d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    : d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '');
+}
+const mailName = (addr) => (addr || '').replace(/<[^>]+>/, '').replace(/"/g, '').trim() || addr || '';
+
+async function loadMailList(box, more) {
+  const st = state.mail[box];
+  const list = document.getElementById(`mail-${box}-list`);
+  if (box === 'my' && !state.attendantId) {
+    list.innerHTML = '<div class="empty-state">Escolha quem está atendendo (botão “Trocar” no topo) para ver a sua caixa.</div>';
+    return;
+  }
+  if (!more) list.innerHTML = '<div class="empty-state">Carregando...</div>';
+  const params = new URLSearchParams({ folder: st.folder });
+  if (st.q) params.set('q', st.q);
+  if (more && st.next) params.set('pageToken', st.next);
+  try {
+    const res = await api(`/api/mail/${box}/messages?${params}&${mailAttendantQuery()}`);
+    st.messages = more ? st.messages.concat(res.messages) : res.messages;
+    st.next = res.nextPageToken;
+    st.email = res.email;
+    document.getElementById(`mail-${box}-account`).innerHTML = `<span class="mail-dot"></span> ${escapeHtml(res.email || '')}${
+      box === 'gmail' ? ` <button class="btn-link" id="mail-gmail-disconnect">Desconectar</button>` : ''
+    }`;
+    const dc = document.getElementById('mail-gmail-disconnect');
+    if (dc)
+      dc.onclick = async () => {
+        if (!confirm('Desconectar a caixa velocitaglobal@gmail.com do CRM?')) return;
+        await Api.gmailInboxDisconnect();
+        loadMailList('gmail');
+      };
+    renderMailList(box);
+  } catch (err) {
+    renderMailConnectCard(box, err.message, err.code === 'GOOGLE_RECONNECT');
+  }
+}
+
+function renderMailList(box) {
+  const st = state.mail[box];
+  const list = document.getElementById(`mail-${box}-list`);
+  document.getElementById(`mail-${box}-more`).style.display = st.next ? '' : 'none';
+  if (!st.messages.length) {
+    list.innerHTML = `<div class="empty-state">${st.q ? 'Nada encontrado para essa busca.' : 'Nenhuma mensagem nesta pasta.'}</div>`;
+    return;
+  }
+  const sentLike = st.folder === 'SENT';
+  list.innerHTML = st.messages
+    .map(
+      (m) => `
+      <button class="mail-row ${m.unread ? 'unread' : ''} ${st.current === m.id ? 'active' : ''}" data-mail-id="${m.id}">
+        <div class="mail-row-top"><span class="mail-who">${escapeHtml(sentLike ? 'Para: ' + mailName(m.to) : mailName(m.from))}</span><span class="mail-date">${mailShortDate(m)}</span></div>
+        <div class="mail-subj">${escapeHtml(m.subject)}</div>
+        <div class="mail-snip">${escapeHtml(m.snippet)}</div>
+      </button>`
+    )
+    .join('');
+  list.querySelectorAll('[data-mail-id]').forEach((row) => row.addEventListener('click', () => openMailMessage(box, row.dataset.mailId)));
+}
+
+async function openMailMessage(box, id) {
+  const st = state.mail[box];
+  st.current = id;
+  document.querySelectorAll(`#mail-${box}-list .mail-row`).forEach((r) => r.classList.toggle('active', r.dataset.mailId === id));
+  const view = document.getElementById(`mail-${box}-view`);
+  view.innerHTML = '<div class="empty-state">Carregando...</div>';
+  try {
+    const msg = await api(`/api/mail/${box}/messages/${id}?${mailAttendantQuery()}`);
+    const item = st.messages.find((m) => m.id === id);
+    if (item) item.unread = false;
+    renderMailList(box);
+    const inTrash = st.folder === 'TRASH';
+    view.innerHTML = `
+      <div class="mail-actions">
+        <button class="btn-secondary btn-sm" data-act="reply">↩ Responder</button>
+        <button class="btn-secondary btn-sm" data-act="replyall">↩ Responder a todos</button>
+        <button class="btn-secondary btn-sm" data-act="forward">↪ Encaminhar</button>
+        <button class="btn-secondary btn-sm" data-act="unread">Marcar como não lida</button>
+        <button class="btn-secondary btn-sm danger" data-act="trash">${inTrash ? 'Restaurar' : 'Excluir'}</button>
+        <a class="btn-link" href="https://mail.google.com/mail/?authuser=${encodeURIComponent(st.email || '')}#all/${encodeURIComponent(msg.threadId || id)}" target="_blank" rel="noopener">Abrir no Gmail</a>
+      </div>
+      <div class="mail-head">
+        <h3>${escapeHtml(msg.subject)}</h3>
+        <div class="mail-meta"><b>De:</b> ${escapeHtml(msg.from)}<br/><b>Para:</b> ${escapeHtml(msg.to)}${msg.cc ? `<br/><b>Cc:</b> ${escapeHtml(msg.cc)}` : ''}<br/>${escapeHtml(msg.date)}</div>
+      </div>
+      <iframe class="mail-frame" sandbox="allow-popups allow-popups-to-escape-sandbox"></iframe>`;
+    // srcdoc via propriedade (não atributo): o HTML do e-mail tem aspas que quebrariam o atributo
+    const frame = view.querySelector('.mail-frame');
+    frame.srcdoc = `<base target="_blank"><style>body{font-family:Arial,sans-serif;font-size:14px;color:#1f2937;margin:12px;word-wrap:break-word}img{max-width:100%;height:auto}</style>${msg.body || '(sem conteúdo)'}`;
+    view.querySelectorAll('[data-act]').forEach((b) =>
+      b.addEventListener('click', async () => {
+        const act = b.dataset.act;
+        if (act === 'reply' || act === 'replyall' || act === 'forward') return openMailCompose(box, msg, act);
+        try {
+          if (act === 'unread') {
+            await api(`/api/mail/${box}/messages/${id}/unread`, { method: 'POST', body: JSON.stringify({ attendantId: state.attendantId }) });
+            if (item) item.unread = true;
+            renderMailList(box);
+            showToast('Marcada como não lida');
+          } else if (act === 'trash') {
+            await api(`/api/mail/${box}/messages/${id}/trash`, { method: 'POST', body: JSON.stringify({ attendantId: state.attendantId, restore: inTrash }) });
+            st.messages = st.messages.filter((m) => m.id !== id);
+            st.current = null;
+            renderMailList(box);
+            view.innerHTML = `<div class="empty-state" style="padding:60px 10px;">${inTrash ? 'Mensagem restaurada para a caixa de entrada.' : 'Mensagem movida para a lixeira.'}</div>`;
+          }
+        } catch (err) {
+          if (err.code === 'GOOGLE_RECONNECT') renderMailConnectCard(box, err.message, true);
+          else showToast(err.message || 'Erro ao executar a ação');
+        }
+      })
+    );
+  } catch (err) {
+    if (err.code === 'GOOGLE_RECONNECT') renderMailConnectCard(box, err.message, true);
+    view.innerHTML = `<div class="empty-state">${escapeHtml(err.message || 'Erro ao carregar mensagem')}</div>`;
+  }
+}
+
+function openMailCompose(box, msg, mode) {
+  state.mailCompose = { box, threadId: null, inReplyTo: null, references: null };
+  const st = state.mail[box];
+  const me = (st.email || '').toLowerCase();
+  const strip = (s) => (s || '').toLowerCase();
+  document.getElementById('mc-from').textContent = `De: ${st.email || (box === 'gmail' ? 'velocitaglobal@gmail.com' : 'sua conta Google')}`;
+  document.getElementById('mc-to-suggestions').innerHTML = state.contacts
+    .filter((c) => c.email)
+    .map((c) => `<option value="${escapeHtml(c.email)}">${escapeHtml(c.name)}</option>`)
+    .join('');
+  let to = '';
+  let cc = '';
+  let subject = '';
+  let text = '';
+  if (msg) {
+    const quoted = `\n\n\nEm ${msg.date}, ${msg.from} escreveu:\n`;
+    const plain = (msg.body || '').replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>/gi, '\n').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim();
+    if (mode === 'forward') {
+      subject = /^(fwd?|enc):/i.test(msg.subject) ? msg.subject : `Enc: ${msg.subject}`;
+      text = `\n\n---------- Mensagem encaminhada ----------\nDe: ${msg.from}\nData: ${msg.date}\nAssunto: ${msg.subject}\nPara: ${msg.to}\n\n${plain}`;
+    } else {
+      const sentByMe = strip(msg.from).includes(me);
+      to = sentByMe ? msg.to : msg.from;
+      if (mode === 'replyall') {
+        cc = [msg.to, msg.cc]
+          .join(',')
+          .split(',')
+          .map((x) => x.trim())
+          .filter((x) => x && !strip(x).includes(me) && !strip(to).includes(strip(x)))
+          .join(', ');
+      }
+      subject = /^re:/i.test(msg.subject) ? msg.subject : `Re: ${msg.subject}`;
+      text = quoted + plain.split('\n').map((l) => '> ' + l).join('\n');
+      Object.assign(state.mailCompose, { threadId: msg.threadId, inReplyTo: msg.messageId, references: [msg.references, msg.messageId].filter(Boolean).join(' ') });
+    }
+  }
+  document.getElementById('mc-title').textContent = mode === 'forward' ? 'Encaminhar' : mode ? 'Responder' : 'Nova mensagem';
+  document.getElementById('mc-to').value = to;
+  document.getElementById('mc-cc').value = cc;
+  document.getElementById('mc-subject').value = subject;
+  const ta = document.getElementById('mc-text');
+  ta.value = text;
+  document.getElementById('mc-status').textContent = '';
+  const panel = document.getElementById('mail-compose');
+  panel.style.display = 'flex';
+  panel.style.flexDirection = 'column';
+  (to ? ta : document.getElementById('mc-to')).focus();
+  if (to) ta.setSelectionRange(0, 0);
+}
+
+async function sendMailCompose() {
+  const c = state.mailCompose;
+  if (!c) return;
+  const to = document.getElementById('mc-to').value.trim();
+  if (!to.includes('@')) return showToast('Informe o destinatário');
+  const btn = document.getElementById('mc-send');
+  btn.disabled = true;
+  document.getElementById('mc-status').textContent = 'Enviando...';
+  try {
+    await api(`/api/mail/${c.box}/send`, {
+      method: 'POST',
+      body: JSON.stringify({
+        attendantId: state.attendantId,
+        to,
+        cc: document.getElementById('mc-cc').value.trim(),
+        subject: document.getElementById('mc-subject').value.trim(),
+        text: document.getElementById('mc-text').value,
+        threadId: c.threadId,
+        inReplyTo: c.inReplyTo,
+        references: c.references
+      })
+    });
+    document.getElementById('mail-compose').style.display = 'none';
+    showToast('E-mail enviado');
+    if (state.mail[c.box].folder === 'SENT') loadMailList(c.box);
+  } catch (err) {
+    document.getElementById('mc-status').textContent = '';
+    if (err.code === 'GOOGLE_RECONNECT') {
+      document.getElementById('mail-compose').style.display = 'none';
+      renderMailConnectCard(c.box, err.message, true);
+    } else showToast(err.message || 'Erro ao enviar');
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 async function renderEmailInbox() {
@@ -3428,10 +3706,31 @@ async function loadNotifDropdown() {
       if (n) n.read = true;
       updateNotifBadges();
       document.getElementById('notif-dropdown').classList.remove('show');
-      switchView('comunicacoes');
-      setTimeout(() => openCommsThread(btn.dataset.notifLead, btn.dataset.notifChannel), 50);
+      openNotificationTarget(btn.dataset.notifLead, btn.dataset.notifChannel);
     });
   });
+}
+
+// Abre a conversa da notificação dentro do próprio lead (aba do canal certo).
+// A antiga tela "Comunicações" saiu do menu, então não é mais usada aqui.
+function openNotificationTarget(leadId, channel) {
+  const lead = state.contacts.find((c) => c.id === leadId);
+  if (!lead) {
+    showToast('Esse lead foi removido do CRM');
+    switchView('mensagens');
+    return;
+  }
+  if (channel === 'email') {
+    switchView('email');
+    openEmailThread(leadId);
+    return;
+  }
+  switchView('leads');
+  openLeadDetail(leadId);
+  setTimeout(() => {
+    const tab = document.querySelector(`#lead-tabs [data-ldtab="${channel}"]`);
+    if (tab) tab.click();
+  }, 80);
 }
 
 function renderMensagens() {
@@ -3461,8 +3760,7 @@ function renderMensagens() {
       if (n) n.read = true;
       updateNotifBadges();
       renderMensagens();
-      switchView('comunicacoes');
-      setTimeout(() => openCommsThread(row.dataset.msgLead, row.dataset.msgChannel), 50);
+      openNotificationTarget(row.dataset.msgLead, row.dataset.msgChannel);
     });
   });
 }
@@ -3497,8 +3795,7 @@ function showBrowserNotification(n) {
   });
   notif.onclick = () => {
     window.focus();
-    switchView('comunicacoes');
-    openCommsThread(n.leadId, n.channel);
+    openNotificationTarget(n.leadId, n.channel);
   };
 }
 
@@ -3551,8 +3848,8 @@ function bindEmailCompose() {
 }
 
 async function openEmailCompose(leadId) {
-  const lead = state.contacts.find((c) => c.id === leadId);
-  if (!lead) return;
+  const lead = leadId ? state.contacts.find((c) => c.id === leadId) : null;
+  if (leadId && !lead) return;
   if (!state.attendantId) {
     showToast('Selecione seu nome de atendente primeiro');
     openAttendantPicker();
@@ -3562,7 +3859,12 @@ async function openEmailCompose(leadId) {
   state.emailAttachments = [];
   state.emailSignatureInserted = false;
 
-  document.getElementById('gc-to').value = lead.email || '(sem e-mail cadastrado)';
+  const toInput = document.getElementById('gc-to');
+  // Sem lead definido (botão "Novo E-mail"): campo "Para" vazio e editável
+  toInput.readOnly = !!lead;
+  toInput.placeholder = lead ? '' : 'Para: digite o e-mail do destinatário';
+  toInput.value = lead ? lead.email || '(sem e-mail cadastrado)' : '';
+  if (!lead) populateEmailNewSelect();
   document.getElementById('gc-subject').value = '';
   document.getElementById('gc-textarea').value = '';
   renderAttachmentChips();
@@ -3574,6 +3876,10 @@ async function openEmailCompose(leadId) {
 
   const modeRow = document.getElementById('gc-reply-mode-row');
   modeRow.style.display = 'none';
+  if (!lead) {
+    toInput.focus();
+    return;
+  }
   try {
     const thread = await Api.leadMessages(leadId, 'email');
     if (thread.length) {
@@ -3661,9 +3967,33 @@ function renderAttachmentChips() {
 }
 
 async function sendComposedEmail() {
-  const leadId = state.emailComposeLeadId;
+  let leadId = state.emailComposeLeadId;
   const subject = document.getElementById('gc-subject').value.trim();
   const text = document.getElementById('gc-textarea').value.trim();
+  if (!leadId) {
+    const typed = document.getElementById('gc-to').value.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(typed)) {
+      showToast('Digite um e-mail válido no campo "Para"');
+      return;
+    }
+    if (!text) {
+      showToast('Escreva uma mensagem antes de enviar');
+      return;
+    }
+    // o e-mail fica guardado na conversa do contato; cria o contato se ainda não existir
+    let contact = state.contacts.find((c) => (c.email || '').toLowerCase() === typed.toLowerCase());
+    if (!contact) {
+      try {
+        contact = await Api.addContact({ name: typed, email: typed, ownerId: state.attendantId, attendantId: state.attendantId, source: { channel: 'organico', campaign: '' } });
+        state.contacts.push(contact);
+      } catch (err) {
+        showToast(err.message || 'Erro ao registrar o destinatário');
+        return;
+      }
+    }
+    leadId = contact.id;
+    state.emailComposeLeadId = leadId;
+  }
   if (!text) {
     showToast('Escreva uma mensagem antes de enviar');
     return;
@@ -3687,18 +4017,82 @@ async function sendComposedEmail() {
   }
 }
 
-// ============ Roteiro do Dia ============
+// ============ Roteiro da Semana ============
+// Visão semanal (segunda a domingo) + painel do dia selecionado. Cada tarefa ganha
+// acompanhamento: status (pendente / em andamento / concluída), se o contato foi feito
+// e observações. O dia também tem um bloco de observações livres por atendente.
 const ROTEIRO_TYPE_ICON = { meeting: svgIcon('calendar'), task: svgIcon('check'), call: svgIcon('call') };
 const ROTEIRO_TYPE_LABEL = { meeting: 'Reunião', task: 'Tarefa', call: 'Chamada' };
+const RT_PROGRESS_LABEL = { pendente: 'Pendente', andamento: 'Em andamento', concluida: 'Concluída' };
+const RT_DOW = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+
+function rtProgress(a) {
+  return a.progress || (a.done ? 'concluida' : 'pendente');
+}
+function dateKey(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function parseDateKey(k) {
+  const [y, m, d] = k.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+function weekStart(d) {
+  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); // segunda-feira
+  return x;
+}
 
 function bindRoteiro() {
   document.getElementById('roteiro-attendant-filter').addEventListener('change', renderRoteiro);
-  document.getElementById('btn-add-roteiro-task').addEventListener('click', () => openCalendarEventModal('task'));
+  document.getElementById('btn-add-roteiro-task').addEventListener('click', () => openCalendarEventModal('task', state.rtDay));
+  document.getElementById('rt-add-day').addEventListener('click', () => openCalendarEventModal('task', state.rtDay));
+  document.getElementById('rt-prev').addEventListener('click', () => shiftRoteiroDay(-7));
+  document.getElementById('rt-next').addEventListener('click', () => shiftRoteiroDay(7));
+  document.getElementById('rt-today').addEventListener('click', () => {
+    state.rtDay = dateKey(new Date());
+    renderRoteiro();
+  });
+  document.getElementById('rt-save-notes').addEventListener('click', saveRoteiroNotes);
+}
+
+function shiftRoteiroDay(days) {
+  const d = parseDateKey(state.rtDay || dateKey(new Date()));
+  d.setDate(d.getDate() + days);
+  state.rtDay = dateKey(d);
+  renderRoteiro();
 }
 
 function fmtTimeOnly(dateStr) {
   const d = new Date(dateStr);
   return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function enrichRoteiroItem(a) {
+  let leadId = a.leadId || null;
+  let leadName = null;
+  let dealTitle = null;
+  const dealId = a.dealId || null;
+  if (a.dealId) {
+    const deal = state.deals.find((d) => d.id === a.dealId);
+    if (deal) {
+      dealTitle = deal.title;
+      leadId = deal.personId;
+      const lead = state.contacts.find((c) => c.id === deal.personId);
+      if (lead) leadName = lead.name;
+    }
+  } else if (a.leadId) {
+    const lead = state.contacts.find((c) => c.id === a.leadId);
+    if (lead) leadName = lead.name;
+  }
+  return { ...a, leadId, dealId, leadName, dealTitle };
+}
+
+function roteiroMatchesAttendant(a, attendantId) {
+  if (!attendantId) return true;
+  if (!a.attendantId && !a.dealId) return true; // tarefa geral: aparece para todos
+  if (a.attendantId) return a.attendantId === attendantId;
+  const deal = state.deals.find((d) => d.id === a.dealId);
+  return !!deal && deal.ownerId === attendantId;
 }
 
 async function renderRoteiro() {
@@ -3711,114 +4105,327 @@ async function renderRoteiro() {
       filterSelect.appendChild(opt);
     });
   }
-  const attendantId = filterSelect.value;
+  if (!state.rtDay) state.rtDay = dateKey(new Date());
+  const ws = weekStart(parseDateKey(state.rtDay));
+  const we = new Date(ws);
+  we.setDate(ws.getDate() + 7);
+  const lastDay = new Date(ws);
+  lastDay.setDate(ws.getDate() + 6);
 
-  const container = document.getElementById('roteiro-list');
-  container.innerHTML = '<div class="empty-state">Carregando...</div>';
+  const fmtShort = (d) => d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '');
+  document.getElementById('rt-range').textContent = `${fmtShort(ws)} – ${fmtShort(lastDay)} ${lastDay.getFullYear()}`;
+  document.getElementById('rt-week').innerHTML = '<div class="empty-state">Carregando...</div>';
 
-  let allActivities;
+  let activities;
+  let notes;
   try {
-    allActivities = await Api.allActivities();
+    [activities, notes] = await Promise.all([Api.allActivities(), Api.dailyNotes(dateKey(ws), dateKey(lastDay))]);
   } catch (err) {
-    container.innerHTML = '<div class="empty-state">Erro ao carregar o roteiro.</div>';
+    document.getElementById('rt-week').innerHTML = '<div class="empty-state">Erro ao carregar o roteiro.</div>';
     return;
   }
-
-  const now = new Date();
-  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
-
-  let items = allActivities.filter((a) => {
-    if (a.type !== 'meeting' && a.type !== 'task' && a.type !== 'call') return false;
-    const d = new Date(a.date);
-    return d >= startOfDay && d < endOfDay;
-  });
-
-  if (attendantId) {
-    items = items.filter((a) => {
-      if (!a.attendantId && !a.dealId) return true; // tarefa geral: aparece para todos
-      if (a.attendantId) return a.attendantId === attendantId;
-      if (a.dealId) {
-        const deal = state.deals.find((d) => d.id === a.dealId);
-        return deal && deal.ownerId === attendantId;
-      }
-      return false;
-    });
-  }
-
-  items = items
-    .map((a) => {
-      let leadId = a.leadId || null;
-      let leadName = null;
-      let dealTitle = null;
-      const dealId = a.dealId || null;
-      if (a.dealId) {
-        const deal = state.deals.find((d) => d.id === a.dealId);
-        if (deal) {
-          dealTitle = deal.title;
-          leadId = deal.personId;
-          const lead = state.contacts.find((c) => c.id === deal.personId);
-          if (lead) leadName = lead.name;
-        }
-      } else if (a.leadId) {
-        const lead = state.contacts.find((c) => c.id === a.leadId);
-        if (lead) leadName = lead.name;
-      }
-      return { ...a, leadId, dealId, leadName, dealTitle };
-    })
+  const attendantId = filterSelect.value;
+  const items = activities
+    .filter((a) => (a.type === 'meeting' || a.type === 'task' || a.type === 'call') && new Date(a.date) >= ws && new Date(a.date) < we)
+    .filter((a) => roteiroMatchesAttendant(a, attendantId))
+    .map(enrichRoteiroItem)
     .sort((x, y) => new Date(x.date) - new Date(y.date));
 
-  if (items.length === 0) {
-    container.innerHTML = '<div class="empty-state">Nenhum compromisso para hoje.</div>';
+  state.rtData = { ws, items, notes };
+  state.roteiroCache = {};
+  items.forEach((it) => (state.roteiroCache[it.id] = it));
+  renderRoteiroWeek();
+  renderRoteiroDay();
+}
+
+function renderRoteiroSummary() {
+  const { items } = state.rtData;
+  const now = new Date();
+  const count = (fn) => items.filter(fn).length;
+  const tiles = [
+    ['Na semana', items.length, ''],
+    ['Concluídas', count((a) => rtProgress(a) === 'concluida'), 'ok'],
+    ['Em andamento', count((a) => rtProgress(a) === 'andamento'), 'mid'],
+    ['Pendentes', count((a) => rtProgress(a) === 'pendente'), ''],
+    ['Atrasadas', count((a) => rtProgress(a) !== 'concluida' && new Date(a.date) < now), 'bad'],
+    ['Contatos feitos', count((a) => a.contacted === true), 'ok'],
+    ['Sem contato', count((a) => a.contacted === false), 'bad']
+  ];
+  document.getElementById('rt-summary').innerHTML = tiles
+    .map(([label, n, cls]) => `<div class="rt-tile ${cls}"><b>${n}</b><span>${label}</span></div>`)
+    .join('');
+}
+
+function renderRoteiroWeek() {
+  renderRoteiroSummary();
+  const { ws, items, notes } = state.rtData;
+  const todayKey = dateKey(new Date());
+  const html = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(ws);
+    d.setDate(ws.getDate() + i);
+    const key = dateKey(d);
+    const dayItems = items.filter((a) => dateKey(new Date(a.date)) === key);
+    const hasNote = notes.some((n) => n.date === key);
+    const doneCount = dayItems.filter((a) => rtProgress(a) === 'concluida').length;
+    const list = dayItems
+      .slice(0, 5)
+      .map(
+        (a) =>
+          `<div class="rt-mini ${rtProgress(a)}"><span class="rt-dot"></span><span class="rt-mini-time">${fmtTimeOnly(a.date)}</span><span class="rt-mini-title">${escapeHtml(a.leadName || a.text || a.dealTitle || '')}</span></div>`
+      )
+      .join('');
+    html.push(`
+      <button class="rt-daycol ${key === todayKey ? 'today' : ''} ${key === state.rtDay ? 'selected' : ''}" data-rt-day="${key}">
+        <div class="rt-dayhead"><span>${RT_DOW[d.getDay()]}</span><b>${d.getDate()}</b>${hasNote ? `<i class="rt-note-flag" title="Tem observações do dia">${svgIcon('note')}</i>` : ''}</div>
+        <div class="rt-daycount">${dayItems.length ? `${doneCount}/${dayItems.length} concluídas` : 'Livre'}</div>
+        <div class="rt-minis">${list}${dayItems.length > 5 ? `<div class="rt-more">+${dayItems.length - 5} mais</div>` : ''}</div>
+      </button>`);
+  }
+  const week = document.getElementById('rt-week');
+  week.innerHTML = html.join('');
+  week.querySelectorAll('[data-rt-day]').forEach((b) =>
+    b.addEventListener('click', () => {
+      state.rtDay = b.dataset.rtDay;
+      week.querySelectorAll('.rt-daycol').forEach((c) => c.classList.toggle('selected', c === b));
+      renderRoteiroDay();
+    })
+  );
+}
+
+function renderRoteiroDay() {
+  const { items, notes } = state.rtData;
+  const day = parseDateKey(state.rtDay);
+  const isToday = state.rtDay === dateKey(new Date());
+  const title = day.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' });
+  document.getElementById('rt-day-title').textContent = title.charAt(0).toUpperCase() + title.slice(1) + (isToday ? ' · Hoje' : '');
+
+  // observações do dia: a do atendente atual é editável, as dos outros aparecem abaixo
+  const mine = notes.find((n) => n.date === state.rtDay && (n.attendantId || null) === (state.attendantId || null));
+  document.getElementById('rt-day-notes').value = mine ? mine.text : '';
+  document.getElementById('rt-notes-status').textContent = mine
+    ? `Salvo às ${new Date(mine.updatedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+    : '';
+  const others = notes.filter((n) => n.date === state.rtDay && n !== mine);
+  document.getElementById('rt-notes-others').innerHTML = others
+    .map((n) => `<div class="rt-other-note"><b>${escapeHtml(n.attendantName || 'Geral')}</b><p>${escapeHtml(n.text)}</p></div>`)
+    .join('');
+
+  const container = document.getElementById('roteiro-list');
+  const dayItems = items.filter((a) => dateKey(new Date(a.date)) === state.rtDay);
+  if (!dayItems.length) {
+    container.innerHTML = '<div class="empty-state">Nenhum compromisso neste dia. Use “+ Tarefa neste dia” para agendar.</div>';
     return;
   }
-
-  state.roteiroCache = {};
-  items.forEach((it) => {
-    state.roteiroCache[it.id] = it;
-  });
-
-  container.innerHTML = items
+  const now = new Date();
+  container.innerHTML = dayItems
     .map((it) => {
+      const prog = rtProgress(it);
       const who = it.leadName || it.dealTitle || it.text;
       const sub = it.dealTitle && it.dealTitle !== who ? it.dealTitle : '';
       const showText = who !== it.text;
+      const late = prog !== 'concluida' && new Date(it.date) < now;
+      const link = it.dealId
+        ? `<button class="btn-link" data-rt-open-deal="${it.dealId}">Abrir negócio</button>`
+        : it.leadId
+          ? `<button class="btn-link" data-rt-open-lead="${it.leadId}">Abrir lead</button>`
+          : '';
       return `
-      <div class="roteiro-item ${it.done ? 'done' : ''}">
-        <button class="activity-check ${it.done ? 'done' : ''}" data-roteiro-toggle="${it.id}" title="${it.done ? 'Marcar como pendente' : 'Marcar como feito'}">${it.done ? '✓' : ''}</button>
+      <div class="roteiro-item rt-full ${prog} ${late ? 'late' : ''}" data-rt-item="${it.id}">
+        <button class="activity-check ${prog === 'concluida' ? 'done' : ''}" data-roteiro-toggle="${it.id}" title="${prog === 'concluida' ? 'Marcar como pendente' : 'Marcar como concluída'}">${prog === 'concluida' ? '✓' : ''}</button>
         <div class="ri-time">${fmtTimeOnly(it.date)}</div>
         <div class="ri-icon">${ROTEIRO_TYPE_ICON[it.type] || svgIcon('note')}</div>
-        <div class="roteiro-item-body" data-roteiro-lead="${it.leadId || ''}" data-roteiro-deal="${it.dealId || ''}">
-          <div class="ri-title">${escapeHtml(who)}</div>
+        <div class="roteiro-item-body">
+          <div class="ri-title">${escapeHtml(who)} ${late ? '<span class="rt-late">Atrasada</span>' : ''}</div>
           ${sub ? `<div class="ri-sub">${escapeHtml(sub)}</div>` : ''}
           ${showText ? `<div class="ri-sub">${escapeHtml(it.text)}</div>` : ''}
-          <div class="ri-meta">${ROTEIRO_TYPE_LABEL[it.type] || it.type}${it.attendantName ? ' · ' + escapeHtml(it.attendantName) : ' · Geral'}</div>
+          <div class="ri-meta">${ROTEIRO_TYPE_LABEL[it.type] || it.type}${it.attendantName ? ' · ' + escapeHtml(it.attendantName) : ' · Geral'} ${link}</div>
+          <div class="rt-controls">
+            <div class="rt-seg" role="group" aria-label="Status">
+              ${Object.entries(RT_PROGRESS_LABEL)
+                .map(([k, l]) => `<button class="${prog === k ? 'on ' + k : ''}" data-rt-progress="${k}">${l}</button>`)
+                .join('')}
+            </div>
+            <div class="rt-seg" role="group" aria-label="Contato feito">
+              <span class="rt-seg-label">Contato feito?</span>
+              <button class="${it.contacted === true ? 'on concluida' : ''}" data-rt-contact="sim">Sim</button>
+              <button class="${it.contacted === false ? 'on bad' : ''}" data-rt-contact="nao">Não</button>
+            </div>
+          </div>
+          <textarea class="rt-obs" rows="2" placeholder="Observações: o que foi conversado, resultado, próximo passo...">${escapeHtml(it.outcomeNotes || '')}</textarea>
+          <div class="rt-obs-foot"><span class="rt-saved">${
+            it.outcomeUpdatedAt
+              ? 'Atualizado em ' + new Date(it.outcomeUpdatedAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+              : ''
+          }</span><button class="btn-secondary btn-sm" data-rt-save-obs>Salvar observação</button></div>
         </div>
-      </div>
-    `;
+      </div>`;
     })
     .join('');
 
-  container.querySelectorAll('[data-roteiro-toggle]').forEach((btn) => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      toggleRoteiroDone(btn.dataset.roteiroToggle);
-    });
+  container.querySelectorAll('[data-roteiro-toggle]').forEach((btn) =>
+    btn.addEventListener('click', () => {
+      const it = state.roteiroCache[btn.dataset.roteiroToggle];
+      updateRoteiroItem(it.id, { progress: rtProgress(it) === 'concluida' ? 'pendente' : 'concluida' });
+    })
+  );
+  container.querySelectorAll('[data-rt-item]').forEach((row) => {
+    const id = row.dataset.rtItem;
+    row.querySelectorAll('[data-rt-progress]').forEach((b) => b.addEventListener('click', () => updateRoteiroItem(id, { progress: b.dataset.rtProgress })));
+    row.querySelectorAll('[data-rt-contact]').forEach((b) =>
+      b.addEventListener('click', () => {
+        const val = b.dataset.rtContact === 'sim';
+        updateRoteiroItem(id, { contacted: state.roteiroCache[id].contacted === val ? null : val });
+      })
+    );
+    const ta = row.querySelector('.rt-obs');
+    const saveObs = () => {
+      if ((state.roteiroCache[id].outcomeNotes || '') === ta.value.trim()) return;
+      updateRoteiroItem(id, { outcomeNotes: ta.value.trim() }, true);
+    };
+    row.querySelector('[data-rt-save-obs]').addEventListener('click', saveObs);
+    ta.addEventListener('blur', saveObs);
   });
+  container.querySelectorAll('[data-rt-open-deal]').forEach((b) =>
+    b.addEventListener('click', () => {
+      switchView('pipeline');
+      openDealDetail(b.dataset.rtOpenDeal);
+    })
+  );
+  container.querySelectorAll('[data-rt-open-lead]').forEach((b) =>
+    b.addEventListener('click', () => {
+      switchView('leads');
+      openLeadDetail(b.dataset.rtOpenLead);
+    })
+  );
+}
 
-  container.querySelectorAll('[data-roteiro-lead], [data-roteiro-deal]').forEach((el) => {
-    if (!el.dataset.roteiroLead && !el.dataset.roteiroDeal) return;
-    el.style.cursor = 'pointer';
-    el.addEventListener('click', () => {
-      if (el.dataset.roteiroDeal) {
-        switchView('pipeline');
-        openDealDetail(el.dataset.roteiroDeal);
-      } else if (el.dataset.roteiroLead) {
-        switchView('leads');
-        openLeadDetail(el.dataset.roteiroLead);
-      }
-    });
+async function updateRoteiroItem(id, changes, quiet) {
+  const payload = { ...changes, outcomeUpdatedAt: new Date().toISOString(), outcomeBy: state.attendantId || null };
+  if (changes.progress) payload.done = changes.progress === 'concluida';
+  try {
+    const updated = await Api.updateActivity(id, payload);
+    const idx = state.rtData.items.findIndex((a) => a.id === id);
+    if (idx >= 0) {
+      state.rtData.items[idx] = enrichRoteiroItem({ ...state.rtData.items[idx], ...updated });
+      state.roteiroCache[id] = state.rtData.items[idx];
+    }
+    if (changes.progress) state.reminders = await Api.reminders();
+    if (quiet) showToast('Observação salva');
+    renderRoteiroWeek();
+    renderRoteiroDay();
+  } catch (err) {
+    showToast('Erro ao atualizar tarefa');
+  }
+}
+
+async function saveRoteiroNotes() {
+  const text = document.getElementById('rt-day-notes').value;
+  try {
+    const res = await Api.saveDailyNote({ date: state.rtDay, attendantId: state.attendantId || null, text });
+    const notes = state.rtData.notes.filter((n) => !(n.date === state.rtDay && (n.attendantId || null) === (state.attendantId || null)));
+    if (!res.removed) notes.push(res);
+    state.rtData.notes = notes;
+    showToast('Observações do dia salvas');
+    renderRoteiroWeek();
+    renderRoteiroDay();
+  } catch (err) {
+    showToast('Erro ao salvar observações');
+  }
+}
+
+// ============ Leads: importar / exportar planilha ============
+// Lê .xlsx/.xls/.csv no navegador (SheetJS) e reconhece os cabeçalhos mais comuns em
+// português e inglês. O servidor cria as empresas que faltarem e pula leads repetidos.
+const LEAD_COLUMN_ALIASES = {
+  name: ['nome', 'name', 'nome completo', 'contato', 'lead', 'cliente', 'responsavel'],
+  email: ['email', 'e-mail', 'e mail', 'mail', 'correio'],
+  phone: ['telefone', 'celular', 'whatsapp', 'whats', 'fone', 'phone', 'tel', 'numero'],
+  company: ['empresa', 'company', 'companhia', 'razao social', 'organizacao', 'loja', 'negocio'],
+  role: ['cargo', 'funcao', 'role', 'posicao'],
+  category: ['categoria', 'category', 'tipo'],
+  setor: ['setor', 'segmento', 'ramo', 'nicho'],
+  cnpj: ['cnpj'],
+  notes: ['observacoes', 'observacao', 'obs', 'notas', 'notes', 'comentarios']
+};
+const normHeader = (h) =>
+  String(h || '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[_.]/g, ' ')
+    .trim();
+
+function bindLeadsImportExport() {
+  const input = document.getElementById('leads-import-file');
+  document.getElementById('btn-import-leads').addEventListener('click', () => input.click());
+  input.addEventListener('change', () => {
+    if (input.files[0]) importLeadsFile(input.files[0]);
+    input.value = '';
   });
+  document.getElementById('btn-export-leads').addEventListener('click', exportLeadsExcel);
+}
+
+async function importLeadsFile(file) {
+  if (!window.XLSX) return showToast('Leitor de planilhas não carregou. Verifique a internet e recarregue a página.');
+  let rows;
+  try {
+    const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+    rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
+  } catch (err) {
+    return showToast('Não consegui ler essa planilha. Use .xlsx, .xls ou .csv.');
+  }
+  if (!rows.length) return showToast('A planilha está vazia.');
+  const headers = Object.keys(rows[0]);
+  const map = {};
+  for (const [field, aliases] of Object.entries(LEAD_COLUMN_ALIASES)) {
+    const h = headers.find((x) => aliases.includes(normHeader(x))) || headers.find((x) => aliases.some((a) => normHeader(x).includes(a)));
+    if (h) map[field] = h;
+  }
+  if (!map.name && !map.email) return showToast('Não achei a coluna de nome nem de e-mail. Use cabeçalhos como "Nome", "E-mail", "Telefone", "Empresa".');
+  const mapped = rows
+    .map((r) => {
+      const o = {};
+      for (const [field, h] of Object.entries(map)) o[field] = String(r[h] ?? '').trim();
+      return o;
+    })
+    .filter((o) => o.name || o.email);
+  const found = Object.entries(map)
+    .map(([f, h]) => `${h} → ${{ name: 'Nome', email: 'E-mail', phone: 'Telefone', company: 'Empresa', role: 'Cargo', category: 'Categoria', setor: 'Setor', cnpj: 'CNPJ', notes: 'Observações' }[f]}`)
+    .join('\n');
+  if (!confirm(`Importar ${mapped.length} leads de "${file.name}"?\n\nColunas reconhecidas:\n${found}\n\nLeads com e-mail ou telefone já cadastrados serão ignorados.`)) return;
+  try {
+    const res = await Api.importContacts({ rows: mapped, fileName: file.name, attendantId: state.attendantId || null, ownerId: state.attendantId || null });
+    [state.contacts, state.organizations] = await Promise.all([Api.contacts(), Api.organizations()]);
+    renderLeads();
+    const pl = (n, um, varios) => `${n} ${n === 1 ? um : varios}`;
+    showToast(`${pl(res.created, 'lead importado', 'leads importados')}${res.skipped ? `, ${pl(res.skipped, 'ignorado', 'ignorados')} (repetido ou sem nome)` : ''}${res.orgsCreated ? `, ${pl(res.orgsCreated, 'empresa criada', 'empresas criadas')}` : ''}.`);
+  } catch (err) {
+    showToast(err.message || 'Erro ao importar a planilha');
+  }
+}
+
+function exportLeadsExcel() {
+  if (!window.XLSX) return showToast('Gerador de planilhas não carregou. Verifique a internet e recarregue a página.');
+  const rows = state.contacts.map((c) => ({
+    Nome: c.name || '',
+    'E-mail': c.email || '',
+    Telefone: c.phone || '',
+    Empresa: c.orgId ? orgName(c.orgId) : '',
+    Categoria: (c.categories || []).join(', '),
+    Origem: c.source ? SOURCE_LABEL[c.source.channel] || c.source.channel : '',
+    Etiquetas: (c.tags || [])
+      .map((id) => (state.tags.find((t) => t.id === id) || {}).name)
+      .filter(Boolean)
+      .join(', '),
+    Responsável: c.ownerId ? userName(c.ownerId) : '',
+    Observações: c.notes || ''
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [{ wch: 28 }, { wch: 30 }, { wch: 18 }, { wch: 26 }, { wch: 18 }, { wch: 20 }, { wch: 24 }, { wch: 18 }, { wch: 40 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Leads');
+  XLSX.writeFile(wb, `leads-velocita-${dateKey(new Date())}.xlsx`);
 }
 
 // ============ Chat da Equipe (interno, somente entre admins/atendentes) ============
@@ -4221,7 +4828,8 @@ function bindGoogleCalendarPopup() {
     if (ev.data.googleCalendarConnected) {
       state.users = await Api.users();
       renderSettings();
-      showToast(`Google Calendar conectado (${ev.data.email})`);
+      showToast(`Conta Google conectada (${ev.data.email})`);
+      if (document.getElementById('view-email').classList.contains('active')) renderMyInbox();
     } else if (ev.data.gmailInboxConnected) {
       showToast(`Caixa de entrada do Gmail conectada (${ev.data.email})`);
       if (document.getElementById('view-email').classList.contains('active')) renderGmailInbox();
@@ -4240,13 +4848,17 @@ function bindCalendarioPage() {
   document.getElementById('btn-save-calendar-event').addEventListener('click', saveCalendarEvent);
 }
 
-function openCalendarEventModal(defaultType) {
+function openCalendarEventModal(defaultType, dayKey) {
+  if (typeof defaultType !== 'string') defaultType = null; // chamado direto pelo clique (recebe o evento)
   document.getElementById('cal-event-title').value = '';
   document.getElementById('cal-event-type').value = defaultType || 'meeting';
 
   const now = new Date();
   now.setMinutes(now.getMinutes() - now.getTimezoneOffset() + 60);
-  document.getElementById('cal-event-date').value = now.toISOString().slice(0, 16);
+  let dateVal = now.toISOString().slice(0, 16);
+  // dia escolhido no Roteiro (que não seja hoje): sugere 09:00 daquele dia
+  if (typeof dayKey === 'string' && dayKey !== dateKey(new Date())) dateVal = `${dayKey}T09:00`;
+  document.getElementById('cal-event-date').value = dateVal;
 
   const attendantSelect = document.getElementById('cal-event-attendant');
   attendantSelect.innerHTML =
@@ -4277,6 +4889,7 @@ async function saveCalendarEvent() {
     text: title,
     date: new Date(dateVal).toISOString(),
     attendantId: document.getElementById('cal-event-attendant').value || null,
+    createdBy: state.attendantId || null,
     done: false,
     dealId: linkType === 'deal' ? linkId : null,
     leadId: linkType === 'lead' ? linkId : null
@@ -4889,37 +5502,31 @@ var AJUDA_SCENES = [
   }
 ];
 
-var ajudaState = { idx: 0, isPlaying: false, isMuted: false, voice: null };
-var ajudaSynth = typeof window !== 'undefined' && 'speechSynthesis' in window ? window.speechSynthesis : null;
+var ajudaState = { idx: 0, isPlaying: false, isMuted: false };
 
-function ajudaPickVoice() {
-  if (!ajudaSynth) return;
-  var voices = ajudaSynth.getVoices() || [];
-  if (!voices.length) return;
-  // Prioriza vozes em português do Brasil que rodam "na nuvem" (localService:
-  // false) — no Chrome, essas costumam ser as vozes do Google, bem mais
-  // naturais que a voz local do sistema operacional (a robótica de sempre).
-  var ptBR = voices.filter((v) => /pt-BR/i.test(v.lang));
-  var scored = (ptBR.length ? ptBR : voices.filter((v) => /^pt/i.test(v.lang))).slice();
-  scored.sort((a, b) => {
-    const score = (v) => (v.localService ? 0 : 2) + (/google/i.test(v.name) ? 1 : 0);
-    return score(b) - score(a);
+// Narração gravada com voz neural (mesma do vídeo de integração), um arquivo por
+// capítulo em /audio/ajuda/NN.mp3 — soa igual em qualquer celular ou computador,
+// sem depender da voz robótica do sistema.
+var ajudaAudio = typeof Audio !== 'undefined' ? new Audio() : null;
+if (ajudaAudio) {
+  ajudaAudio.preload = 'auto';
+  ajudaAudio.addEventListener('ended', () => {
+    if (ajudaState.isPlaying) window._ajudaTimer = setTimeout(ajudaAdvance, 700);
   });
-  ajudaState.voice = scored[0] || voices.find((v) => /^pt/i.test(v.lang)) || voices[0];
-  const statusEl = document.getElementById('ajuda-voice-status');
-  if (statusEl && ajudaState.voice) statusEl.textContent = 'Voz: ' + ajudaState.voice.name;
+  ajudaAudio.addEventListener('timeupdate', ajudaHighlightCaption);
+  ajudaAudio.addEventListener('error', () => {
+    if (ajudaState.isPlaying) showToast('Não foi possível tocar a narração. Verifique a conexão.');
+  });
 }
+const AJUDA_ICONS = {
+  prev: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5"></line></svg>',
+  next: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19"></line></svg>',
+  play: '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>',
+  pause: '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><rect x="5" y="4" width="5" height="16" rx="1"></rect><rect x="14" y="4" width="5" height="16" rx="1"></rect></svg>',
+  sound: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.5 8.5a5 5 0 0 1 0 7"></path><path d="M18.5 5.5a9 9 0 0 1 0 13"></path></svg>',
+  muted: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="22" y1="9" x2="16" y2="15"></line><line x1="16" y1="9" x2="22" y2="15"></line></svg>'
+};
 
-if (ajudaSynth) {
-  ajudaPickVoice();
-  ajudaSynth.addEventListener && ajudaSynth.addEventListener('voiceschanged', ajudaPickVoice);
-  ajudaSynth.onvoiceschanged = ajudaPickVoice;
-}
-
-// Quebra a narração em frases e fala uma de cada vez, com uma pausa curta entre
-// elas — soa bem mais natural do que jogar o parágrafo inteiro como um único
-// utterance (que tende a sair apressado e monótono nos motores de voz do
-// navegador), e evita o corte que alguns navegadores dão em falas muito longas.
 function ajudaSplitSentences(text) {
   return text
     .split(/(?<=[.!?])\s+/)
@@ -4927,43 +5534,55 @@ function ajudaSplitSentences(text) {
     .filter(Boolean);
 }
 
+// Legenda acompanha a fala: destaca a frase que está sendo dita (estimada pelo
+// tamanho de cada frase em relação ao áudio inteiro).
+function ajudaRenderCaption(activeIdx) {
+  const sentences = ajudaSplitSentences(AJUDA_SCENES[ajudaState.idx].narration);
+  document.getElementById('ajuda-caption-text').innerHTML = sentences
+    .map((t, i) => `<span class="${i === activeIdx ? 'on' : i < activeIdx ? 'past' : ''}">${escapeHtml(t)}</span>`)
+    .join(' ');
+}
+function ajudaHighlightCaption() {
+  if (!ajudaAudio || !ajudaAudio.duration) return;
+  const sentences = ajudaSplitSentences(AJUDA_SCENES[ajudaState.idx].narration);
+  const total = sentences.reduce((n, t) => n + t.length, 0);
+  const pos = (ajudaAudio.currentTime / ajudaAudio.duration) * total;
+  let acc = 0;
+  let idx = sentences.length - 1;
+  for (let i = 0; i < sentences.length; i++) {
+    acc += sentences[i].length;
+    if (pos <= acc) {
+      idx = i;
+      break;
+    }
+  }
+  if (idx !== ajudaState.captionIdx) {
+    ajudaState.captionIdx = idx;
+    ajudaRenderCaption(idx);
+  }
+  const chapterPct = ajudaAudio.currentTime / ajudaAudio.duration;
+  const pct = ((ajudaState.idx + chapterPct) / AJUDA_SCENES.length) * 100;
+  document.getElementById('ajuda-scrubber-fill').style.width = pct + '%';
+}
+
 function ajudaSpeakScene(sceneIdx) {
-  if (!ajudaSynth || ajudaState.isMuted) {
-    if (ajudaState.isPlaying) {
-      window._ajudaTimer = setTimeout(ajudaAdvance, 6000);
-    }
-    return;
-  }
-  ajudaSynth.cancel();
-  const sentences = ajudaSplitSentences(AJUDA_SCENES[sceneIdx].narration);
-  const rate = parseFloat(document.getElementById('ajuda-rate-select').value || '1');
-  let i = 0;
-  function speakNext() {
-    if (i >= sentences.length) {
-      if (ajudaState.isPlaying && sceneIdx === ajudaState.idx) ajudaAdvance();
-      return;
-    }
-    const utter = new SpeechSynthesisUtterance(sentences[i]);
-    if (ajudaState.voice) utter.voice = ajudaState.voice;
-    utter.lang = ajudaState.voice ? ajudaState.voice.lang : 'pt-BR';
-    utter.rate = rate * 0.95;
-    utter.pitch = 1;
-    i++;
-    utter.onend = () => {
-      if (sceneIdx !== ajudaState.idx) return; // usuário já pulou de capítulo
-      window._ajudaTimer = setTimeout(speakNext, 160);
-    };
-    utter.onerror = () => {
-      if (sceneIdx !== ajudaState.idx) return;
-      window._ajudaTimer = setTimeout(speakNext, 300);
-    };
-    ajudaSynth.speak(utter);
-  }
-  speakNext();
+  ajudaStopSpeaking();
+  if (!ajudaAudio) return;
+  ajudaAudio.src = `/audio/ajuda/${String(sceneIdx + 1).padStart(2, '0')}.mp3`;
+  ajudaAudio.playbackRate = parseFloat(document.getElementById('ajuda-rate-select').value || '1');
+  ajudaAudio.muted = ajudaState.isMuted;
+  ajudaState.captionIdx = -1;
+  const p = ajudaAudio.play();
+  if (p && p.catch)
+    p.catch(() => {
+      // o navegador bloqueou o som (precisa de um toque do usuário): volta para "pausado"
+      ajudaState.isPlaying = false;
+      ajudaUpdatePlayButton();
+    });
 }
 
 function ajudaStopSpeaking() {
-  if (ajudaSynth) ajudaSynth.cancel();
+  if (ajudaAudio) ajudaAudio.pause();
   if (window._ajudaTimer) clearTimeout(window._ajudaTimer);
 }
 
@@ -4971,6 +5590,7 @@ function ajudaAdvance() {
   if (ajudaState.idx < AJUDA_SCENES.length - 1) {
     ajudaState.idx++;
     ajudaRenderScene();
+    if (ajudaState.isPlaying) ajudaSpeakScene(ajudaState.idx);
   } else {
     ajudaState.isPlaying = false;
     ajudaUpdatePlayButton();
@@ -4982,17 +5602,41 @@ function ajudaGoTo(i) {
   ajudaStopSpeaking();
   ajudaRenderScene();
   if (ajudaState.isPlaying) ajudaSpeakScene(ajudaState.idx);
+  document.querySelector('#view-ajuda .ajuda-player').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function ajudaUpdatePlayButton() {
-  document.getElementById('ajuda-btn-play').innerHTML = ajudaState.isPlaying ? '⏸ Pausar' : '▶ Reproduzir';
+  document.getElementById('ajuda-btn-play').innerHTML = ajudaState.isPlaying ? `${AJUDA_ICONS.pause} Pausar` : `${AJUDA_ICONS.play} Reproduzir`;
 }
 
 function ajudaTogglePlay() {
   ajudaState.isPlaying = !ajudaState.isPlaying;
   ajudaUpdatePlayButton();
-  if (ajudaState.isPlaying) ajudaSpeakScene(ajudaState.idx);
-  else ajudaStopSpeaking();
+  if (ajudaState.isPlaying) {
+    // retoma de onde parou se for o mesmo capítulo
+    if (ajudaAudio && ajudaAudio.src && ajudaAudio.src.endsWith(`/${String(ajudaState.idx + 1).padStart(2, '0')}.mp3`) && ajudaAudio.currentTime > 0 && !ajudaAudio.ended) {
+      ajudaAudio.play().catch(() => {});
+    } else ajudaSpeakScene(ajudaState.idx);
+  } else ajudaStopSpeaking();
+}
+
+// Os quadros de exemplo foram desenhados para tela de computador: no celular eles
+// são reduzidos proporcionalmente para caber inteiros, sem barra de rolagem lateral.
+function ajudaFitVisual(visual) {
+  const frame = visual.querySelector('.mock-frame');
+  visual.style.height = '';
+  if (!frame) return;
+  frame.style.transform = '';
+  frame.style.width = '';
+  const base = 720;
+  const cs = getComputedStyle(visual);
+  const have = visual.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  if (have >= base) return;
+  const scale = have / base;
+  frame.style.width = base + 'px';
+  frame.style.transformOrigin = 'top left';
+  frame.style.transform = `scale(${scale})`;
+  visual.style.height = Math.ceil(frame.offsetHeight * scale + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom)) + "px";
 }
 
 function ajudaRenderScene() {
@@ -5001,8 +5645,9 @@ function ajudaRenderScene() {
   document.getElementById('ajuda-scene-title').textContent = s.title;
   const visual = document.getElementById('ajuda-scene-visual');
   visual.innerHTML = s.visual;
-  document.getElementById('ajuda-caption-text').textContent = s.narration;
-  const pct = (ajudaState.idx / (AJUDA_SCENES.length - 1)) * 100;
+  ajudaFitVisual(visual);
+  ajudaRenderCaption(-1);
+  const pct = (ajudaState.idx / AJUDA_SCENES.length) * 100;
   document.getElementById('ajuda-scrubber-fill').style.width = pct + '%';
   document.querySelectorAll('.ajuda-chapter-card').forEach((btn, i) => {
     btn.classList.toggle('active', i === ajudaState.idx);
@@ -5084,13 +5729,24 @@ function bindAjuda() {
   document.getElementById('ajuda-btn-play').addEventListener('click', ajudaTogglePlay);
   document.getElementById('ajuda-btn-prev').addEventListener('click', () => ajudaGoTo(ajudaState.idx - 1));
   document.getElementById('ajuda-btn-next').addEventListener('click', () => ajudaGoTo(ajudaState.idx + 1));
-  document.getElementById('ajuda-btn-mute').addEventListener('click', (e) => {
+  const muteBtn = document.getElementById('ajuda-btn-mute');
+  muteBtn.addEventListener('click', () => {
     ajudaState.isMuted = !ajudaState.isMuted;
-    e.target.textContent = ajudaState.isMuted ? '🔇' : '🔊';
-    if (ajudaState.isMuted) ajudaStopSpeaking();
+    if (ajudaAudio) ajudaAudio.muted = ajudaState.isMuted;
+    muteBtn.innerHTML = ajudaState.isMuted ? AJUDA_ICONS.muted : AJUDA_ICONS.sound;
+    muteBtn.title = ajudaState.isMuted ? 'Ativar som' : 'Silenciar';
   });
-  document.getElementById('ajuda-rate-select').addEventListener('change', () => {
-    if (ajudaState.isPlaying) ajudaSpeakScene(ajudaState.idx);
+  document.getElementById('ajuda-rate-select').addEventListener('change', (e) => {
+    if (ajudaAudio) ajudaAudio.playbackRate = parseFloat(e.target.value || '1');
+  });
+  document.getElementById('ajuda-btn-prev').innerHTML = AJUDA_ICONS.prev;
+  document.getElementById('ajuda-btn-next').innerHTML = AJUDA_ICONS.next;
+  muteBtn.innerHTML = AJUDA_ICONS.sound;
+  ajudaUpdatePlayButton();
+  document.getElementById('ajuda-voice-status').textContent = 'Narração com voz neural';
+  window.addEventListener('resize', () => {
+    const v = document.getElementById('ajuda-scene-visual');
+    if (v && document.getElementById('view-ajuda').classList.contains('active')) ajudaFitVisual(v);
   });
 }
 

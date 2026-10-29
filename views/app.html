@@ -2,9 +2,16 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
 <title>Velocita Global | CRM</title>
 <link rel="icon" href="/img/logo.webp" />
+<link rel="manifest" href="/manifest.webmanifest" />
+<meta name="theme-color" content="#F4821F" />
+<link rel="apple-touch-icon" href="/img/apple-touch-icon.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="Velocita" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
 <link rel="stylesheet" href="/css/style.css" />
 <script>
   try {
@@ -59,6 +66,13 @@
     <div class="body-wrap">
       <!-- Sidebar -->
       <aside class="sidebar" id="sidebar">
+        <div class="sidebar-head">
+          <span>Menu</span>
+          <button type="button" id="sidebar-close" class="sidebar-close" title="Ocultar menu" aria-label="Ocultar menu">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg>
+            Ocultar
+          </button>
+        </div>
         <div class="sidebar-link active" data-view="dashboard">
           <svg class="si" viewBox="0 0 24 24"><rect x="3" y="12" width="4" height="9" rx="1"></rect><rect x="10" y="7" width="4" height="14" rx="1"></rect><rect x="17" y="3" width="4" height="18" rx="1"></rect></svg>
           Dashboard
@@ -124,6 +138,18 @@
 
         <!-- ===== DASHBOARD ===== -->
         <section class="view active" id="view-dashboard">
+          <div class="pwa-card">
+            <img src="/img/icon-192.png" alt="" class="pwa-icon" />
+            <div class="pwa-text">
+              <strong>App no celular e notificações</strong>
+              <div id="pwa-status">Verificando...</div>
+            </div>
+            <div class="pwa-actions">
+              <button class="btn-secondary" id="btn-pwa-install" style="display:none;">Instalar app</button>
+              <button class="btn-primary" id="btn-pwa-toggle">Ativar notificações</button>
+              <button class="btn-link" id="btn-pwa-test" style="display:none;">Enviar teste</button>
+            </div>
+          </div>
           <div class="stat-grid">
             <div class="stat-card">
               <div class="label">Negócios em aberto</div>
@@ -168,15 +194,37 @@
         <!-- ===== ROTEIRO DO DIA ===== -->
         <section class="view" id="view-roteiro">
           <div class="pipeline-header">
-            <h2>Roteiro do Dia</h2>
+            <h2>Roteiro da Semana</h2>
             <button class="btn-primary" id="btn-add-roteiro-task">+ Nova Tarefa</button>
           </div>
-          <div class="table-toolbar">
+          <div class="table-toolbar roteiro-toolbar">
             <select id="roteiro-attendant-filter" class="filter-input" style="max-width:260px;">
               <option value="">Todos os atendentes</option>
             </select>
+            <div class="rt-weeknav">
+              <button class="btn-secondary" id="rt-prev" title="Semana anterior">‹</button>
+              <button class="btn-secondary" id="rt-today">Hoje</button>
+              <button class="btn-secondary" id="rt-next" title="Próxima semana">›</button>
+              <span class="rt-range" id="rt-range"></span>
+            </div>
           </div>
-          <div id="roteiro-list"></div>
+          <div class="rt-summary" id="rt-summary"></div>
+          <div class="rt-week" id="rt-week"></div>
+          <div class="rt-day">
+            <div class="rt-day-head">
+              <h3 id="rt-day-title">Hoje</h3>
+              <button class="btn-secondary" id="rt-add-day">+ Tarefa neste dia</button>
+            </div>
+            <div class="rt-day-grid">
+              <div id="roteiro-list"></div>
+              <aside class="rt-notes">
+                <label for="rt-day-notes">Observações do dia</label>
+                <textarea id="rt-day-notes" rows="8" placeholder="Como foi o dia: contatos, combinados, pendências, ideias..."></textarea>
+                <div class="rt-notes-foot"><span id="rt-notes-status"></span><button class="btn-primary" id="rt-save-notes">Salvar observações</button></div>
+                <div class="rt-notes-others" id="rt-notes-others"></div>
+              </aside>
+            </div>
+          </div>
         </section>
 
         <!-- ===== PIPELINE ===== -->
@@ -192,7 +240,12 @@
         <section class="view" id="view-leads">
           <div class="pipeline-header">
             <h2>Leads</h2>
-            <button class="btn-primary" id="btn-add-contact">+ Adicionar Lead</button>
+            <div class="header-actions">
+              <button class="btn-secondary" id="btn-export-leads" title="Baixar todos os leads em Excel">Exportar Excel</button>
+              <button class="btn-secondary" id="btn-import-leads" title="Anexar uma planilha Excel ou CSV com leads">Importar Excel</button>
+              <input type="file" id="leads-import-file" accept=".xlsx,.xls,.csv" hidden />
+              <button class="btn-primary" id="btn-add-contact">+ Adicionar Lead</button>
+            </div>
           </div>
           <div class="table-toolbar">
             <input type="text" class="filter-input" id="leads-filter" placeholder="Buscar por nome, e-mail ou empresa..." />
@@ -281,9 +334,6 @@
           <div id="email-tab-leads" class="settings-panel">
             <div class="comms-layout">
               <div class="comms-list-col">
-                <select id="email-inbox-new-select" style="width:100%; margin-bottom:6px; padding:9px 8px; border-radius:7px; border:1.5px solid var(--vg-border);"></select>
-                <div style="text-align:center; font-size:11px; color:var(--vg-text-muted); margin-bottom:6px;">— ou —</div>
-                <input type="email" id="email-inbox-new-typed" placeholder="Digite um e-mail (não precisa ser um lead)" style="width:100%; margin-bottom:6px; padding:9px 8px; border-radius:7px; border:1.5px solid var(--vg-border);" />
                 <button class="btn-primary" id="btn-new-email-inbox" style="width:100%; margin-bottom:10px;"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg> Novo E-mail</button>
                 <input type="text" class="filter-input" id="email-inbox-filter" placeholder="Buscar conversa..." style="width:100%; margin-bottom:10px;" />
                 <div id="email-inbox-list"></div>
@@ -301,40 +351,57 @@
           </div>
 
           <div id="email-tab-my" class="settings-panel" style="display:none;">
-            <div class="comms-layout">
-              <div class="comms-list-col">
-                <div class="tab-pills gmail-folder-pills" data-folderfor="my">
-                  <button class="tab-pill active" data-folder="INBOX">Recebidos</button>
-                  <button class="tab-pill" data-folder="SENT">Enviados</button>
-                  <button class="tab-pill" data-folder="SPAM">Spam</button>
-                  <button class="tab-pill" data-folder="TRASH">Lixeira</button>
+            <div class="mail-shell" data-mailbox="my">
+              <div class="mail-topbar">
+                <div class="mail-account" id="mail-my-account"></div>
+                <div class="mail-top-actions">
+                  <button class="btn-secondary btn-sm" data-mail-refresh>Atualizar</button>
+                  <button class="btn-primary btn-sm" data-mail-compose>Escrever</button>
                 </div>
-                <div id="my-inbox-status" class="empty-state" style="text-align:left; padding:0 0 12px;"></div>
-                <div id="my-inbox-list"></div>
               </div>
-              <div class="comms-chat-col">
-                <div id="my-message-view" class="empty-state" style="padding:60px 10px;">Selecione uma mensagem à esquerda.</div>
+              <div class="mail-cols">
+                <div class="mail-list-col">
+                  <div class="mail-folders">
+                    <button class="mail-folder active" data-folder="INBOX">Recebidos</button>
+                    <button class="mail-folder" data-folder="SENT">Enviados</button>
+                    <button class="mail-folder" data-folder="SPAM">Spam</button>
+                    <button class="mail-folder" data-folder="TRASH">Lixeira</button>
+                  </div>
+                  <input type="search" class="filter-input mail-search" placeholder="Buscar e-mails (remetente, assunto, texto)..." />
+                  <div class="mail-list" id="mail-my-list"></div>
+                  <button class="btn-secondary btn-sm mail-more" id="mail-my-more" style="display:none;">Carregar mais</button>
+                </div>
+                <div class="mail-view" id="mail-my-view"><div class="empty-state" style="padding:60px 10px;">Selecione uma mensagem à esquerda.</div></div>
               </div>
             </div>
           </div>
 
           <div id="email-tab-gmail" class="settings-panel" style="display:none;">
-            <div class="comms-layout">
-              <div class="comms-list-col">
-                <div class="tab-pills gmail-folder-pills" data-folderfor="gmail">
-                  <button class="tab-pill active" data-folder="INBOX">Recebidos</button>
-                  <button class="tab-pill" data-folder="SENT">Enviados</button>
-                  <button class="tab-pill" data-folder="SPAM">Spam</button>
-                  <button class="tab-pill" data-folder="TRASH">Lixeira</button>
+            <div class="mail-shell" data-mailbox="gmail">
+              <div class="mail-topbar">
+                <div class="mail-account" id="mail-gmail-account"></div>
+                <div class="mail-top-actions">
+                  <button class="btn-secondary btn-sm" data-mail-refresh>Atualizar</button>
+                  <button class="btn-primary btn-sm" data-mail-compose>Escrever</button>
                 </div>
-                <div id="gmail-inbox-status" class="empty-state" style="text-align:left; padding:0 0 12px;"></div>
-                <div id="gmail-inbox-list"></div>
               </div>
-              <div class="comms-chat-col">
-                <div id="gmail-message-view" class="empty-state" style="padding:60px 10px;">Selecione uma mensagem à esquerda.</div>
+              <div class="mail-cols">
+                <div class="mail-list-col">
+                  <div class="mail-folders">
+                    <button class="mail-folder active" data-folder="INBOX">Recebidos</button>
+                    <button class="mail-folder" data-folder="SENT">Enviados</button>
+                    <button class="mail-folder" data-folder="SPAM">Spam</button>
+                    <button class="mail-folder" data-folder="TRASH">Lixeira</button>
+                  </div>
+                  <input type="search" class="filter-input mail-search" placeholder="Buscar e-mails (remetente, assunto, texto)..." />
+                  <div class="mail-list" id="mail-gmail-list"></div>
+                  <button class="btn-secondary btn-sm mail-more" id="mail-gmail-more" style="display:none;">Carregar mais</button>
+                </div>
+                <div class="mail-view" id="mail-gmail-view"><div class="empty-state" style="padding:60px 10px;">Selecione uma mensagem à esquerda.</div></div>
               </div>
             </div>
           </div>
+
         </section>
 
         <!-- ===== NOTIFICAÇÕES (mensagens recebidas em todos os canais) ===== -->
@@ -567,11 +634,11 @@
             </div>
 
             <div class="ajuda-transport">
-              <button class="btn-secondary" id="ajuda-btn-prev" title="Capítulo anterior">⏮</button>
-              <button class="btn-primary" id="ajuda-btn-play" title="Reproduzir / Pausar">▶ Reproduzir</button>
-              <button class="btn-secondary" id="ajuda-btn-next" title="Próximo capítulo">⏭</button>
-              <button class="btn-secondary" id="ajuda-btn-mute" title="Silenciar narração">🔊</button>
-              <select class="btn-secondary" id="ajuda-rate-select" title="Velocidade da narração">
+              <button class="btn-secondary ajuda-icon-btn" id="ajuda-btn-prev" title="Capítulo anterior" aria-label="Capítulo anterior"></button>
+              <button class="btn-primary ajuda-play-btn" id="ajuda-btn-play" title="Reproduzir / Pausar">Reproduzir</button>
+              <button class="btn-secondary ajuda-icon-btn" id="ajuda-btn-next" title="Próximo capítulo" aria-label="Próximo capítulo"></button>
+              <button class="btn-secondary ajuda-icon-btn" id="ajuda-btn-mute" title="Silenciar" aria-label="Silenciar"></button>
+              <select class="btn-secondary ajuda-rate" id="ajuda-rate-select" title="Velocidade da narração">
                 <option value="0.9">0.9×</option>
                 <option value="1" selected>1×</option>
                 <option value="1.15">1.15×</option>
@@ -1374,7 +1441,8 @@
     </div>
     <div class="gc-body" id="gc-body">
       <div class="gc-field">
-        <input type="text" id="gc-to" readonly />
+        <input type="text" id="gc-to" readonly list="gc-to-suggestions" autocomplete="off" />
+        <datalist id="gc-to-suggestions"></datalist>
       </div>
       <div id="gc-reply-mode-row" style="display:none; gap:8px; padding:8px 16px; border-bottom:1px solid var(--vg-border);">
         <button type="button" class="btn-secondary" id="gc-mode-reply" style="padding:5px 12px; font-size:12px;">↩ Responder</button>
@@ -1401,6 +1469,26 @@
     </div>
   </div>
 
+  <!-- ===== Escrever e-mail pelas caixas Gmail (Minha Caixa / compartilhada) ===== -->
+  <div id="mail-compose" class="gmail-compose" style="display:none;">
+    <div class="gc-header">
+      <span id="mc-title">Nova mensagem</span>
+      <div class="gc-header-actions"><button id="mc-close" title="Fechar">&times;</button></div>
+    </div>
+    <div class="gc-body">
+      <div class="gc-field mc-from" id="mc-from"></div>
+      <div class="gc-field"><input type="text" id="mc-to" placeholder="Para (separe vários com vírgula)" list="mc-to-suggestions" /></div>
+      <datalist id="mc-to-suggestions"></datalist>
+      <div class="gc-field"><input type="text" id="mc-cc" placeholder="Cc (opcional)" /></div>
+      <div class="gc-field"><input type="text" id="mc-subject" placeholder="Assunto" /></div>
+      <textarea id="mc-text" placeholder="Escreva sua mensagem..."></textarea>
+    </div>
+    <div class="gc-footer">
+      <div class="gc-footer-left"><button id="mc-send" class="gc-send-btn">Enviar</button><span id="mc-status" class="mc-status"></span></div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="/js/app.js"></script>
   <script src="/js/margem.js"></script>
 </body>
