@@ -5,25 +5,63 @@ const path = require('path');
 const nodemailer = require('nodemailer');
 const webpush = require('web-push');
 const jwt = require('jsonwebtoken');
+const zlib = require('zlib');
+const fs = require('fs');
 const db = require('./db');
 
-const APP_PASSWORD = 'Velocita1';
+// Defina APP_PASSWORD nas variáveis de ambiente do Render para trocar a senha de
+// acesso sem mexer no código (o repositório é público).
+const APP_PASSWORD = process.env.APP_PASSWORD || 'Velocita1';
 const PORT = process.env.PORT || 3000;
 
 const app = express();
+app.disable('x-powered-by');
 // Necessário no Render (atrás de proxy) para que req.protocol reporte "https"
 // corretamente — usado para montar a redirect_uri do OAuth do Google Calendar.
 app.set('trust proxy', 1);
-// Limite maior que o padrão (100kb) porque fotos/áudios do Chat da Equipe e
-// anexos de e-mail chegam em base64 dentro do corpo JSON — uma foto de celular
-// sozinha já passa de 1-5MB antes mesmo da inflação de ~33% do base64.
+
+// Cabeçalhos básicos de segurança e "não indexar" (o CRM é privado).
+app.use((req, res, next) => {
+  res.set({
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'SAMEORIGIN',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+    'X-Robots-Tag': 'noindex, nofollow'
+  });
+  if (req.secure) res.set('Strict-Transport-Security', 'max-age=15552000');
+  next();
+});
+
+// Compressão gzip das respostas de texto (HTML, CSS, JS e JSON da API). O app.js
+// sozinho tem ~260KB; comprimido cai para ~60KB, o que pesa muito no celular.
+const COMPRESSIBLE = /^(text\/|application\/(json|javascript|manifest\+json)|image\/svg)/;
+app.use((req, res, next) => {
+  if (!/\bgzip\b/.test(req.headers['accept-encoding'] || '')) return next();
+  const send = res.send.bind(res);
+  res.send = (body) => {
+    const type = String(res.get('Content-Type') || '');
+    const size = typeof body === 'string' ? Buffer.byteLength(body) : Buffer.isBuffer(body) ? body.length : 0;
+    if (size < 1024 || res.get('Content-Encoding') || !COMPRESSIBLE.test(type) || req.method === 'HEAD') return send(body);
+    res.set('Content-Encoding', 'gzip');
+    res.vary('Accept-Encoding');
+    res.removeHeader('Content-Length');
+    return send(zlib.gzipSync(typeof body === 'string' ? Buffer.from(body) : body));
+  };
+  next();
+});
+
+// Limite maior que o padrão (100kb) porque anexos de e-mail e do Chat da Equipe
+// chegam em base64 dentro do corpo JSON — uma foto de celular sozinha já passa de
+// 1-5MB antes mesmo da inflação de ~33% do base64.
 app.use(express.json({ limit: '20mb' }));
 app.use(
   session({
-    secret: 'velocita-global-crm-secret',
+    // a sessão em memória já some a cada reinício (o cookie "lembrar" a recria),
+    // então um segredo aleatório por boot é suficiente quando não há SESSION_SECRET
+    secret: process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex'),
     resave: false,
     saveUninitialized: false,
-    cookie: { maxAge: 1000 * 60 * 60 * 12 } // 12h
+    cookie: { maxAge: 1000 * 60 * 60 * 12, httpOnly: true, sameSite: 'lax' } // 12h
   })
 );
 
@@ -68,14 +106,40 @@ function requirePageAuth(req, res, next) {
   return res.redirect('/login.html');
 }
 
+// Freio contra tentativa de adivinhar a senha: 10 erros por IP a cada 15 minutos.
+const loginFailures = new Map();
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+function tooManyLoginFailures(ip) {
+  const entry = loginFailures.get(ip);
+  if (!entry || Date.now() - entry.first > LOGIN_WINDOW_MS) return false;
+  return entry.count >= 10;
+}
+function registerLoginFailure(ip) {
+  const entry = loginFailures.get(ip);
+  if (!entry || Date.now() - entry.first > LOGIN_WINDOW_MS) loginFailures.set(ip, { first: Date.now(), count: 1 });
+  else entry.count++;
+  if (loginFailures.size > 5000) loginFailures.clear();
+}
+
+function passwordMatches(password) {
+  const a = Buffer.from(String(password || ''));
+  const b = Buffer.from(APP_PASSWORD);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
 app.post('/api/login', (req, res) => {
   const { password } = req.body || {};
-  if (password === APP_PASSWORD) {
+  if (tooManyLoginFailures(req.ip)) {
+    return res.status(429).json({ error: 'Muitas tentativas erradas. Aguarde 15 minutos e tente de novo.' });
+  }
+  if (passwordMatches(password)) {
+    loginFailures.delete(req.ip);
     req.session.authenticated = true;
     const token = jwt.sign({ ok: 1 }, authSecret(), { expiresIn: '60d' });
     res.cookie(REMEMBER_COOKIE, token, { httpOnly: true, sameSite: 'lax', secure: req.secure, maxAge: 60 * 24 * 60 * 60 * 1000 });
     return res.json({ ok: true });
   }
+  registerLoginFailure(req.ip);
   return res.status(401).json({ error: 'Senha incorreta' });
 });
 
@@ -88,8 +152,52 @@ app.get('/api/session', (req, res) => {
   res.json({ authenticated: restoreFromCookie(req) });
 });
 
+// Para o Render saber se o serviço está de pé (Health Check Path: /healthz).
+app.get('/healthz', (req, res) => res.json({ ok: true }));
+
+app.get('/robots.txt', (req, res) => res.type('text/plain').send('User-agent: *\nDisallow: /\n'));
+
 // ---------- Static assets (public, non-sensitive) ----------
-app.use(express.static(path.join(__dirname, 'public')));
+// Arquivos de texto (JS/CSS/HTML) saem já comprimidos de um cache em memória.
+// Quando a URL tem ?v= (versão do deploy), o navegador pode guardar por 1 ano.
+const PUBLIC_DIR = path.join(__dirname, 'public');
+const gzipCache = new Map();
+app.use((req, res, next) => {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+  if (!/\.(js|css|html|webmanifest|svg|json)$/.test(req.path)) return next();
+  if (!/\bgzip\b/.test(req.headers['accept-encoding'] || '')) return next();
+  let file;
+  try {
+    file = path.join(PUBLIC_DIR, path.normalize(decodeURIComponent(req.path)));
+  } catch (e) {
+    return next();
+  }
+  if (!file.startsWith(PUBLIC_DIR + path.sep)) return next();
+  fs.stat(file, (err, st) => {
+    if (err || !st.isFile()) return next();
+    const key = `${file}:${st.mtimeMs}`;
+    let entry = gzipCache.get(key);
+    if (!entry) {
+      const raw = fs.readFileSync(file);
+      entry = { body: zlib.gzipSync(raw), etag: `W/"${st.size.toString(16)}-${Math.floor(st.mtimeMs).toString(16)}"` };
+      gzipCache.set(key, entry);
+    }
+    res.type(path.extname(file));
+    res.set({ 'Content-Encoding': 'gzip', ETag: entry.etag, Vary: 'Accept-Encoding' });
+    res.set('Cache-Control', req.query.v ? 'public, max-age=31536000, immutable' : 'no-cache');
+    if (req.headers['if-none-match'] === entry.etag) return res.status(304).end();
+    if (req.method === 'HEAD') return res.end();
+    res.end(entry.body);
+  });
+});
+app.use(
+  express.static(PUBLIC_DIR, {
+    setHeaders: (res, filePath) => {
+      // imagens e áudios da Ajuda quase nunca mudam
+      if (/[\\/](img|audio)[\\/]/.test(filePath)) res.set('Cache-Control', 'public, max-age=604800');
+    }
+  })
+);
 
 app.get('/', (req, res) => {
   if (restoreFromCookie(req)) return res.redirect('/app');
@@ -103,7 +211,8 @@ app.get('/app', requirePageAuth, (req, res) => {
   const html = require('fs')
     .readFileSync(path.join(__dirname, 'views', 'app.html'), 'utf-8')
     .replace('/css/style.css"', `/css/style.css?v=${ASSET_VERSION}"`)
-    .replace('/js/app.js"', `/js/app.js?v=${ASSET_VERSION}"`);
+    .replace('/js/app.js"', `/js/app.js?v=${ASSET_VERSION}"`)
+    .replace('/js/margem.js"', `/js/margem.js?v=${ASSET_VERSION}"`);
   res.set('Cache-Control', 'no-cache');
   res.type('html').send(html);
 });
@@ -211,7 +320,12 @@ app.post('/api/push/test', requireAuth, (req, res) => {
 // (No plano gratuito da Render o servidor dorme sem uso; nesse caso o lembrete sai
 // quando ele acordar, se ainda estiver dentro da janela.)
 setInterval(() => {
-  const data = db.read();
+  let data;
+  try {
+    data = db.read();
+  } catch (e) {
+    return; // banco ainda carregando
+  }
   if (!(data.pushSubscriptions || []).length) return;
   const now = Date.now();
   let changed = false;
@@ -312,7 +426,8 @@ app.delete('/api/stages/:id', requireAuth, (req, res) => {
 
 app.put('/api/stages-reorder', requireAuth, (req, res) => {
   const data = db.read();
-  const { orderedIds } = req.body;
+  const { orderedIds } = req.body || {};
+  if (!Array.isArray(orderedIds)) return res.status(400).json({ error: 'Ordem inválida' });
   orderedIds.forEach((id, idx) => {
     const stage = data.stages.find((s) => s.id === id);
     if (stage) stage.order = idx + 1;
@@ -364,6 +479,13 @@ app.put('/api/organizations/:id', requireAuth, (req, res) => {
 app.delete('/api/organizations/:id', requireAuth, (req, res) => {
   const data = db.read();
   data.organizations = data.organizations.filter((o) => o.id !== req.params.id);
+  // leads e negócios dessa empresa ficam sem empresa, em vez de apontar para uma que não existe
+  data.contacts.forEach((c) => {
+    if (c.orgId === req.params.id) c.orgId = null;
+  });
+  data.deals.forEach((d) => {
+    if (d.orgId === req.params.id) d.orgId = null;
+  });
   db.write(data);
   res.json({ ok: true });
 });
@@ -803,15 +925,25 @@ app.delete('/api/users/:id', requireAuth, (req, res) => {
 });
 
 // ---------- Settings (custom fields, goal) ----------
+// Chaves internas do servidor (assinatura do login e das notificações) não vão
+// para o navegador nem podem ser trocadas por ele.
+const SERVER_ONLY_SETTINGS = ['authSecret', 'webPush'];
+
 app.get('/api/settings', requireAuth, (req, res) => {
-  res.json(db.read().settings);
+  const settings = db.read().settings;
+  SERVER_ONLY_SETTINGS.forEach((k) => delete settings[k]);
+  res.json(settings);
 });
 
 app.put('/api/settings', requireAuth, (req, res) => {
   const data = db.read();
-  data.settings = { ...data.settings, ...req.body };
+  const payload = { ...(req.body || {}) };
+  SERVER_ONLY_SETTINGS.forEach((k) => delete payload[k]);
+  data.settings = { ...data.settings, ...payload };
   db.write(data);
-  res.json(data.settings);
+  const visible = { ...data.settings };
+  SERVER_ONLY_SETTINGS.forEach((k) => delete visible[k]);
+  res.json(visible);
 });
 
 app.post('/api/settings/custom-fields', requireAuth, (req, res) => {
@@ -963,15 +1095,30 @@ app.options('/api/webhooks/site-form', (req, res) => {
   res.sendStatus(204);
 });
 
+// Formulário público: no máximo 20 envios por IP por hora, para um robô não
+// encher o CRM de leads falsos.
+const siteFormHits = new Map();
+function siteFormLimited(ip) {
+  const now = Date.now();
+  const hits = (siteFormHits.get(ip) || []).filter((t) => now - t < 60 * 60 * 1000);
+  hits.push(now);
+  siteFormHits.set(ip, hits);
+  if (siteFormHits.size > 5000) siteFormHits.clear();
+  return hits.length > 20;
+}
+
 app.post('/api/webhooks/site-form', (req, res) => {
   res.header('Access-Control-Allow-Origin', '*');
+  if (siteFormLimited(req.ip)) return res.status(429).json({ error: 'Muitos envios. Tente mais tarde.' });
+  const body = req.body || {};
+  const field = (v, max) => String(v || '').trim().slice(0, max);
   const data = db.read();
-  const name = (req.body.name || req.body.nome || '').trim();
-  const email = (req.body.email || '').trim();
-  const whatsapp = (req.body.whatsapp || req.body.phone || '').trim();
-  const company = (req.body.company || req.body.empresa || '').trim();
-  const plan = (req.body.plan || req.body.plano || '').trim();
-  const message = (req.body.message || req.body.mensagem || '').trim();
+  const name = field(body.name || body.nome, 200);
+  const email = field(body.email, 200);
+  const whatsapp = field(body.whatsapp || body.phone, 40);
+  const company = field(body.company || body.empresa, 200);
+  const plan = field(body.plan || body.plano, 200);
+  const message = field(body.message || body.mensagem, 5000);
 
   if (!name && !email && !whatsapp) {
     return res.status(400).json({ error: 'Formulário vazio' });
@@ -982,7 +1129,7 @@ app.post('/api/webhooks/site-form', (req, res) => {
   if (!contact) {
     let orgId = null;
     if (company) {
-      let org = data.organizations.find((o) => o.name.toLowerCase() === company.toLowerCase());
+      let org = data.organizations.find((o) => (o.name || '').toLowerCase() === company.toLowerCase());
       if (!org) {
         org = { id: newId('org'), name: company, address: '', ownerId: null, extraInfo: [] };
         data.organizations.push(org);
@@ -1129,14 +1276,49 @@ app.get('/api/team-chat', requireAuth, (req, res) => {
   res.json(msgs);
 });
 
-app.post('/api/team-chat', requireAuth, (req, res) => {
-  const data = db.read();
-  if (!data.teamChat) data.teamChat = [];
-  const { text, attendantId, attachment, recipientId } = req.body;
-  const trimmedText = (text || '').trim();
+// Fotos, áudios e arquivos do chat ficam guardados à parte (db.putFile) e são
+// baixados só quando aparecem na tela — o navegador guarda cópia, já que nunca mudam.
+app.get('/api/team-chat/files/:id', requireAuth, async (req, res) => {
+  try {
+    const file = await db.getFile(req.params.id);
+    if (!file) return res.status(404).json({ error: 'Arquivo não encontrado' });
+    res.set('Cache-Control', 'private, max-age=31536000, immutable');
+    res.type(file.mime || 'application/octet-stream').end(file.buffer);
+  } catch (err) {
+    res.status(500).json({ error: 'Falha ao carregar o arquivo' });
+  }
+});
+
+const TEAM_CHAT_KINDS = ['image', 'audio', 'file'];
+
+app.post('/api/team-chat', requireAuth, async (req, res) => {
+  const { text, attendantId, attachment, recipientId } = req.body || {};
+  const trimmedText = String(text || '').trim().slice(0, 5000);
   if (!trimmedText && !(attachment && attachment.dataBase64)) {
     return res.status(400).json({ error: 'Mensagem vazia' });
   }
+  let storedAttachment = null;
+  if (attachment && attachment.dataBase64) {
+    const buffer = Buffer.from(String(attachment.dataBase64), 'base64');
+    const fileId = newId('f');
+    const mime = String(attachment.mime || 'application/octet-stream').slice(0, 100);
+    try {
+      await db.putFile(fileId, mime, buffer);
+    } catch (err) {
+      console.error('Falha ao guardar anexo do chat:', err.message);
+      return res.status(500).json({ error: 'Não foi possível salvar o anexo. Tente de novo.' });
+    }
+    storedAttachment = {
+      kind: TEAM_CHAT_KINDS.includes(attachment.kind) ? attachment.kind : 'file',
+      filename: String(attachment.filename || 'arquivo').slice(0, 200),
+      mime,
+      size: buffer.length,
+      fileId
+    };
+  }
+  // lê os dados só depois do upload, para não sobrescrever o que chegou nesse meio-tempo
+  const data = db.read();
+  if (!data.teamChat) data.teamChat = [];
   const sender = data.users.find((u) => u.id === attendantId);
   const message = {
     id: newId('tc'),
@@ -1144,21 +1326,16 @@ app.post('/api/team-chat', requireAuth, (req, res) => {
     senderName: sender ? sender.name : 'Atendente',
     recipientId: recipientId || null,
     text: trimmedText,
-    attachment:
-      attachment && attachment.dataBase64
-        ? {
-            kind: attachment.kind || 'file',
-            filename: attachment.filename || 'arquivo',
-            mime: attachment.mime || '',
-            dataBase64: attachment.dataBase64
-          }
-        : null,
+    attachment: storedAttachment,
     readBy: [],
     timestamp: new Date().toISOString()
   };
   data.teamChat.push(message);
+  const dropped = data.teamChat.slice(0, Math.max(0, data.teamChat.length - 500));
   data.teamChat = data.teamChat.slice(-500);
   db.write(data);
+  const droppedFiles = dropped.map((m) => m.attachment && m.attachment.fileId).filter(Boolean);
+  if (droppedFiles.length) db.deleteFiles(droppedFiles).catch(() => {});
   res.status(201).json(message);
   pushToTeam(data, {
     except: attendantId,
@@ -1404,7 +1581,7 @@ function buildFreeAiProviders() {
   if (process.env.GEMINI_API_KEY) {
     providers.push({
       name: 'Gemini',
-      call: (sys, msgs) => callGeminiRaw(process.env.GEMINI_API_KEY, process.env.GEMINI_MODEL || 'gemini-1.5-flash', sys, msgs)
+      call: (sys, msgs) => callGeminiRaw(process.env.GEMINI_API_KEY, process.env.GEMINI_MODEL || 'gemini-3.5-flash', sys, msgs)
     });
   }
   if (process.env.GROQ_API_KEY) {
@@ -1545,7 +1722,7 @@ async function callAiProvider(ai, systemPrompt, userMessage, history) {
 
   if (provider === 'gemini') {
     if (!ai.apiKey) throw new Error('Configure a API Key do Google Gemini em Configurações > Assistente IA.');
-    const model = ai.model || 'gemini-1.5-flash';
+    const model = ai.model || process.env.GEMINI_MODEL || 'gemini-3.5-flash';
     const transcript = [systemPrompt, ...messages.map((m) => `${m.role === 'user' ? 'Usuário' : 'Assistente'}: ${m.content}`)].join('\n\n');
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${ai.apiKey}`,
@@ -1565,7 +1742,7 @@ async function callAiProvider(ai, systemPrompt, userMessage, history) {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': ai.apiKey, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({ model: ai.model || 'claude-sonnet-4-5', max_tokens: 500, system: systemPrompt, messages })
+      body: JSON.stringify({ model: ai.model || 'claude-sonnet-5-5', max_tokens: 500, system: systemPrompt, messages })
     });
     const result = await response.json();
     if (!response.ok) throw new Error((result.error && result.error.message) || 'Erro na API da Anthropic');
@@ -2308,11 +2485,60 @@ app.use(
   roteiroDoDia.app
 );
 
+// Rotas inexistentes da API respondem JSON (o app espera JSON, não uma página HTML).
+app.use('/api', (req, res) => res.status(404).json({ error: 'Rota não encontrada' }));
+
+// Erro inesperado numa rota: responde JSON simples, sem expor o stack trace.
+app.use((err, req, res, next) => {
+  if (err.type === 'entity.too.large') return res.status(413).json({ error: 'Arquivo grande demais para enviar.' });
+  if (err.type === 'entity.parse.failed') return res.status(400).json({ error: 'Dados inválidos.' });
+  console.error(`Erro em ${req.method} ${req.originalUrl}:`, err);
+  if (res.headersSent) return next(err);
+  res.status(500).json({ error: 'Erro interno no servidor. Tente de novo.' });
+});
+
+// Mensagens antigas do Chat da Equipe guardavam a mídia em base64 dentro do JSON
+// principal. Na primeira subida com esta versão, elas são movidas para o
+// armazenamento de arquivos (uma vez só; depois não há mais nada a migrar).
+async function migrateTeamChatAttachments() {
+  const data = db.read();
+  const pending = (data.teamChat || []).filter((m) => m.attachment && m.attachment.dataBase64);
+  if (!pending.length) return;
+  const moved = new Map();
+  for (const m of pending) {
+    const buffer = Buffer.from(m.attachment.dataBase64, 'base64');
+    const fileId = newId('f');
+    await db.putFile(fileId, m.attachment.mime || 'application/octet-stream', buffer);
+    moved.set(m.id, { fileId, size: buffer.length });
+  }
+  // relê para não perder nada gravado durante a migração
+  const fresh = db.read();
+  for (const m of fresh.teamChat || []) {
+    const info = moved.get(m.id);
+    if (!info || !m.attachment) continue;
+    delete m.attachment.dataBase64;
+    m.attachment.fileId = info.fileId;
+    m.attachment.size = info.size;
+  }
+  db.write(fresh);
+  await db.flush();
+  console.log(`Chat da Equipe: ${moved.size} anexo(s) movido(s) para o armazenamento de arquivos.`);
+}
+
 (async () => {
   try {
     await db.init();
   } catch (e) {
-    console.error('Falha ao iniciar o banco de dados do CRM (voltando ao db.json local):', e);
+    // Sem o banco, o CRM não pode subir: com Turso configurado, seguir com o db.json
+    // do repositório gravaria dados de exemplo por cima dos dados reais.
+    console.error('Falha ao iniciar o banco de dados do CRM:', e);
+    process.exit(1);
+  }
+
+  try {
+    await migrateTeamChatAttachments();
+  } catch (e) {
+    console.error('Falha ao migrar anexos do Chat da Equipe (os antigos continuam funcionando):', e.message);
   }
 
   try {
@@ -2321,7 +2547,23 @@ app.use(
     console.error('Falha ao iniciar o Roteiro do Dia:', e);
   }
 
-  app.listen(PORT, () => {
+  const server = app.listen(PORT, () => {
     console.log(`Velocita Global CRM rodando em http://localhost:${PORT}`);
   });
+
+  // No deploy o Render manda SIGTERM: termina de gravar o que estiver pendente antes de sair.
+  let shuttingDown = false;
+  const shutdown = async (signal) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`${signal} recebido, gravando dados pendentes...`);
+    server.close();
+    try {
+      await Promise.race([db.flush(), new Promise((r) => setTimeout(r, 8000))]);
+    } finally {
+      process.exit(0);
+    }
+  };
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 })();

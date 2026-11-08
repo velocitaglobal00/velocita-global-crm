@@ -28,6 +28,8 @@ form.addEventListener('submit', async (e) => {
     if (res.ok) {
       window.location.href = '/app';
     } else {
+      const body = await res.json().catch(() => ({}));
+      errorBox.textContent = res.status === 429 && body.error ? body.error : 'Senha incorreta. Tente novamente.';
       errorBox.classList.add('show');
       card.classList.remove('shake');
       void card.offsetWidth;

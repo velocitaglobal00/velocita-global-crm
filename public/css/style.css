@@ -949,7 +949,7 @@ table.data-table tr.clickable:hover {
   display: none;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  z-index: 300; /* acima do Velo-Cito, do painel da IA e do menu lateral */
   padding: 20px;
 }
 
@@ -1048,12 +1048,15 @@ table.data-table tr.clickable:hover {
 /* ---------- Deal Detail ---------- */
 .deal-detail-grid {
   display: grid;
-  grid-template-columns: 220px 1fr 260px;
+  /* minmax(0, 1fr): a coluna do meio pode encolher; antes ela empurrava a da
+     direita para fora da janela e aparecia uma barra de rolagem lateral */
+  grid-template-columns: 220px minmax(0, 1fr) 260px;
   gap: 0;
 }
 
 .dd-col {
   padding: 20px;
+  min-width: 0;
 }
 
 .dd-col.left {
@@ -1293,7 +1296,7 @@ table.data-table tr.clickable:hover {
   font-size: 13px;
   font-weight: 600;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
-  z-index: 200;
+  z-index: 400; /* aviso aparece até por cima de janelas abertas */
   opacity: 0;
   transform: translateY(10px);
   transition: opacity 0.2s, transform 0.2s;
@@ -3316,7 +3319,7 @@ table.data-table tr.clickable:hover {
 @media (max-width: 900px) {
   /* espaço no fim da página para o botão do Velo-Cito não cobrir o último botão */
   .main-content { padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
-
+}
 
 /* ===========================================================================
    Calculadora de Margem (aba "margem"). Tudo prefixado com .mg- para não
@@ -3557,3 +3560,197 @@ table.data-table tr.clickable:hover {
 @media (max-width: 720px) {
   .notif-acoes button { flex: 1 1 calc(50% - 4px); }
 }
+
+/* Janela pequena (ex.: "Quem está atendendo?") no celular: folha baixa no rodapé,
+   em vez de ocupar a tela inteira com um espaço vazio enorme no meio */
+@media (max-width: 900px) {
+  .modal-overlay:has(.modal.compact) { align-items: flex-end; }
+  .modal.compact {
+    height: auto;
+    max-height: 85dvh !important;
+    border-radius: 16px 16px 0 0 !important;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .modal.compact .modal-header { padding-top: 14px; }
+}
+
+/* ---------- Busca global (barra do topo) ---------- */
+.search-box { position: relative; }
+.global-search-results {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  min-width: 280px;
+  max-height: 60vh;
+  overflow-y: auto;
+  background: var(--vg-surface);
+  border: 1px solid var(--vg-border);
+  border-radius: 12px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25);
+  padding: 6px;
+  z-index: 250;
+}
+.global-search-results.open { display: block; }
+.gs-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-radius: 8px;
+  padding: 9px 10px;
+  cursor: pointer;
+  font: inherit;
+}
+.gs-item:hover, .gs-item.active { background: var(--vg-highlight-bg, rgba(244, 130, 31, 0.12)); }
+.gs-title { color: var(--vg-heading); font-weight: 600; font-size: 14px; }
+.gs-sub { color: var(--vg-text-muted); font-size: 12px; }
+.gs-empty { padding: 12px; color: var(--vg-text-muted); font-size: 13px; }
+
+/* ===========================================================================
+   Efeito vidro (estilo Apple): superfícies translúcidas com desfoque do que
+   está atrás, borda clara e brilho fino no topo. Fica numa camada só, no fim
+   do arquivo, sem mexer nas regras de cima. O fundo ganha manchas suaves de
+   laranja e azul-marinho da marca para o vidro ter o que refletir.
+   ======================================================================== */
+:root {
+  --glass-bg: rgba(255, 255, 255, 0.52);
+  --glass-bg-strong: rgba(255, 255, 255, 0.78);
+  --glass-column: rgba(255, 255, 255, 0.34);
+  --glass-border: rgba(255, 255, 255, 0.7);
+  --glass-edge: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  --glass-shadow: 0 8px 32px rgba(27, 42, 78, 0.10);
+  --glass-blur: blur(22px) saturate(180%);
+  --glass-page:
+    radial-gradient(65vw 55vh at 100% 0%, rgba(244, 130, 31, 0.30), transparent 70%),
+    radial-gradient(60vw 60vh at 0% 100%, rgba(27, 42, 78, 0.24), transparent 70%),
+    radial-gradient(45vw 45vh at 55% 55%, rgba(244, 130, 31, 0.10), transparent 70%),
+    linear-gradient(180deg, #f3f4f7 0%, #e9ecf2 100%);
+}
+:root[data-theme='dark'] {
+  --glass-bg: rgba(23, 31, 46, 0.55);
+  --glass-bg-strong: rgba(23, 31, 46, 0.80);
+  --glass-column: rgba(24, 32, 49, 0.42);
+  --glass-border: rgba(255, 255, 255, 0.09);
+  --glass-edge: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  --glass-shadow: 0 10px 36px rgba(0, 0, 0, 0.40);
+  --glass-page:
+    radial-gradient(60vw 50vh at 100% 0%, rgba(244, 130, 31, 0.16), transparent 70%),
+    radial-gradient(55vw 55vh at 0% 100%, rgba(60, 90, 170, 0.22), transparent 70%),
+    linear-gradient(180deg, #0f1521 0%, #0b101a 100%);
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  body { background: var(--glass-page) fixed; }
+
+  /* barra do topo: continua laranja da marca, só fica levemente translúcida */
+  .topbar {
+    background: rgba(244, 130, 31, 0.90);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.35) inset;
+    position: relative;
+    z-index: 20;
+  }
+
+  /* superfícies grandes: vidro com desfoque */
+  .sidebar,
+  .stat-card,
+  .panel,
+  .comms-list-col,
+  .comms-chat-col,
+  .login-card {
+    background: var(--glass-bg);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    border-color: var(--glass-border);
+    box-shadow: var(--glass-edge), var(--glass-shadow);
+  }
+  .sidebar { border-right: 1px solid var(--glass-border); box-shadow: var(--glass-edge); }
+
+  /* janelas, menus suspensos e o painel do Velo-Cito: vidro mais opaco, para ler bem */
+  .modal,
+  .notif-dropdown,
+  .global-search-results,
+  #ai-panel {
+    background: var(--glass-bg-strong);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-edge), 0 24px 60px rgba(15, 27, 51, 0.28);
+  }
+  .modal-header { background: transparent; }
+  .modal-overlay {
+    background: rgba(15, 27, 51, 0.35);
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+  }
+
+  /* colunas do funil: vidro bem leve; os cartões ficam sem desfoque próprio
+     (desfoque dentro de desfoque pesa no celular) */
+  .kanban-column {
+    background: var(--glass-column);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-edge);
+  }
+  .deal-card {
+    background: var(--glass-bg-strong);
+    box-shadow: var(--glass-edge), 0 2px 10px rgba(27, 42, 78, 0.08);
+  }
+
+  /* realce ao passar o mouse, como nos cartões do macOS */
+  .stat-card:hover,
+  .deal-card:hover { box-shadow: var(--glass-edge), 0 12px 30px rgba(27, 42, 78, 0.16); }
+
+  /* login: o cartão de vidro sobre o fundo azul-marinho com brilho laranja */
+  .login-shell {
+    background:
+      radial-gradient(50vw 45vh at 85% 10%, rgba(244, 130, 31, 0.35), transparent 70%),
+      radial-gradient(45vw 45vh at 10% 95%, rgba(60, 90, 170, 0.45), transparent 70%),
+      linear-gradient(135deg, var(--vg-navy) 0%, #0f1b33 100%);
+  }
+  .login-card { background: rgba(255, 255, 255, 0.82); }
+  :root[data-theme='dark'] .login-card { background: rgba(23, 31, 46, 0.72); }
+}
+
+/* celular: desfoque menor para não pesar na bateria nem travar a rolagem */
+@media (max-width: 900px) {
+  :root { --glass-blur: blur(14px) saturate(170%); }
+  .modal, .modal.wide { background: var(--vg-surface); }
+}
+
+/* quem pediu menos transparência no sistema (iPhone/Mac/Windows) vê tudo sólido */
+@media (prefers-reduced-transparency: reduce) {
+  .sidebar, .stat-card, .panel, .comms-list-col, .comms-chat-col, .login-card,
+  .modal, .notif-dropdown, .global-search-results, #ai-panel, .deal-card {
+    background: var(--vg-surface) !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+  .kanban-column { background: var(--vg-column-bg) !important; }
+  .topbar { background: var(--vg-orange) !important; }
+}
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  /* faixa da busca, logo abaixo da barra laranja */
+  .toolbar {
+    background: var(--glass-bg);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    border-bottom: 1px solid var(--glass-border);
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .toolbar { background: var(--vg-surface) !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+}
+/* Menus que abrem de dentro das barras de vidro (busca e sino): a barra já tem
+   desfoque, e o navegador não desfoca de novo por baixo do menu. Por isso eles
+   ficam quase sólidos, para o texto de trás não atrapalhar a leitura. */
+.global-search-results,
+.notif-dropdown { background: rgba(255, 255, 255, 0.96) !important; }
+:root[data-theme='dark'] .global-search-results,
+:root[data-theme='dark'] .notif-dropdown { background: rgba(23, 31, 46, 0.97) !important; }

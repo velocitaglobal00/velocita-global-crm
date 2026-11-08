@@ -4,7 +4,7 @@ CRM comercial completo inspirado no Pipedrive, com backend em Node.js/Express e 
 
 ## Funcionalidades
 
-- Login por senha única (`Velocita1`), com sessão persistida no servidor
+- Login por senha única (definida pela variável `APP_PASSWORD`), com sessão persistida no servidor e bloqueio após 10 tentativas erradas
 - Dashboard com métricas de vendas, funil de conversão, meta do mês e lembretes a vencer
 - Pipeline (Kanban) com drag-and-drop entre estágios (Prospecção → Qualificação → Reunião → Proposta → Implantação) e dias por etapa
 - Gestão de negócios: criar, editar, marcar como Ganho/Perdido, excluir
@@ -24,9 +24,20 @@ npm install
 npm start
 ```
 
-Acesse `http://localhost:3000`. Senha de acesso: `Velocita1`.
+Acesse `http://localhost:3000`. A senha de acesso vem da variável `APP_PASSWORD` (sem ela, vale a senha padrão do código, só para uso local).
 
 O Gerador de Roteiros (IA), em `/roteiro-do-dia`, precisa do seu próprio `.env` — copie `roteiro-do-dia/.env.example` para `roteiro-do-dia/.env` e preencha pelo menos `ACCESS_CODE`, `ADMIN_PASS` e uma chave de IA (veja detalhes em [roteiro-do-dia/README.md](roteiro-do-dia/README.md)). No Render, essas mesmas variáveis devem ser adicionadas em **Environment** do serviço `velocita-global-crm` (é o mesmo serviço, não precisa criar um novo).
+
+## Variáveis de ambiente (Render > Environment)
+
+| Variável | Para quê |
+| --- | --- |
+| `APP_PASSWORD` | Senha de acesso ao CRM. **Defina no Render**: o repositório é público, então a senha padrão do código não deve ser usada em produção. |
+| `SESSION_SECRET` | Chave que assina o login "lembrar por 60 dias". Opcional (sem ela, uma chave é gerada e guardada no banco). |
+| `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` | Banco onde os dados e os anexos do Chat da Equipe ficam salvos entre deploys. |
+| `GEMINI_API_KEY`, `GROQ_API_KEY`... | IAs gratuitas do assistente (as mesmas do Gerador de Roteiros). |
+
+Para o Render conferir se o serviço está no ar, use **Health Check Path: `/healthz`**.
 
 ## Deploy no Render
 

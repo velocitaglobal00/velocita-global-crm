@@ -277,13 +277,21 @@ async function init() {
   bindGoalEdit();
   bindAjuda();
   bindPwa();
+  bindGlobalSearch();
 
   ensureAttendant();
   openViewFromHash();
   pollNotifications();
-  setInterval(pollNotifications, 25000);
+  // com a aba/app em segundo plano não precisa consultar o servidor (o celular
+  // recebe as notificações pelo push); ao voltar, atualiza na hora
+  setInterval(() => !document.hidden && pollNotifications(), 25000);
   pollTeamChatBadge();
-  setInterval(pollTeamChatBadge, 25000);
+  setInterval(() => !document.hidden && pollTeamChatBadge(), 25000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) return;
+    pollNotifications();
+    pollTeamChatBadge();
+  });
 }
 
 async function loadAllData() {
@@ -311,7 +319,7 @@ async function loadAllData() {
 // ============ App no celular (PWA) + notificações ============
 // O service worker (/sw.js) recebe as notificações do servidor mesmo com o app fechado.
 // Cada aparelho fica ligado ao atendente escolhido em "Atendendo como".
-const PWA_VIEWS = ['dashboard', 'roteiro', 'pipeline', 'leads', 'orgs', 'email', 'mensagens', 'bi', 'calendario', 'chatequipe', 'settings', 'ajuda'];
+const PWA_VIEWS = ['dashboard', 'roteiro', 'pipeline', 'leads', 'orgs', 'email', 'mensagens', 'bi', 'margem', 'calendario', 'chatequipe', 'settings', 'ajuda'];
 
 function openViewFromHash(hash) {
   const v = String(hash || location.hash || '').replace('#', '');
@@ -447,6 +455,10 @@ function switchView(viewName) {
   document.querySelectorAll('.view').forEach((v) => v.classList.remove('active'));
   document.getElementById(`view-${viewName}`).classList.add('active');
   document.querySelectorAll('.sidebar-link').forEach((t) => t.classList.toggle('active', t.dataset.view === viewName));
+  // guarda a tela no endereço: recarregar a página (ou reabrir o app) volta para ela
+  if (PWA_VIEWS.includes(viewName) && location.hash !== `#${viewName}`) {
+    history.replaceState(null, '', `#${viewName}`);
+  }
 
   if (viewName === 'dashboard') renderDashboard();
   if (viewName === 'pipeline') renderKanban();
@@ -480,9 +492,18 @@ function switchView(viewName) {
 
 function bindNav() {
   document.querySelectorAll('.sidebar-link[data-view]').forEach((link) => {
+    // os itens do menu são <div>: isso os deixa alcançáveis pelo Tab e pelo leitor de tela
+    link.setAttribute('role', 'button');
+    link.setAttribute('tabindex', '0');
     link.addEventListener('click', () => {
       switchView(link.dataset.view);
       if (isMobileViewport()) setSidebarOpen(false);
+    });
+    link.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        link.click();
+      }
     });
   });
 }
@@ -558,6 +579,12 @@ function bindModalCloseButtons() {
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) closeModal(overlay.id);
     });
+  });
+  // Esc fecha a janela aberta por último (a não ser a de atendente, que é obrigatória)
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || e.defaultPrevented) return;
+    const open = [...document.querySelectorAll('.modal-overlay.show')].filter((m) => m.id !== 'modal-attendant');
+    if (open.length) closeModal(open[open.length - 1].id);
   });
 }
 
@@ -4418,7 +4445,10 @@ const normHeader = (h) =>
 
 function bindLeadsImportExport() {
   const input = document.getElementById('leads-import-file');
-  document.getElementById('btn-import-leads').addEventListener('click', () => input.click());
+  document.getElementById('btn-import-leads').addEventListener('click', () => {
+    loadXlsx(); // já vai baixando enquanto a pessoa escolhe o arquivo
+    input.click();
+  });
   input.addEventListener('change', () => {
     if (input.files[0]) importLeadsFile(input.files[0]);
     input.value = '';
@@ -4426,8 +4456,29 @@ function bindLeadsImportExport() {
   document.getElementById('btn-export-leads').addEventListener('click', exportLeadsExcel);
 }
 
+// A biblioteca de planilhas tem ~900KB: só é baixada quando alguém importa ou
+// exporta, em vez de atrasar toda abertura do CRM.
+let xlsxLoading = null;
+function loadXlsx() {
+  if (window.XLSX) return Promise.resolve(true);
+  if (!xlsxLoading) {
+    xlsxLoading = new Promise((resolve) => {
+      const script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+      script.onload = () => resolve(!!window.XLSX);
+      script.onerror = () => {
+        xlsxLoading = null;
+        script.remove();
+        resolve(false);
+      };
+      document.head.appendChild(script);
+    });
+  }
+  return xlsxLoading;
+}
+
 async function importLeadsFile(file) {
-  if (!window.XLSX) return showToast('Leitor de planilhas não carregou. Verifique a internet e recarregue a página.');
+  if (!(await loadXlsx())) return showToast('Leitor de planilhas não carregou. Verifique a internet e tente de novo.');
   let rows;
   try {
     const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
@@ -4465,8 +4516,8 @@ async function importLeadsFile(file) {
   }
 }
 
-function exportLeadsExcel() {
-  if (!window.XLSX) return showToast('Gerador de planilhas não carregou. Verifique a internet e recarregue a página.');
+async function exportLeadsExcel() {
+  if (!(await loadXlsx())) return showToast('Gerador de planilhas não carregou. Verifique a internet e tente de novo.');
   const rows = state.contacts.map((c) => ({
     Nome: c.name || '',
     'E-mail': c.email || '',
@@ -4672,7 +4723,9 @@ async function sendTeamChatMessage() {
 
 function startTeamChatPolling() {
   stopTeamChatPolling();
-  state.teamChatPollHandle = setInterval(renderTeamChat, 4000);
+  state.teamChatPollHandle = setInterval(() => {
+    if (!document.hidden) renderTeamChat();
+  }, 4000);
 }
 
 function stopTeamChatPolling() {
@@ -4768,11 +4821,14 @@ function renderTeamChatBubble(m) {
   const isOut = m.senderId === state.attendantId;
   let attachmentHtml = '';
   if (m.attachment) {
-    const src = `data:${m.attachment.mime};base64,${m.attachment.dataBase64}`;
+    // anexos novos ficam no servidor (fileId); os bem antigos ainda podem vir em base64
+    const src = m.attachment.fileId
+      ? `/api/team-chat/files/${encodeURIComponent(m.attachment.fileId)}`
+      : `data:${m.attachment.mime};base64,${m.attachment.dataBase64}`;
     if (m.attachment.kind === 'image') {
-      attachmentHtml = `<div class="tc-image-bubble"><img src="${src}" alt="${escapeHtml(m.attachment.filename)}" /></div>`;
+      attachmentHtml = `<div class="tc-image-bubble"><a href="${src}" target="_blank" rel="noopener"><img src="${src}" alt="${escapeHtml(m.attachment.filename)}" loading="lazy" /></a></div>`;
     } else if (m.attachment.kind === 'audio') {
-      attachmentHtml = `<div class="tc-audio-bubble"><audio controls src="${src}"></audio></div>`;
+      attachmentHtml = `<div class="tc-audio-bubble"><audio controls preload="metadata" src="${src}"></audio></div>`;
     } else {
       attachmentHtml = `<div class="tc-file-bubble"><a href="${src}" download="${escapeHtml(m.attachment.filename)}">${svgIcon('attach')} ${escapeHtml(m.attachment.filename)}</a></div>`;
     }
@@ -4823,17 +4879,25 @@ async function renderTeamChat() {
       });
     }
 
+    const html = visible.length
+      ? visible.map(renderTeamChatBubble).join('')
+      : '<div class="empty-state">Nenhuma mensagem ainda. Comece a conversa!</div>';
+    // só redesenha quando algo mudou: redesenhar a cada 4s cortava o áudio que
+    // estava tocando e fazia as fotos piscarem
+    if (state.teamChatLastHtml === html) return;
+    state.teamChatLastHtml = html;
     if (visible.length === 0) {
-      thread.innerHTML = '<div class="empty-state">Nenhuma mensagem ainda. Comece a conversa!</div>';
+      thread.innerHTML = html;
       return;
     }
     const wasAtBottom = thread.scrollTop + thread.clientHeight >= thread.scrollHeight - 40;
-    thread.innerHTML = visible.map(renderTeamChatBubble).join('');
+    thread.innerHTML = html;
     if (wasAtBottom || !thread.dataset.rendered) {
       thread.scrollTop = thread.scrollHeight;
     }
     thread.dataset.rendered = '1';
   } catch (err) {
+    state.teamChatLastHtml = null;
     thread.innerHTML = '<div class="empty-state">Erro ao carregar o chat da equipe.</div>';
   }
 }
@@ -5816,3 +5880,121 @@ function renderAjuda() {
 
 // ============ Boot ============
 init();
+
+// ============ Busca global (barra do topo) ============
+// Procura em negócios, leads e empresas já carregados no navegador (sem ir ao
+// servidor) e abre o item escolhido. Ignora acentos e maiúsculas.
+function normSearch(s) {
+  return String(s || '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase();
+}
+
+function globalSearchResults(term) {
+  const q = normSearch(term).trim();
+  if (q.length < 2) return [];
+  const digits = q.replace(/\D/g, '');
+  const hit = (...fields) =>
+    fields.some((f) => normSearch(f).includes(q)) || (digits.length >= 4 && fields.some((f) => String(f || '').replace(/\D/g, '').includes(digits)));
+  const deals = state.deals
+    .filter((d) => hit(d.title, orgName(d.orgId)))
+    .slice(0, 6)
+    .map((d) => ({ kind: 'deal', id: d.id, title: d.title, sub: `Negócio · ${stageName(d.stage)} · ${fmtMoney(d.value, d.currency)}` }));
+  const leads = state.contacts
+    .filter((c) => hit(c.name, c.email, c.phone, orgName(c.orgId)))
+    .slice(0, 6)
+    .map((c) => ({ kind: 'lead', id: c.id, title: c.name, sub: `Lead${c.orgId ? ' · ' + orgName(c.orgId) : ''}${c.phone ? ' · ' + c.phone : ''}` }));
+  const orgs = state.organizations
+    .filter((o) => hit(o.name, o.razaoSocial, o.cnpj))
+    .slice(0, 6)
+    .map((o) => ({ kind: 'org', id: o.id, title: o.name, sub: `Empresa${o.cnpj ? ' · ' + o.cnpj : ''}` }));
+  return [...deals, ...leads, ...orgs];
+}
+
+function openGlobalSearchResult(kind, id) {
+  if (kind === 'deal') {
+    switchView('pipeline');
+    openDealDetail(id);
+  } else if (kind === 'lead') {
+    switchView('leads');
+    openLeadDetail(id);
+  } else if (kind === 'org') {
+    switchView('orgs');
+    openOrgDetail(id);
+  }
+}
+
+function bindGlobalSearch() {
+  const input = document.getElementById('global-search');
+  if (!input) return;
+  const box = input.closest('.search-box');
+  const list = document.createElement('div');
+  list.className = 'global-search-results';
+  list.setAttribute('role', 'listbox');
+  box.appendChild(list);
+  input.setAttribute('aria-label', 'Buscar negócios, contatos e empresas');
+  input.setAttribute('autocomplete', 'off');
+  let active = -1;
+
+  const close = () => {
+    list.classList.remove('open');
+    list.innerHTML = '';
+    active = -1;
+  };
+  const highlight = () => list.querySelectorAll('.gs-item').forEach((el, i) => el.classList.toggle('active', i === active));
+  const choose = (el) => {
+    if (!el) return;
+    openGlobalSearchResult(el.dataset.kind, el.dataset.id);
+    input.value = '';
+    close();
+    input.blur();
+  };
+  const render = () => {
+    const term = input.value;
+    if (normSearch(term).trim().length < 2) return close();
+    const results = globalSearchResults(term);
+    active = results.length ? 0 : -1;
+    list.innerHTML = results.length
+      ? results
+          .map(
+            (r) => `<button type="button" class="gs-item" data-kind="${r.kind}" data-id="${escapeHtml(r.id)}" role="option">
+              <span class="gs-title">${escapeHtml(r.title || '(sem nome)')}</span>
+              <span class="gs-sub">${escapeHtml(r.sub)}</span>
+            </button>`
+          )
+          .join('')
+      : '<div class="gs-empty">Nada encontrado.</div>';
+    list.classList.add('open');
+    highlight();
+  };
+
+  input.addEventListener('input', render);
+  input.addEventListener('focus', render);
+  input.addEventListener('keydown', (e) => {
+    const items = list.querySelectorAll('.gs-item');
+    if (e.key === 'ArrowDown' && items.length) {
+      e.preventDefault();
+      active = (active + 1) % items.length;
+      highlight();
+    } else if (e.key === 'ArrowUp' && items.length) {
+      e.preventDefault();
+      active = (active - 1 + items.length) % items.length;
+      highlight();
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      choose(items[active]);
+    } else if (e.key === 'Escape') {
+      input.value = '';
+      close();
+    }
+  });
+  // mousedown (e não click) para escolher antes de o campo perder o foco
+  list.addEventListener('mousedown', (e) => {
+    const item = e.target.closest('.gs-item');
+    if (!item) return;
+    e.preventDefault();
+    choose(item);
+  });
+  input.addEventListener('blur', () => setTimeout(close, 150));
+}
