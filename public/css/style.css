@@ -3760,3 +3760,17 @@ table.data-table tr.clickable:hover {
   display: block; font-style: normal; font-size: 10.5px; line-height: 1.35;
   color: rgba(255, 255, 255, .66); margin-top: 3px;
 }
+
+/* Custos e premissas: antes ficavam recolhidos, o que fazia o resultado
+   parecer errado (o investimento ja somava frete e embalagem sem aparecer).
+   Agora ficam sempre a vista, logo abaixo da margem desejada. */
+.mg-extras { margin-bottom: 14px; }
+.mg-extras-titulo {
+  font-size: 11px; font-weight: 700; letter-spacing: 1.1px; text-transform: uppercase;
+  color: var(--vg-text-muted); margin-bottom: 10px;
+}
+.mg-extras-titulo small {
+  display: block; margin-top: 3px; font-size: 11px; font-weight: 400;
+  letter-spacing: 0; text-transform: none; color: var(--vg-text-muted);
+}
+.mg-extras-grid { padding-top: 0; }
