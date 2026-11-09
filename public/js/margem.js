@@ -279,6 +279,8 @@
     const e = lerEntrada();
     const temCusto = e.custo > 0;
     $('mg-meta-valor').textContent = pct(e.meta, 0);
+    if (document.activeElement !== $('mg-meta-num')) $('mg-meta-num').value = String(e.meta);
+    $('mg-meta').style.setProperty('--mg-pos', `${(e.meta / 100) * 100}%`);
 
     const linhas = PLATAFORMAS.map((plat) => {
       if (modo === 'margem') {
@@ -467,7 +469,22 @@
     carregarExtras();
 
     CAMPOS.forEach((id) => { const el = $(id); if (el) el.addEventListener('input', render); });
-    $('mg-meta').addEventListener('input', render);
+    // a barra redesenha no máximo uma vez por quadro: deslizar fica fluido mesmo com a tela cheia
+    let quadro = null;
+    const agendarRender = () => {
+      if (quadro) return;
+      quadro = requestAnimationFrame(() => { quadro = null; render(); });
+    };
+    $('mg-meta').addEventListener('input', agendarRender);
+    // campo numérico: aceita qualquer valor de 0 a 99,5 digitado pela pessoa
+    $('mg-meta-num').addEventListener('input', () => {
+      const v = Math.min(99.5, Math.max(0, lerNumero($('mg-meta-num').value)));
+      $('mg-meta').value = String(v);
+      agendarRender();
+    });
+    $('mg-meta-num').addEventListener('blur', () => {
+      $('mg-meta-num').value = $('mg-meta').value;
+    });
 
     // passos rápidos para negociar: toca e o número todo se move
     document.querySelectorAll('#view-margem [data-passo]').forEach((bt) => {

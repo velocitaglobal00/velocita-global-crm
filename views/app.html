@@ -482,7 +482,13 @@
 
           <div class="mg-meta" id="mg-bloco-meta">
             <label for="mg-meta">Margem que você quer <strong id="mg-meta-valor">20%</strong></label>
-            <input id="mg-meta" class="mg-slider" type="range" min="5" max="60" step="1" value="20">
+            <div class="mg-meta-controles">
+              <input id="mg-meta" class="mg-slider" type="range" min="0" max="100" step="0.5" value="20" aria-label="Margem desejada, de 0 a 100 por cento" />
+              <label class="mg-meta-num-wrap">
+                <input id="mg-meta-num" type="number" min="0" max="99.5" step="0.5" value="20" inputmode="decimal" aria-label="Digitar a margem" />
+                <span>%</span>
+              </label>
+            </div>
           </div>
 
           <div class="mg-campo-grande" id="mg-bloco-preco" hidden>
