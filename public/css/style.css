@@ -3754,3 +3754,9 @@ table.data-table tr.clickable:hover {
 .notif-dropdown { background: rgba(255, 255, 255, 0.96) !important; }
 :root[data-theme='dark'] .global-search-results,
 :root[data-theme='dark'] .notif-dropdown { background: rgba(23, 31, 46, 0.97) !important; }
+
+/* composicao do investimento, para o numero nao parecer tirado do nada */
+.mg-resumo em {
+  display: block; font-style: normal; font-size: 10.5px; line-height: 1.35;
+  color: rgba(255, 255, 255, .66); margin-top: 3px;
+}

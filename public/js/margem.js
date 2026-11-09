@@ -295,6 +295,22 @@
     const melhor = linhas[0];
     const investimento = (e.custo + e.freteEnt + e.embalagem) * e.qtd;
     $('mg-investimento').textContent = temCusto ? moeda(investimento) : '—';
+
+    // O investimento NAO e custo x quantidade: entram tambem o frete de entrada
+    // e a embalagem, que ficam recolhidos em "Custos e premissas". Sem mostrar
+    // essa conta, o numero parece errado para quem so digitou o custo.
+    const porUnidade = e.custo + e.freteEnt + e.embalagem;
+    const extras = [];
+    if (e.freteEnt > 0) extras.push(`${moeda(e.freteEnt)} de frete de entrada`);
+    if (e.embalagem > 0) extras.push(`${moeda(e.embalagem)} de embalagem`);
+    const conta = $('mg-investimento-conta');
+    if (conta) {
+      conta.textContent = !temCusto
+        ? ''
+        : extras.length
+          ? `${moeda(porUnidade)}/un (${moeda(e.custo)} + ${extras.join(' + ')}) × ${Math.round(e.qtd)}`
+          : `${moeda(porUnidade)}/un × ${Math.round(e.qtd)} unidades`;
+    }
     $('mg-lucro-lote').textContent = temCusto && melhor ? moeda(melhor.r.lucroLote) : '—';
     $('mg-melhor').textContent = temCusto && melhor ? melhor.plat.curto : '—';
     $('mg-payback').textContent = temCusto && melhor && melhor.r.paybackOk
