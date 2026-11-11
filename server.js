@@ -256,6 +256,21 @@ app.get('/app', requirePageAuth, (req, res) => {
   res.type('html').send(html);
 });
 
+
+// ---------- Assinatura digital de e-mail (PNG claro e escuro) ----------
+// Quem estiver logado envia com a própria assinatura, sem fazer nada. Em programas de e-mail com modo escuro
+// que aceitam CSS, troca sozinha para a versão escura; nos demais, aparece a clara.
+const SIGNATURE_KEYS = { luis: 'Luis Henrique Dias', pedro: 'Pedro Romanello', diego: 'Diego Gianini' };
+function signatureHtmlFor(user) {
+  if (!user || user.role === 'matriz') return '';
+  const key = String(user.username || '').split(/[^a-z]/)[0] || String(user.name || '').toLowerCase().split(' ')[0];
+  const full = SIGNATURE_KEYS[key]; if (!full) return '';
+  const base = (process.env.PUBLIC_URL || 'https://velocita-global-crm.onrender.com').replace(/\/$/, '');
+  const alt = `${full} · Velocita Global`;
+  const img = (tone, hidden) => `<img class="vg-sig-${tone[0]}" src="${base}/img/assinaturas/${key}-${tone}.png" width="620" alt="${alt}" style="${hidden ? 'display:none;' : 'display:block;'}width:620px;max-width:100%;height:auto;border:0;" />`;
+  return `<br><br><style>@media (prefers-color-scheme: dark){.vg-sig-c{display:none!important}.vg-sig-e{display:block!important}}</style><div class="vg-sig">${img('clara', false)}${img('escura', true)}</div>`;
+}
+
 // ---------- API helpers ----------
 function newId(prefix) {
   return `${prefix}-${crypto.randomBytes(6).toString('hex')}`;
@@ -1536,9 +1551,8 @@ app.post('/api/leads/:id/messages', requireAuth, async (req, res) => {
           });
           const trackingPixel = `<img src="${req.protocol}://${req.get('host')}/api/track/open/${message.id}.png" width="1" height="1" alt="" style="display:none;" />`;
           const signatureImageHtml =
-            attendant && attendant.signatureImage
-              ? `<br><br><img src="${attendant.signatureImage}" alt="Assinatura" style="max-width:320px;" />`
-              : '';
+            signatureHtmlFor(req.user) ||
+            (attendant && attendant.signatureImage ? `<br><br><img src="${attendant.signatureImage}" alt="Assinatura" style="max-width:320px;" />` : '');
           const htmlBody = message.text.replace(/\n/g, '<br>') + signatureImageHtml + trackingPixel;
           const mailAttachments = (Array.isArray(attachments) ? attachments : [])
             .filter((a) => a.dataBase64)
@@ -2277,7 +2291,8 @@ app.post('/api/mail/:box/send', requireAuth, async (req, res) => {
     const token = await getGoogleAccessTokenGeneric(mb.gcal, mb.refreshToken, mb.label);
     const from = mb.user ? `${mimeWord(mb.user.name)} <${mb.email}>` : `Velocita Global <${mb.email}>`;
     const bodyHtml = html || escapeHtmlServer(String(text || '')).replace(/\n/g, '<br>');
-    const raw = buildRawEmail({ from, to, cc, subject, html: `<div style="font-family:Arial,sans-serif;font-size:14px;">${bodyHtml}</div>`, inReplyTo, references });
+    const bodyWithSig = req.body.noSignature ? bodyHtml : bodyHtml + signatureHtmlFor(req.user);
+    const raw = buildRawEmail({ from, to, cc, subject, html: `<div style="font-family:Arial,sans-serif;font-size:14px;">${bodyWithSig}</div>`, inReplyTo, references });
     const sent = await gmailApi(token, 'messages/send', { method: 'POST', body: JSON.stringify(threadId ? { raw, threadId } : { raw }) });
     // se o destinatário for um lead do CRM, registra na linha do tempo dele
     const lead = data.contacts.find((c) => c.email && String(to).toLowerCase().includes(c.email.toLowerCase()));

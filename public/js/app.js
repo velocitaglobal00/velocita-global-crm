@@ -4012,20 +4012,8 @@ function closeEmailCompose() {
 }
 
 function toggleSignatureInBody() {
-  const attendant = currentAttendant();
-  if (!attendant || !attendant.signature) {
-    showToast('Você ainda não tem uma assinatura cadastrada (Configurações > Usuários)');
-    return;
-  }
-  const textarea = document.getElementById('gc-textarea');
-  const plainSignature = attendant.signature.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '');
-  if (state.emailSignatureInserted) {
-    textarea.value = textarea.value.replace(plainSignature, '').replace(/\n{3,}$/, '\n');
-    state.emailSignatureInserted = false;
-  } else {
-    textarea.value = textarea.value.replace(/\n+$/, '') + '\n' + plainSignature;
-    state.emailSignatureInserted = true;
-  }
+  // A assinatura digital (imagem, versão clara e escura) é anexada automaticamente ao enviar, em nome de quem está logado.
+  showToast('A sua assinatura digital já vai automaticamente no fim de cada e-mail enviado pelo CRM.');
 }
 
 function handleFileSelection(files) {
