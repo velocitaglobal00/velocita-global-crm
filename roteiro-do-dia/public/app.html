@@ -246,11 +246,13 @@ function vgToggleTheme(){var d=document.documentElement.getAttribute('data-theme
 </main>
 
 <script>
-// Se no CRM foi escolhido outro sócio em "Atendendo como", entra de novo como ele
+// Confere com o CRM quem está logado; se mudou (outro usuário entrou), volta para entrar de novo como ele
 (function(){
-  const crm = localStorage.getItem('vg_attendant_id');
-  const mine = localStorage.getItem('rd_crm_id');
-  if (crm && mine && crm !== mine) { window.location.href = './' + (location.pathname.endsWith('admin.html') ? '?ir=admin' : ''); }
+  fetch('api/crm-me').then(function(r){ return r.ok ? r.json() : null; }).then(function(me){
+    var mine = localStorage.getItem('rd_crm_id');
+    if (!me) return;
+    if (mine && me.id !== mine) { window.location.href = './' + (location.pathname.endsWith('admin.html') ? '?ir=admin' : ''); }
+  }).catch(function(){});
 })();
 const token = localStorage.getItem('rd_token');
 if(!token){ window.location.href = './'; }

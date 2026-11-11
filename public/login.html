@@ -13,6 +13,17 @@
 <meta name="apple-mobile-web-app-title" content="Velocita" />
 <meta name="apple-mobile-web-app-status-bar-style" content="default" />
 <link rel="stylesheet" href="/css/style.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Poppins:wght@600;700;800&display=swap">
+<style>
+@keyframes lgUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
+@keyframes lgPop{from{opacity:0;transform:scale(.6) rotate(-8deg)}to{opacity:1;transform:none}}
+.login-card{animation:lgUp .6s ease-out both}
+.login-card img{animation:lgPop .8s .15s cubic-bezier(.2,.9,.3,1.2) both}
+.login-card h1{font-family:'Poppins',sans-serif;animation:lgUp .6s .25s ease-out both}
+.login-card .subtitle,.login-card .login-field,.login-card .login-btn{animation:lgUp .6s .35s ease-out both}
+@media (prefers-reduced-motion:reduce){.login-card,.login-card *{animation:none!important}}
+</style>
 </head>
 <body>
   <div class="login-shell">

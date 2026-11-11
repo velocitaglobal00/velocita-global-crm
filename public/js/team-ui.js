@@ -27,6 +27,7 @@
     const sw = $('btn-switch-attendant'); if (sw) { sw.textContent = 'Minha senha'; sw.title = 'Trocar a minha senha'; sw.replaceWith(sw.cloneNode(true)); $('btn-switch-attendant').addEventListener('click', openPassword); }
     const admin = me.role === 'matriz' || me.role === 'admin';
     const link = document.querySelector('[data-view=equipe]'); if (link && admin) link.hidden = false;
+    const gl = $('link-gerador-admin'); if (gl && admin) gl.hidden = false;
     // perfil limitado: sem acesso a Configurações
     const cfg = document.querySelector('[data-view=settings]'); if (cfg && !admin) cfg.hidden = true;
     if (!admin && /#settings/.test(location.hash)) location.hash = '#dashboard';

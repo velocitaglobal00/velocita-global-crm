@@ -341,3 +341,61 @@ input:focus, select:focus, textarea:focus { outline: 3px solid var(--focus); out
 .aj-d ol, .aj-d ul { margin: 0 0 12px; padding-left: 22px; line-height: 1.6; font-size: 14px; } .aj-d li { margin-bottom: 4px; } .aj-d a { color: var(--vg-orange-dark); font-weight: 600; }
 
 .aj-shot { background: #060c1a; border: 1px solid var(--vg-border); border-radius: 12px; overflow: hidden; } .aj-shot img { display: block; width: 100%; height: auto; }
+
+/* Selo de não lidas dentro das listas (chat, comunicações): fica ao lado do nome, não solto na tela */
+.ct-name .notif-badge, .comms-thread-item .notif-badge {
+  position: static !important; display: inline-flex !important; align-items: center; justify-content: center;
+  min-width: 20px; height: 20px; padding: 0 6px; margin-left: 8px; border-radius: 999px; font-size: 11px; line-height: 1; vertical-align: middle;
+}
+
+/* ============ Modo claro de verdade: menu, topo e busca claros ============ */
+:root:not([data-theme='dark']) { --nav-bg: #ffffff; --nav-text: #2f3b59; --nav-line: #e1e6f0; }
+:root:not([data-theme='dark']) .sidebar { border-right: 1px solid var(--vg-border) !important; }
+:root:not([data-theme='dark']) .sidebar-head span, :root:not([data-theme='dark']) .nav-group-head { color: #5b6780; }
+:root:not([data-theme='dark']) .nav-group-head:hover { color: var(--vg-navy); }
+:root:not([data-theme='dark']) .sidebar-close { color: var(--vg-navy); border-color: var(--vg-border); }
+:root:not([data-theme='dark']) .sidebar-link .si { stroke: #5b6780; }
+:root:not([data-theme='dark']) .sidebar-link:hover { background: rgba(27, 42, 78, .07) !important; color: var(--vg-navy) !important; }
+:root:not([data-theme='dark']) .sidebar-link:hover .si { stroke: var(--vg-navy); }
+:root:not([data-theme='dark']) .sidebar-link.active .si { stroke: #0c1528; }
+:root:not([data-theme='dark']) .nav-scroll { scrollbar-color: rgba(27, 42, 78, .25) transparent; }
+:root:not([data-theme='dark']) .nav-scroll::-webkit-scrollbar-thumb { background: rgba(27, 42, 78, .25); }
+:root:not([data-theme='dark']) .topbar { background: #ffffff !important; border-bottom: 3px solid var(--vg-orange) !important; box-shadow: 0 1px 0 var(--vg-border); }
+:root:not([data-theme='dark']) .topbar, :root:not([data-theme='dark']) .topbar span, :root:not([data-theme='dark']) .topbar strong { color: var(--vg-navy) !important; }
+:root:not([data-theme='dark']) .topbar .logout-link { color: var(--vg-orange-dark) !important; }
+:root:not([data-theme='dark']) .topbar .logout-link:hover { color: var(--vg-navy) !important; }
+:root:not([data-theme='dark']) .search-box { background: #eef1f7 !important; border-color: var(--vg-border); }
+:root:not([data-theme='dark']) .search-box input { color: var(--vg-text); }
+:root:not([data-theme='dark']) .search-box input::placeholder { color: #66728d; }
+:root:not([data-theme='dark']) .search-box svg { stroke: #66728d; }
+:root:not([data-theme='dark']) .mt-tab[aria-selected='true'] { background: var(--vg-orange); border-color: var(--vg-orange); color: #0c1528; }
+
+/* ============ Logotipo reorganizado ============ */
+.topbar-brand { gap: 12px; }
+.topbar-brand img { width: 48px; height: 48px; filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .18)); }
+.vg-word { display: inline-flex !important; flex-direction: column; line-height: 1; gap: 4px; }
+.vg-word b { font: 800 21px 'Poppins', sans-serif; letter-spacing: .03em; }
+.vg-word i { font: 600 10.5px 'Poppins', sans-serif; font-style: normal; letter-spacing: .5em; color: var(--vg-orange-dark); text-indent: 1px; }
+.topbar .vg-word i { color: var(--vg-orange) !important; }
+
+/* ============ Animação de entrada (mesma linguagem do site) ============ */
+#vg-splash { position: fixed; inset: 0; z-index: 9999; display: grid; place-items: center; background: #0c1528; overflow: hidden; transition: opacity .5s ease, visibility .5s; }
+#vg-splash.out { opacity: 0; visibility: hidden; }
+#vg-splash::before { content: ''; position: absolute; inset: 0; background-image: linear-gradient(rgba(255,255,255,.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.04) 1px, transparent 1px); background-size: 56px 56px; mask-image: radial-gradient(ellipse at 50% 40%, #000 25%, transparent 75%); -webkit-mask-image: radial-gradient(ellipse at 50% 40%, #000 25%, transparent 75%); }
+.sp-glow { position: absolute; width: 560px; height: 560px; border-radius: 50%; background: radial-gradient(circle, rgba(244,130,31,.28), transparent 65%); animation: spGlow 1.6s ease-out both; }
+.sp-box { position: relative; display: grid; justify-items: center; gap: 16px; }
+.sp-box img { width: 120px; height: 120px; animation: spPop .8s cubic-bezier(.2, .9, .3, 1.2) both; filter: drop-shadow(0 10px 30px rgba(244,130,31,.35)); }
+.sp-word { display: grid; justify-items: center; gap: 6px; animation: spUp .7s .25s ease-out both; }
+.sp-word b { font: 800 34px 'Poppins', sans-serif; color: #fff; letter-spacing: .06em; }
+.sp-word i { font: 600 13px 'Poppins', sans-serif; font-style: normal; color: #ff9a3d; letter-spacing: .7em; text-indent: .7em; }
+.sp-bar { width: 180px; height: 3px; background: rgba(255,255,255,.12); border-radius: 3px; overflow: hidden; animation: spUp .6s .4s ease-out both; }
+.sp-bar u { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #f4821f, #ffb066); transform-origin: left; animation: spBar 1.3s .3s ease-in-out both; text-decoration: none; }
+@keyframes spPop { from { opacity: 0; transform: scale(.55) rotate(-8deg); } to { opacity: 1; transform: none; } }
+@keyframes spUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes spBar { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes spGlow { from { opacity: 0; transform: scale(.6); } to { opacity: 1; transform: none; } }
+/* as telas entram suavemente, só com opacidade e movimento (leve) */
+@keyframes vgUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.view.active > * { animation: vgUp .42s ease-out both; }
+.view.active > *:nth-child(2) { animation-delay: .04s; } .view.active > *:nth-child(3) { animation-delay: .08s; } .view.active > *:nth-child(4) { animation-delay: .12s; } .view.active > *:nth-child(5) { animation-delay: .16s; } .view.active > *:nth-child(n+6) { animation-delay: .2s; }
+@media (prefers-reduced-motion: reduce) { #vg-splash { display: none; } .view.active > * { animation: none !important; } }

@@ -2568,6 +2568,7 @@ app.use(
   '/roteiro-do-dia',
   (req, res, next) => {
     req.crmAuthenticated = restoreFromCookie(req);
+    req.crmUser = req.crmAuthenticated && req.user ? { id: req.user.id, name: req.user.name, role: req.user.role } : null;
     req.crmUsers = req.crmAuthenticated ? db.view().users.filter((u) => u.role !== 'matriz').map((u) => ({ id: u.id, name: u.name, email: u.email || u.googleEmail || '' })) : [];
     next();
   },

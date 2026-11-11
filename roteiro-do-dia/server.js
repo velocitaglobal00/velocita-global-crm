@@ -504,60 +504,41 @@ app.get('/api/crm-attendants', (req, res) => {
   res.json({ ok: true, users: (req.crmUsers || []).map((u) => ({ id: u.id, name: u.name })) });
 });
 
-// Conta do Gerador ligada a um sócio do CRM. Criada no primeiro uso, com acesso ao
-// painel admin, e reencontrada depois pelo e-mail interno crm+<id>@velocitaglobal.local.
+// Quem está logado no CRM (o Gerador não pede mais para escolher).
+app.get('/api/crm-me', (req, res) => {
+  if (!req.crmUser) return res.status(401).json({ error: 'Entre no CRM primeiro.' });
+  res.json({ ok: true, id: req.crmUser.id, name: req.crmUser.name, role: req.crmUser.role });
+});
+
+// Conta do Gerador ligada a uma pessoa do CRM. Criada no primeiro uso e reencontrada depois pelo
+// e-mail interno crm+<id>@velocitaglobal.local. Matriz e administradores do CRM entram com acesso ao
+// painel admin do Gerador; o perfil limitado entra só para gerar roteiros.
 async function generatorUserForCrm(crmUser) {
+  const wantRole = crmUser.role === 'matriz' || crmUser.role === 'admin' ? 'admin' : 'afiliado';
   const linkEmail = `crm+${crmUser.id}@velocitaglobal.local`;
   let user = await db.findUserByEmail(linkEmail);
-  if (user) return user;
+  if (user) {
+    if (user.role !== wantRole && (user.role === 'admin' || user.role === 'afiliado')) { await db.updateUserRole(user.id, wantRole); user = await db.findUserByEmail(linkEmail); }
+    return user;
+  }
   const base = String(crmUser.name || 'socio')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .trim().replace(/\s+/g, '.').replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 20) || 'socio';
   let username = base.length >= 3 ? base : `${base}.vg`;
   for (let i = 2; await db.findUserByUsername(username); i++) username = `${base.slice(0, 18)}.${i}`;
-  await db.createUser({ email: linkEmail, username, passHash: hashPassword(crypto.randomBytes(16).toString('hex')), role: 'admin', status: 'ativo', createdByAdmin: true });
+  await db.createUser({ email: linkEmail, username, passHash: hashPassword(crypto.randomBytes(16).toString('hex')), role: wantRole, status: 'ativo', createdByAdmin: true });
   return db.findUserByEmail(linkEmail);
 }
 
+// Entrada automática: quem já está logado no CRM entra no Gerador como ele mesmo, sem escolher nada.
+// (O corpo da requisição é ignorado de propósito: ninguém consegue entrar como outra pessoa.)
 app.post('/api/quick-login', async (req, res) => {
   try {
-    // Só entra quem já passou pelo login do CRM (antes qualquer um conseguia chamar esta rota).
-    if (!req.crmAuthenticated) return res.status(401).json({ error: 'Entre no CRM primeiro para usar o Gerador.' });
-    const { role, attendantId } = req.body || {};
-
-    if (attendantId) {
-      const crmUser = (req.crmUsers || []).find((u) => u.id === attendantId);
-      if (!crmUser) return res.status(404).json({ error: 'Sócio não encontrado no CRM.' });
-      const user = await generatorUserForCrm(crmUser);
-      if (user.status === 'banido' || user.status === 'suspenso') return res.status(403).json({ error: 'Conta suspensa no Gerador. Reative pelo painel admin.' });
-      const token = await signToken(user);
-      return res.json({ ok: true, token, role: user.role, username: user.username, displayName: crmUser.name, crmId: crmUser.id });
-    }
-
-    if (!['admin', 'afiliado'].includes(role)) {
-      return res.status(400).json({ error: 'Papel inválido.' });
-    }
-
-    let user;
-    if (role === 'admin') {
-      const all = await db.listAllUsers();
-      user = all.find((u) => u.role === 'admin');
-      if (!user) return res.status(500).json({ error: 'Nenhuma conta de admin encontrada.' });
-    } else {
-      user = await db.findUserByUsername('afiliado');
-      if (!user) {
-        user = await db.createUser({
-          email: CONTACT_EMAIL, username: 'afiliado', passHash: hashPassword(crypto.randomBytes(16).toString('hex')),
-          role: 'afiliado', status: 'ativo', createdByAdmin: true
-        });
-      }
-    }
-
-    if (user.status === 'banido') return res.status(403).json({ error: 'Conta banida. Comunique a administração.' });
-    if (user.status === 'suspenso') return res.status(403).json({ error: 'Conta suspensa. Comunique a administração.' });
-
+    if (!req.crmUser) return res.status(401).json({ error: 'Entre no CRM primeiro para usar o Gerador.' });
+    const user = await generatorUserForCrm(req.crmUser);
+    if (user.status === 'banido' || user.status === 'suspenso') return res.status(403).json({ error: 'Conta suspensa no Gerador. Fale com um administrador.' });
     const token = await signToken(user);
-    res.json({ ok: true, token, role: user.role, username: user.username });
+    res.json({ ok: true, token, role: user.role, username: user.username, displayName: req.crmUser.name, crmId: req.crmUser.id });
   } catch (e) {
     console.error('Erro em /api/quick-login:', e);
     res.status(500).json({ error: 'Erro interno ao entrar.' });

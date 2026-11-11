@@ -81,6 +81,13 @@
     });
   }
 
+  // abertura animada: aparece uma vez por sessão e some sozinha
+  (function splash() {
+    const el = document.getElementById('vg-splash'); if (!el) return;
+    let seen = false; try { seen = sessionStorage.getItem('vg_splash') === '1'; sessionStorage.setItem('vg_splash', '1'); } catch (e) { /* sem armazenamento */ }
+    if (seen || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) { el.remove(); return; }
+    setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 600); }, 1700);
+  })();
   document.addEventListener('click', (e) => { const b = e.target.closest('[data-goto]'); if (b && typeof window.switchView === 'function') window.switchView(b.dataset.goto); });
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initNav); else initNav();
 })();
