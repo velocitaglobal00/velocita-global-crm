@@ -89,7 +89,7 @@ function currentUser(req) {
   if (!uid) {
     const token = readCookie(req, REMEMBER_COOKIE);
     if (!token) return null;
-    try { uid = jwt.verify(token, authSecret()).uid; } catch (e) { return null; }
+    try { const pl = jwt.verify(token, authSecret()); uid = pl.uid; if (pl.iat && Date.now() / 1000 - pl.iat > 3 * 86400) req._renewCookie = true; } catch (e) { return null; }
     if (!uid) return null; // cookie antigo (senha única): pede login de novo
   }
   const u = db.view().users.find((x) => x.id === uid && x.active !== false);
@@ -134,6 +134,15 @@ function passwordMatches(password) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
+
+// Abre a sessão e grava o cookie de "continuar logado" (60 dias, renovado enquanto a pessoa usa o CRM).
+function startSession(req, res, user) {
+  req.session.userId = user.id; req.session.authenticated = true;
+  const token = jwt.sign({ uid: user.id }, authSecret(), { expiresIn: '60d' });
+  res.cookie(REMEMBER_COOKIE, token, { httpOnly: true, sameSite: 'lax', secure: !!req.secure, maxAge: 60 * 24 * 60 * 60 * 1000 });
+  team.onLogin(user);
+}
+
 app.post('/api/login', (req, res) => {
   const { username, password } = req.body || {};
   if (tooManyLoginFailures(req.ip)) {
@@ -145,10 +154,7 @@ app.post('/api/login', (req, res) => {
   const ok = !!user && (user.passHash ? team.verifyPassword(password, user.passHash) : passwordMatches(password));
   if (ok) {
     loginFailures.delete(req.ip);
-    req.session.userId = user.id; req.session.authenticated = true;
-    const token = jwt.sign({ uid: user.id }, authSecret(), { expiresIn: '60d' });
-    res.cookie(REMEMBER_COOKIE, token, { httpOnly: true, sameSite: 'lax', secure: req.secure, maxAge: 60 * 24 * 60 * 60 * 1000 });
-    team.onLogin(user);
+    startSession(req, res, user);
     return res.json({ ok: true, user: team.publicUser(user), needsPassword: !user.passHash });
   }
   registerLoginFailure(req.ip);
@@ -168,7 +174,10 @@ app.get('/api/session', (req, res) => {
 
 // Em toda chamada da API: identifica quem é, força "quem fez" = usuário logado (matriz fica anônima) e conta a atividade.
 app.use('/api', (req, res, next) => {
-  if (restoreFromCookie(req)) { team.attribute(req); team.track(req, res); }
+  if (restoreFromCookie(req)) {
+    team.attribute(req); team.track(req, res);
+    if (req._renewCookie) { const t = jwt.sign({ uid: req.user.id }, authSecret(), { expiresIn: '60d' }); res.cookie(REMEMBER_COOKIE, t, { httpOnly: true, sameSite: 'lax', secure: !!req.secure, maxAge: 60 * 24 * 60 * 60 * 1000 }); }
+  }
   next();
 });
 
@@ -249,6 +258,7 @@ app.get('/app', requirePageAuth, (req, res) => {
     .replace('/js/margem.js"', `/js/margem.js?v=${ASSET_VERSION}"`)
     .replace('/js/leadgen-ui.js"', `/js/leadgen-ui.js?v=${ASSET_VERSION}"`)
     .replace('/js/nav-materiais.js"', `/js/nav-materiais.js?v=${ASSET_VERSION}"`)
+    .replace('/js/passkey-ui.js"', `/js/passkey-ui.js?v=${ASSET_VERSION}"`)
     .replace('/js/team-ui.js"', `/js/team-ui.js?v=${ASSET_VERSION}"`)
     .replace('/js/pipeline-v2.js"', `/js/pipeline-v2.js?v=${ASSET_VERSION}"`)
     .replace('/js/calls-ui.js"', `/js/calls-ui.js?v=${ASSET_VERSION}"`);
@@ -339,7 +349,8 @@ app.put('/api/materials', requireAuth, (req, res) => {
 
 // Gerador de Leads (busca de empresas, pontuação e envio ao pipeline) — ver leadgen.js
 team.register(app, { db, requireAuth, newId });
-require('./calls').register(app, { db, requireAuth });
+require('./passkey').register(app, { db, requireAuth, startSession, tooManyFailures: tooManyLoginFailures, registerFailure: registerLoginFailure });
+require('./calls').register(app, { db, requireAuth, pushToTeam });
 require('./leadgen').register(app, { db, requireAuth, newId, logHistory });
 
 // ---------- Notificações no celular (Web Push / PWA) ----------
@@ -1010,7 +1021,7 @@ app.put('/api/users/:id', requireAuth, (req, res) => {
   const user = data.users.find((u) => u.id === req.params.id);
   if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
   if (!team.isAdminLike(req.user) && req.user.id !== user.id) return res.status(403).json({ error: 'Você só pode alterar o seu próprio cadastro.' });
-  const { passHash, role, username, active, id, ...safe } = req.body || {};
+  const { passHash, role, username, active, id, passkeys, ...safe } = req.body || {};
   Object.assign(user, safe);
   db.write(data);
   res.json(team.sanitizeUsers([user])[0] || {});

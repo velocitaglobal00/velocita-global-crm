@@ -99,5 +99,18 @@
     });
   }
 
-  window.addEventListener('crm-ready', () => { setupTopbar(); startPresence(); });
+  // convite para ativar o Face ID neste aparelho (uma vez, até a pessoa ativar ou dispensar)
+  async function offerFaceId() {
+    const me = window.state && window.state.me; if (!me || me.role === 'matriz' || !window.VGPasskey) return;
+    let done = false, skipped = false; try { done = localStorage.getItem('vg_passkey') === '1'; skipped = localStorage.getItem('vg_passkey_skip') === '1'; } catch (e) { /* ok */ }
+    if (done || skipped || !(await window.VGPasskey.available())) return;
+    const bar = document.createElement('div'); bar.className = 'faceid-bar'; bar.setAttribute('role', 'region');
+    bar.innerHTML = '<div><b>Entre sem digitar a senha</b><span>Ative o Face ID (ou digital) neste aparelho. Assim você não fica deslogado e continua recebendo os avisos.</span></div><div class="faceid-actions"><button type="button" class="btn-primary btn-sm" id="faceid-on">Ativar Face ID</button><button type="button" class="btn-secondary btn-sm" id="faceid-off">Agora não</button></div>';
+    const host = document.querySelector('.main-content'); if (!host) return; host.prepend(bar);
+    $('faceid-off').onclick = () => { try { localStorage.setItem('vg_passkey_skip', '1'); } catch (e) { /* ok */ } bar.remove(); };
+    $('faceid-on').onclick = async () => {
+      try { await window.VGPasskey.enroll(); toast('Face ID ativado neste aparelho.'); bar.remove(); } catch (e) { if (!(e && e.name === 'NotAllowedError')) toast('Não foi possível ativar: ' + (e.message || 'erro')); }
+    };
+  }
+  window.addEventListener('crm-ready', () => { setupTopbar(); startPresence(); setTimeout(offerFaceId, 2500); });
 })();

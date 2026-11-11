@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@libsql/client": "^0.17.4",
+    "@simplewebauthn/server": "^9.0.3",
     "dotenv": "^17.4.2",
     "express": "^4.19.2",
     "express-session": "^1.18.0",

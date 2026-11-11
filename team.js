@@ -69,7 +69,7 @@ function ensureTeam(data) {
 const publicUser = (u) => ({ id: u.id, name: u.name, role: u.role, username: u.username });
 // o que vai para o navegador: nunca o hash da senha; e a matriz some das listas de atendentes
 function sanitizeUsers(list) {
-  return list.filter((u) => u.role !== 'matriz').map((u) => { const { passHash, ...rest } = u; return rest; });
+  return list.filter((u) => u.role !== 'matriz').map((u) => { const { passHash, passkeys, ...rest } = u; return rest; });
 }
 
 // ---------- presença e atividade ----------

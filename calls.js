@@ -7,7 +7,7 @@ const TTL_MS = 120000;
 const mailbox = new Map(); // userId -> [{ from, fromName, type, callId, kind, data, t }]
 const TYPES = new Set(['invite', 'accept', 'decline', 'offer', 'answer', 'ice', 'end']);
 
-function register(app, { db, requireAuth }) {
+function register(app, { db, requireAuth, pushToTeam }) {
   const blockMatriz = (req, res, next) => (req.user && req.user.role === 'matriz' ? res.status(403).json({ error: 'A conta matriz não participa de chamadas. Entre com o seu usuário.' }) : next());
 
   // servidores de rede para atravessar roteadores. TURN é opcional (variáveis TURN_URL, TURN_USER, TURN_PASS).
@@ -27,6 +27,10 @@ function register(app, { db, requireAuth }) {
     if (raw && raw.length > 60000) return res.status(413).json({ error: 'Sinal grande demais' });
     box.push({ from: req.user.id, fromName: req.user.name, type: b.type, callId: b.callId, kind: ['audio', 'video', 'screen'].includes(b.kind) ? b.kind : 'audio', data: b.data == null ? null : b.data, t: Date.now() });
     if (box.length > 300) box.splice(0, box.length - 300);
+    // chamada nova: avisa no celular e no computador mesmo com o CRM fechado ou deslogado (notificação push)
+    if (b.type === 'invite' && typeof pushToTeam === 'function') {
+      try { pushToTeam(db.view(), { only: [target.id], title: `${req.user.name} está te chamando`, body: { audio: 'Chamada de voz', video: 'Chamada de vídeo', screen: 'Chamada com tela compartilhada' }[b.kind] || 'Chamada', url: '/app#chatequipe', tag: 'call-' + b.callId }); } catch (e) { /* sem push */ }
+    }
     res.json({ ok: true });
   });
 

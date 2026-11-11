@@ -41,3 +41,21 @@ form.addEventListener('submit', async (e) => {
     errorBox.classList.add('show');
   }
 });
+
+
+// Entrar com Face ID / biometria (passkey cadastrada neste aparelho)
+(async function faceId() {
+  const btn = document.getElementById('faceid-btn'); if (!btn || !window.VGPasskey) return;
+  if (!(await window.VGPasskey.available())) return;
+  btn.style.display = 'block';
+  btn.addEventListener('click', async () => {
+    errorBox.classList.remove('show'); btn.disabled = true;
+    try { await window.VGPasskey.login(); window.location.href = '/app'; }
+    catch (e) {
+      btn.disabled = false;
+      if (e && e.name === 'NotAllowedError') return; // a pessoa cancelou
+      errorBox.textContent = e.message && !/credential|WebAuthn|operation/i.test(e.message) ? e.message : 'Não foi possível usar o Face ID. Entre com usuário e senha e ative de novo.';
+      errorBox.classList.add('show');
+    }
+  });
+})();

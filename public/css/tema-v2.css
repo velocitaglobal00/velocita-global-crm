@@ -399,3 +399,7 @@ input:focus, select:focus, textarea:focus { outline: 3px solid var(--focus); out
 .view.active > * { animation: vgUp .42s ease-out both; }
 .view.active > *:nth-child(2) { animation-delay: .04s; } .view.active > *:nth-child(3) { animation-delay: .08s; } .view.active > *:nth-child(4) { animation-delay: .12s; } .view.active > *:nth-child(5) { animation-delay: .16s; } .view.active > *:nth-child(n+6) { animation-delay: .2s; }
 @media (prefers-reduced-motion: reduce) { #vg-splash { display: none; } .view.active > * { animation: none !important; } }
+
+.faceid-bar { display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; background: var(--vg-surface); border: 1px solid var(--vg-border); border-left: 4px solid var(--vg-orange); border-radius: 14px; padding: 12px 14px; margin-bottom: 14px; }
+.faceid-bar b { display: block; color: var(--vg-heading); } .faceid-bar span { font-size: 13px; color: var(--vg-text-muted); }
+.faceid-actions { display: flex; gap: 8px; }

@@ -610,6 +610,7 @@ function ensureAttendant() {
   const me = state.me || {};
   state.attendantId = me.role === 'matriz' ? null : me.id || null;
   updateAttendantTopbar();
+  if (state.attendantId) syncPushSubscription(); // o aparelho continua recebendo avisos deste usuário, mesmo se o CRM for fechado
   window.dispatchEvent(new Event('crm-ready'));
 }
 
