@@ -319,7 +319,7 @@ async function loadAllData() {
 // ============ App no celular (PWA) + notificações ============
 // O service worker (/sw.js) recebe as notificações do servidor mesmo com o app fechado.
 // Cada aparelho fica ligado ao atendente escolhido em "Atendendo como".
-const PWA_VIEWS = ['dashboard', 'roteiro', 'pipeline', 'leads', 'orgs', 'email', 'mensagens', 'bi', 'margem', 'calendario', 'chatequipe', 'settings', 'ajuda'];
+const PWA_VIEWS = ['dashboard', 'roteiro', 'pipeline', 'leads', 'leadgen', 'materiais', 'orgs', 'email', 'mensagens', 'bi', 'margem', 'calendario', 'chatequipe', 'settings', 'ajuda'];
 
 function openViewFromHash(hash) {
   const v = String(hash || location.hash || '').replace('#', '');
@@ -464,6 +464,8 @@ function switchView(viewName) {
   if (viewName === 'pipeline') renderKanban();
   if (viewName === 'leads') renderLeads();
   if (viewName === 'orgs') renderOrgs();
+  if (viewName === 'leadgen' && window.initLeadgen) window.initLeadgen();
+  if (viewName === 'materiais' && window.initMateriais) window.initMateriais();
   if (viewName === 'comunicacoes') renderComms();
   if (viewName === 'email') renderEmailInbox();
   if (viewName === 'mensagens') renderMensagens();

@@ -3806,3 +3806,43 @@ table.data-table tr.clickable:hover {
   letter-spacing: 0; text-transform: none; color: var(--vg-text-muted);
 }
 .mg-extras-grid { padding-top: 0; }
+
+/* ===== Gerador de Leads ===== */
+.lg-warn { background: var(--vg-warn-bg, #fff6e5); color: var(--vg-warn-text, #8a5a00); border: 1px solid #f0d49a; border-radius: 10px; padding: 12px 14px; margin-bottom: 14px; font-size: 13px; line-height: 1.5; }
+.lg-warn code { background: rgba(0,0,0,.08); padding: 1px 5px; border-radius: 4px; }
+.lg-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 14px; }
+.lg-metric { background: var(--vg-surface); border: 1px solid var(--vg-border); border-radius: 12px; padding: 12px 14px; box-shadow: 0 1px 3px var(--vg-shadow); }
+.lg-metric b { display: block; font-size: 26px; color: var(--vg-heading); }
+.lg-metric span { font-size: 12px; color: var(--vg-text-muted); }
+.lg-bar { height: 6px; background: var(--vg-column-bg); border-radius: 4px; margin-top: 8px; overflow: hidden; }
+.lg-bar i { display: block; height: 100%; background: var(--vg-orange); }
+.lg-card { background: var(--vg-surface); border: 1px solid var(--vg-border); border-radius: 14px; padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 3px var(--vg-shadow); }
+.lg-card h3 { margin: 0 0 12px; color: var(--vg-heading); }
+.lg-card h3 small { font-weight: 400; color: var(--vg-text-muted); font-size: 13px; }
+.lg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px 12px; }
+.lg-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--vg-text-muted); }
+.lg-grid input, .lg-grid select, .lg-outcome select, .lg-outcome input { padding: 8px 10px; border: 1px solid var(--vg-border); border-radius: 8px; background: var(--vg-surface); color: var(--vg-text); font-size: 13px; min-width: 0; }
+.lg-checks { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 12px 0; }
+.lg-check { font-size: 13px; color: var(--vg-text); display: flex; gap: 6px; align-items: center; }
+.lg-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.lg-status { font-size: 13px; color: var(--vg-text-muted); }
+.lg-ref { display: flex; gap: 6px; } .lg-ref input { flex: 1; }
+.lg-refinfo { font-size: 12px; color: var(--vg-text-muted); margin: 8px 0; min-height: 4px; }
+.lg-lead { display: flex; gap: 12px; padding: 12px; border: 1px solid var(--vg-border); border-left: 5px solid var(--vg-border); border-radius: 10px; margin-top: 10px; background: var(--vg-surface-2); }
+.lg-lead.lg-quente { border-left-color: var(--vg-green); } .lg-lead.lg-morno { border-left-color: var(--vg-orange); } .lg-lead.lg-frio { border-left-color: #9aa5b8; }
+.lg-score { min-width: 52px; text-align: center; } .lg-score b { display: block; font-size: 24px; color: var(--vg-heading); } .lg-score small { text-transform: uppercase; font-size: 10px; letter-spacing: .5px; color: var(--vg-text-muted); }
+.lg-body { flex: 1; min-width: 0; }
+.lg-title { font-size: 15px; color: var(--vg-heading); display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.lg-line { font-size: 13px; margin-top: 5px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.lg-line a { color: var(--vg-orange-dark); }
+.lg-muted { color: var(--vg-text-muted); }
+.lg-stars { color: #d98a00; font-weight: 600; } .lg-stars small { color: var(--vg-text-muted); font-weight: 400; }
+.lg-pill { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--vg-column-bg); color: var(--vg-text); }
+.lg-pill.lg-ok { background: #d9f2e3; color: #14683a; }
+.lg-btn { font-size: 12px; padding: 3px 9px; border: 1px solid var(--vg-border); border-radius: 999px; text-decoration: none; background: var(--vg-surface); }
+.lg-wa { background: #25d366; color: #fff !important; border-color: #25d366; }
+.lg-ra { font-size: 12px; color: var(--vg-text-muted); display: flex; gap: 4px; align-items: center; } .lg-ra input { width: 64px; padding: 3px 6px; border: 1px solid var(--vg-border); border-radius: 6px; background: var(--vg-surface); color: var(--vg-text); }
+.lg-outcome { padding-top: 6px; border-top: 1px dashed var(--vg-border); } .lg-outcome input { flex: 1; min-width: 140px; }
+@media (max-width: 700px) { .lg-lead { flex-direction: column; } .lg-score { text-align: left; display: flex; gap: 8px; align-items: baseline; } }
+
+.lg-pitch { font-size: 12.5px; margin-top: 6px; padding: 8px 10px; background: rgba(244,130,31,.09); border-radius: 8px; color: var(--vg-text); line-height: 1.45; }

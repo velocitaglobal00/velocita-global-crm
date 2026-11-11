@@ -89,6 +89,16 @@ function read() {
   return JSON.parse(JSON.stringify(cache));
 }
 
+// Leitura SEM cópia, só para rotas que apenas consultam (não alteram nem devolvem para write()).
+// read() copia o banco inteiro a cada chamada; com muitos leads isso pesava bastante.
+function view() {
+  if (!cache) {
+    if (useTurso) throw new Error('Banco de dados ainda não carregado');
+    cache = readSeedFile();
+  }
+  return cache;
+}
+
 // Gravações no Turso: uma por vez e sempre a versão mais recente. Se várias
 // chegarem enquanto uma está em andamento, só a última é enviada (as anteriores
 // já estão contidas nela). Sem isso, duas gravações simultâneas podiam terminar
@@ -185,4 +195,4 @@ async function deleteFiles(ids) {
   }
 }
 
-module.exports = { init, read, write, flush, putFile, getFile, deleteFiles, useTurso };
+module.exports = { init, read, view, write, flush, putFile, getFile, deleteFiles, useTurso };

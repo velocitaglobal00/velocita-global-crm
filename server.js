@@ -211,8 +211,11 @@ app.get('/app', requirePageAuth, (req, res) => {
   const html = require('fs')
     .readFileSync(path.join(__dirname, 'views', 'app.html'), 'utf-8')
     .replace('/css/style.css"', `/css/style.css?v=${ASSET_VERSION}"`)
+    .replace('/css/tema-v2.css"', `/css/tema-v2.css?v=${ASSET_VERSION}"`)
     .replace('/js/app.js"', `/js/app.js?v=${ASSET_VERSION}"`)
-    .replace('/js/margem.js"', `/js/margem.js?v=${ASSET_VERSION}"`);
+    .replace('/js/margem.js"', `/js/margem.js?v=${ASSET_VERSION}"`)
+    .replace('/js/leadgen-ui.js"', `/js/leadgen-ui.js?v=${ASSET_VERSION}"`)
+    .replace('/js/nav-materiais.js"', `/js/nav-materiais.js?v=${ASSET_VERSION}"`);
   res.set('Cache-Control', 'no-cache');
   res.type('html').send(html);
 });
@@ -245,6 +248,46 @@ function logHistory(data, entityType, entityId, attendantId, action, summary) {
     tag: `${entityType}-${entityId}`
   });
 }
+
+
+// ---------- Materiais e Preços (uso interno: tabela de preços, modelos de mensagem e atalhos do Drive) ----------
+function defaultMaterials() {
+  return {
+    prices: [
+      { name: 'Parceria orgânica', desc: 'Sem custo fixo inicial. Comissão cobrada só depois da venda.', value: 'R$ 0 fixo + 10% de comissão' },
+      { name: 'Plano de gestão com mídia', desc: 'Gestão de anúncios e canais, com verba de mídia inclusa.', value: 'A partir de R$ 1.500/mês' },
+      { name: 'Referência de mercado', desc: 'O que agências tradicionais cobram só de taxa de gestão.', value: 'R$ 2,5 mil a R$ 10 mil' }
+    ],
+    templates: [
+      { title: 'WhatsApp: primeiro contato', text: 'Olá, {nome}! Aqui é {atendente}, da Velocita Global. Vimos a {empresa} e gostaríamos de conversar sobre levar os seus produtos para Mercado Livre, Shopee, Amazon e TikTok Shop, com tecnologia própria e acompanhamento de perto. O estoque continua com vocês. Posso explicar em 2 minutos?' },
+      { title: 'E-mail: apresentação', text: 'Assunto: Vender mais em marketplaces com a {empresa}\n\nOlá, {nome}, tudo bem?\n\nSomos a Velocita Global. Unimos inteligência artificial própria, tráfego pago, marketing e e-commerce para acelerar as vendas de marcas em vários canais ao mesmo tempo.\n\nGostaria de apresentar como podemos fazer isso com a {empresa}, sem mexer no seu estoque. Tem 15 minutos esta semana?\n\n{atendente}\nvelocitaglobal.com.br | WhatsApp (16) 3362-4507' },
+      { title: 'Follow-up: sem resposta', text: 'Olá, {nome}! Passando para saber se você viu a minha mensagem sobre vender a {empresa} em mais canais. Se fizer sentido, te explico rapidinho como funciona. Se não for o momento, sem problema!' },
+      { title: 'Pós-reunião', text: 'Olá, {nome}! Obrigado pela conversa hoje. Como combinado, vou preparar a proposta para a {empresa} e envio até {data}. Qualquer dúvida, é só chamar por aqui.' }
+    ],
+    drive: [
+      { title: 'Crachá e Cordão (arquivos para a gráfica)', url: 'https://drive.google.com/drive/folders/1B_28wKcaNL0_kKUXiQoBMUtEzgwv353V' },
+      { title: 'Meu Drive', url: 'https://drive.google.com/drive/my-drive' }
+    ]
+  };
+}
+app.get('/api/materials', requireAuth, (req, res) => {
+  const data = db.view();
+  res.json(data.materials || defaultMaterials());
+});
+app.put('/api/materials', requireAuth, (req, res) => {
+  const b = req.body || {}; const cl = (v, n) => String(v == null ? '' : v).slice(0, n);
+  const data = db.read();
+  data.materials = {
+    prices: (Array.isArray(b.prices) ? b.prices : []).slice(0, 60).map((p) => ({ name: cl(p.name, 120), desc: cl(p.desc, 400), value: cl(p.value, 120) })),
+    templates: (Array.isArray(b.templates) ? b.templates : []).slice(0, 60).map((p) => ({ title: cl(p.title, 120), text: cl(p.text, 4000) })),
+    drive: (Array.isArray(b.drive) ? b.drive : []).slice(0, 60).map((p) => ({ title: cl(p.title, 120), url: /^https:\/\/(drive|docs)\.google\.com\//.test(cl(p.url, 500)) ? cl(p.url, 500) : '' }))
+  };
+  db.write(data);
+  res.json(data.materials);
+});
+
+// Gerador de Leads (busca de empresas, pontuação e envio ao pipeline) — ver leadgen.js
+require('./leadgen').register(app, { db, requireAuth, newId, logHistory });
 
 // ---------- Notificações no celular (Web Push / PWA) ----------
 // Chaves VAPID geradas uma vez e guardadas nas configurações (persistem no Turso).
@@ -288,7 +331,7 @@ function pushToTeam(data, { except, only, title, body, url, tag }) {
 }
 
 app.get('/api/push/public-key', requireAuth, (req, res) => {
-  res.json({ publicKey: vapidKeys(db.read()).publicKey });
+  res.json({ publicKey: vapidKeys(db.view()).publicKey });
 });
 
 app.post('/api/push/subscribe', requireAuth, (req, res) => {
@@ -391,7 +434,7 @@ function notifyUserWhatsApp(data, userId, text) {
 
 // ---------- Stages ----------
 app.get('/api/stages', requireAuth, (req, res) => {
-  const data = db.read();
+  const data = db.view();
   res.json(data.stages.sort((a, b) => a.order - b.order));
 });
 
@@ -438,7 +481,7 @@ app.put('/api/stages-reorder', requireAuth, (req, res) => {
 
 // ---------- Organizations ----------
 app.get('/api/organizations', requireAuth, (req, res) => {
-  res.json(db.read().organizations);
+  res.json(db.view().organizations);
 });
 
 app.post('/api/organizations', requireAuth, (req, res) => {
@@ -491,13 +534,13 @@ app.delete('/api/organizations/:id', requireAuth, (req, res) => {
 });
 
 app.get('/api/organizations/:id/history', requireAuth, (req, res) => {
-  const data = db.read();
+  const data = db.view();
   res.json((data.history || []).filter((h) => h.entityType === 'org' && h.entityId === req.params.id));
 });
 
 // ---------- Contacts (people) ----------
 app.get('/api/contacts', requireAuth, (req, res) => {
-  res.json(db.read().contacts);
+  res.json(db.view().contacts);
 });
 
 app.post('/api/contacts', requireAuth, (req, res) => {
@@ -581,7 +624,7 @@ app.post('/api/contacts/import', requireAuth, (req, res) => {
 // Uma anotação por dia e por atendente (attendantId null = observação geral do time).
 app.get('/api/daily-notes', requireAuth, (req, res) => {
   const { from, to } = req.query;
-  let notes = db.read().dailyNotes || [];
+  let notes = db.view().dailyNotes || [];
   if (from) notes = notes.filter((n) => n.date >= from);
   if (to) notes = notes.filter((n) => n.date <= to);
   res.json(notes);
@@ -635,13 +678,13 @@ app.delete('/api/contacts/:id', requireAuth, (req, res) => {
 });
 
 app.get('/api/leads/:id/history', requireAuth, (req, res) => {
-  const data = db.read();
+  const data = db.view();
   res.json((data.history || []).filter((h) => h.entityType === 'lead' && h.entityId === req.params.id));
 });
 
 // ---------- Deals ----------
 app.get('/api/deals', requireAuth, (req, res) => {
-  res.json(db.read().deals);
+  res.json(db.view().deals);
 });
 
 app.post('/api/deals', requireAuth, (req, res) => {
@@ -707,7 +750,7 @@ app.delete('/api/deals/:id', requireAuth, (req, res) => {
 // ---------- Activities ----------
 // Todas as atividades (negócios + leads) — usado pelo Roteiro do Dia.
 app.get('/api/activities', requireAuth, (req, res) => {
-  res.json(db.read().activities);
+  res.json(db.view().activities);
 });
 
 // Criação avulsa (aba Calendário) — não vinculada obrigatoriamente a um negócio/lead.
@@ -732,7 +775,7 @@ app.post('/api/activities', requireAuth, (req, res) => {
 });
 
 app.get('/api/deals/:id/activities', requireAuth, (req, res) => {
-  const data = db.read();
+  const data = db.view();
   res.json(data.activities.filter((a) => a.dealId === req.params.id));
 });
 
@@ -757,7 +800,7 @@ app.post('/api/deals/:id/activities', requireAuth, (req, res) => {
 
 // Atividades gerais do lead (não vinculadas a um negócio específico)
 app.get('/api/leads/:id/activities', requireAuth, (req, res) => {
-  const data = db.read();
+  const data = db.view();
   res.json(data.activities.filter((a) => a.leadId === req.params.id));
 });
 
@@ -830,7 +873,7 @@ app.delete('/api/activities/:id', requireAuth, (req, res) => {
 
 // ---------- Tags (etiquetas) ----------
 app.get('/api/tags', requireAuth, (req, res) => {
-  res.json(db.read().tags || []);
+  res.json(db.view().tags || []);
 });
 
 app.post('/api/tags', requireAuth, (req, res) => {
@@ -862,7 +905,7 @@ app.delete('/api/tags/:id', requireAuth, (req, res) => {
 
 // ---------- Reminders (lembretes / tarefas a vencer) ----------
 app.get('/api/reminders', requireAuth, (req, res) => {
-  const data = db.read();
+  const data = db.view();
   const now = new Date();
   const reminders = data.activities
     .filter((a) => a.type === 'task' && !a.done)
@@ -896,7 +939,7 @@ app.get('/api/reminders', requireAuth, (req, res) => {
 
 // ---------- Users ----------
 app.get('/api/users', requireAuth, (req, res) => {
-  res.json(db.read().users);
+  res.json(db.view().users);
 });
 
 app.post('/api/users', requireAuth, (req, res) => {
@@ -930,7 +973,7 @@ app.delete('/api/users/:id', requireAuth, (req, res) => {
 const SERVER_ONLY_SETTINGS = ['authSecret', 'webPush'];
 
 app.get('/api/settings', requireAuth, (req, res) => {
-  const settings = db.read().settings;
+  const settings = db.view().settings;
   SERVER_ONLY_SETTINGS.forEach((k) => delete settings[k]);
   res.json(settings);
 });
@@ -1187,7 +1230,7 @@ app.post('/api/webhooks/email', (req, res) => {
 });
 
 app.get('/api/webhook-events', requireAuth, (req, res) => {
-  res.json((db.read().webhookEvents || []).slice(0, 50));
+  res.json((db.view().webhookEvents || []).slice(0, 50));
 });
 
 // ---------- Conversas por canal (WhatsApp / Facebook / Instagram / E-mail) ----------
@@ -1197,7 +1240,7 @@ app.get('/api/webhook-events', requireAuth, (req, res) => {
 // registrada apenas no CRM (deliveryStatus: "simulated"), de forma transparente.
 // Lista a conversa mais recente por lead+canal — alimenta a página Comunicações.
 app.get('/api/messages', requireAuth, (req, res) => {
-  const data = db.read();
+  const data = db.view();
   const latestByThread = new Map();
   (data.messages || [])
     .slice()
@@ -1216,11 +1259,11 @@ app.get('/api/messages', requireAuth, (req, res) => {
 
 // ---------- Notificações ----------
 app.get('/api/notifications', requireAuth, (req, res) => {
-  res.json((db.read().notifications || []).slice(0, 50));
+  res.json((db.view().notifications || []).slice(0, 50));
 });
 
 app.get('/api/notifications/unread-count', requireAuth, (req, res) => {
-  const count = (db.read().notifications || []).filter((n) => !n.read).length;
+  const count = (db.view().notifications || []).filter((n) => !n.read).length;
   res.json({ count });
 });
 
@@ -1270,7 +1313,7 @@ app.post('/api/notifications/clear', requireAuth, (req, res) => {
 // Mensagens "gerais" (sem recipientId) vão para todo mundo; mensagens privadas só
 // aparecem para o remetente e o destinatário escolhido.
 app.get('/api/team-chat', requireAuth, (req, res) => {
-  const data = db.read();
+  const data = db.view();
   const me = req.query.attendantId || '';
   const msgs = (data.teamChat || []).filter((m) => !m.recipientId || m.senderId === me || m.recipientId === me);
   res.json(msgs);
@@ -1362,7 +1405,7 @@ app.post('/api/team-chat/:id/read', requireAuth, (req, res) => {
 });
 
 app.get('/api/leads/:id/messages', requireAuth, (req, res) => {
-  const data = db.read();
+  const data = db.view();
   let msgs = (data.messages || []).filter((m) => m.leadId === req.params.id);
   if (req.query.channel) msgs = msgs.filter((m) => m.channel === req.query.channel);
   msgs.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
@@ -1504,7 +1547,7 @@ app.get('/api/track/open/:messageId.png', (req, res) => {
 });
 
 app.get('/api/leads/:id/messages/:messageId/opens', requireAuth, (req, res) => {
-  const data = db.read();
+  const data = db.view();
   const message = (data.messages || []).find((m) => m.id === req.params.messageId && m.leadId === req.params.id);
   if (!message) return res.status(404).json({ error: 'Mensagem não encontrada' });
   res.json({ openCount: message.openCount || 0, opens: message.opens || [] });
@@ -1795,7 +1838,7 @@ Use AGENDAR_REUNIAO quando o vendedor pedir para marcar/agendar uma reunião ou 
 
 // ---------- Dicas automáticas (regras locais, sem IA e sem custo) ----------
 app.get('/api/ai/tips', requireAuth, (req, res) => {
-  const data = db.read();
+  const data = db.view();
   const now = new Date();
   const tips = [];
 
@@ -1929,7 +1972,7 @@ function googleRedirectUri(req) {
 }
 
 app.get('/api/google/oauth-start', requireAuth, (req, res) => {
-  const data = db.read();
+  const data = db.view();
   const gcal = data.settings.integrations.googleCalendar || {};
   const user = data.users.find((u) => u.id === req.query.userId);
   if (!gcal.clientId || !gcal.clientSecret) {
@@ -1955,7 +1998,7 @@ app.get('/api/google/oauth-start', requireAuth, (req, res) => {
 // escopo gmail.readonly, e reaproveita a mesma redirect_uri (identificado pelo
 // state="gmail-inbox" em vez de um id de usuário).
 app.get('/api/google/gmail-oauth-start', requireAuth, (req, res) => {
-  const data = db.read();
+  const data = db.view();
   const gcal = data.settings.integrations.googleCalendar || {};
   if (!gcal.clientId || !gcal.clientSecret) {
     return res.status(400).send('Configure o Client ID e o Client Secret do Google em Configurações > Integrações antes de conectar a caixa de entrada.');
@@ -2112,7 +2155,7 @@ function buildRawEmail({ from, to, cc, subject, html, inReplyTo, references }) {
 }
 
 app.get('/api/mail/:box/messages', requireAuth, async (req, res) => {
-  const data = db.read();
+  const data = db.view();
   const mb = resolveMailbox(data, req.params.box, req.query.attendantId);
   try {
     const token = await getGoogleAccessTokenGeneric(mb.gcal, mb.refreshToken, mb.label);
@@ -2136,7 +2179,7 @@ app.get('/api/mail/:box/messages', requireAuth, async (req, res) => {
 });
 
 app.get('/api/mail/:box/messages/:id', requireAuth, async (req, res) => {
-  const data = db.read();
+  const data = db.view();
   const mb = resolveMailbox(data, req.params.box, req.query.attendantId);
   try {
     const token = await getGoogleAccessTokenGeneric(mb.gcal, mb.refreshToken, mb.label);
@@ -2302,7 +2345,7 @@ async function getGmailMessage(accessToken, id) {
 }
 
 app.get('/api/email-inbox/gmail/messages', requireAuth, async (req, res) => {
-  const data = db.read();
+  const data = db.view();
   const gcal = data.settings.integrations.googleCalendar || {};
   const gmailInbox = data.settings.integrations.gmailInbox || {};
   try {
@@ -2315,7 +2358,7 @@ app.get('/api/email-inbox/gmail/messages', requireAuth, async (req, res) => {
 });
 
 app.get('/api/email-inbox/gmail/messages/:id', requireAuth, async (req, res) => {
-  const data = db.read();
+  const data = db.view();
   const gcal = data.settings.integrations.googleCalendar || {};
   const gmailInbox = data.settings.integrations.gmailInbox || {};
   try {
@@ -2330,7 +2373,7 @@ app.get('/api/email-inbox/gmail/messages/:id', requireAuth, async (req, res) => 
 // o MESMO refresh token que o usuário já conectou para o Google Calendar (o escopo
 // gmail.readonly foi incluído nesse fluxo), então não precisa de uma conexão separada.
 app.get('/api/email-inbox/my/messages', requireAuth, async (req, res) => {
-  const data = db.read();
+  const data = db.view();
   const gcal = data.settings.integrations.googleCalendar || {};
   const user = data.users.find((u) => u.id === req.query.attendantId);
   try {
@@ -2343,7 +2386,7 @@ app.get('/api/email-inbox/my/messages', requireAuth, async (req, res) => {
 });
 
 app.get('/api/email-inbox/my/messages/:id', requireAuth, async (req, res) => {
-  const data = db.read();
+  const data = db.view();
   const gcal = data.settings.integrations.googleCalendar || {};
   const user = data.users.find((u) => u.id === req.query.attendantId);
   try {

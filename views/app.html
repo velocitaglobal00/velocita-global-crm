@@ -13,6 +13,9 @@
 <meta name="apple-mobile-web-app-title" content="Velocita" />
 <meta name="apple-mobile-web-app-status-bar-style" content="default" />
 <link rel="stylesheet" href="/css/style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700&display=swap">
+  <link rel="stylesheet" href="/css/tema-v2.css" />
 <script>
   try {
     document.documentElement.setAttribute('data-theme', localStorage.getItem('vg_theme') === 'dark' ? 'dark' : 'light');
@@ -73,6 +76,13 @@
             Ocultar
           </button>
         </div>
+        <nav class="nav-scroll" aria-label="Menu principal">
+        <div class="nav-group" data-group="inicio">
+          <button type="button" class="nav-group-head" aria-expanded="true" aria-controls="ng-inicio">
+            <span class="nav-group-title">Início</span>
+            <svg class="nav-chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"></path></svg>
+          </button>
+          <div class="nav-group-body" id="ng-inicio">
         <div class="sidebar-link active" data-view="dashboard">
           <svg class="si" viewBox="0 0 24 24"><rect x="3" y="12" width="4" height="9" rx="1"></rect><rect x="10" y="7" width="4" height="14" rx="1"></rect><rect x="17" y="3" width="4" height="18" rx="1"></rect></svg>
           Dashboard
@@ -81,6 +91,14 @@
           <svg class="si" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"></rect><path d="M3 10h18"></path><path d="M8 2v4M16 2v4"></path><path d="M9 16l2 2 4-4"></path></svg>
           Roteiro do Dia
         </div>
+          </div>
+        </div>
+        <div class="nav-group" data-group="vendas">
+          <button type="button" class="nav-group-head" aria-expanded="true" aria-controls="ng-vendas">
+            <span class="nav-group-title">Vendas</span>
+            <svg class="nav-chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"></path></svg>
+          </button>
+          <div class="nav-group-body" id="ng-vendas">
         <div class="sidebar-link" data-view="pipeline">
           <svg class="si" viewBox="0 0 24 24"><rect x="3" y="4" width="5" height="16" rx="1.5"></rect><rect x="9.5" y="4" width="5" height="10" rx="1.5"></rect><rect x="16" y="4" width="5" height="13" rx="1.5"></rect></svg>
           Pipeline
@@ -89,11 +107,22 @@
           <svg class="si" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"></circle><path d="M2.5 20c0-3.6 2.9-6.5 6.5-6.5s6.5 2.9 6.5 6.5"></path><path d="M17 8h4M19 6v4"></path></svg>
           Leads
         </div>
+        <div class="sidebar-link" data-view="leadgen">
+          <svg class="si" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path><path d="M11 8v6M8 11h6"></path></svg>
+          Gerador de Leads
+        </div>
         <div class="sidebar-link" data-view="orgs">
           <svg class="si" viewBox="0 0 24 24"><rect x="4" y="3" width="12" height="18" rx="1"></rect><path d="M8 7h1M8 11h1M8 15h1M13 7h1M13 11h1M13 15h1"></path><path d="M16 10h4v11h-4"></path></svg>
           Empresas
         </div>
-        <!-- Comunicações removida do menu por enquanto (a pedido) — view/rotas continuam existindo. -->
+          </div>
+        </div>
+        <div class="nav-group" data-group="comunicacao">
+          <button type="button" class="nav-group-head" aria-expanded="true" aria-controls="ng-comunicacao">
+            <span class="nav-group-title">Comunicação</span>
+            <svg class="nav-chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"></path></svg>
+          </button>
+          <div class="nav-group-body" id="ng-comunicacao">
         <div class="sidebar-link" data-view="email">
           <svg class="si" viewBox="0 0 24 24"><path d="M22 6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2z"></path><path d="M22 6l-10 7L2 6"></path></svg>
           E-mail
@@ -102,26 +131,54 @@
           <svg class="si" viewBox="0 0 24 24"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 01-3.46 0"></path></svg>
           Notificações <span id="sidebar-msg-badge" class="notif-badge" style="display:none;">0</span>
         </div>
+        <div class="sidebar-link" data-view="chatequipe">
+          <svg class="si" viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 20l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"></path></svg>
+          Chat da Equipe <span id="sidebar-teamchat-badge" class="notif-badge" style="display:none;">0</span>
+        </div>
+          </div>
+        </div>
+        <div class="nav-group" data-group="analise">
+          <button type="button" class="nav-group-head" aria-expanded="true" aria-controls="ng-analise">
+            <span class="nav-group-title">Análises e agenda</span>
+            <svg class="nav-chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"></path></svg>
+          </button>
+          <div class="nav-group-body" id="ng-analise">
         <div class="sidebar-link" data-view="bi">
           <svg class="si" viewBox="0 0 24 24"><path d="M3 3v18h18"></path><path d="M7 15l4-5 3 3 5-7"></path></svg>
           BI
-        </div>
-        <div class="sidebar-link" data-view="margem">
-          <svg class="si" viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2"></rect><rect x="8" y="5" width="8" height="3.5" rx="1"></rect><path d="M9 13h.01M12 13h.01M15 13h.01M9 17h.01M12 17h.01M15 17h.01"></path></svg>
-          Calculadora de Margem
         </div>
         <div class="sidebar-link" data-view="calendario">
           <svg class="si" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
           Calendário
         </div>
-        <div class="sidebar-link" data-view="chatequipe">
-          <svg class="si" viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 20l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"></path></svg>
-          Chat da Equipe <span id="sidebar-teamchat-badge" class="notif-badge" style="display:none;">0</span>
+          </div>
+        </div>
+        <div class="nav-group" data-group="ferramentas">
+          <button type="button" class="nav-group-head" aria-expanded="true" aria-controls="ng-ferramentas">
+            <span class="nav-group-title">Ferramentas</span>
+            <svg class="nav-chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"></path></svg>
+          </button>
+          <div class="nav-group-body" id="ng-ferramentas">
+        <div class="sidebar-link" data-view="margem">
+          <svg class="si" viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2"></rect><rect x="8" y="5" width="8" height="3.5" rx="1"></rect><path d="M9 13h.01M12 13h.01M15 13h.01M9 17h.01M12 17h.01M15 17h.01"></path></svg>
+          Calculadora de Margem
+        </div>
+        <div class="sidebar-link" data-view="materiais">
+          <svg class="si" viewBox="0 0 24 24"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2z"></path></svg>
+          Materiais e Preços
         </div>
         <a class="sidebar-link" href="/roteiro-do-dia/">
           <svg class="si" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="14" rx="2"></rect><path d="M8 21h8M12 17v4"></path><path d="M10 9l4 2-4 2V9z"></path></svg>
           Gerador de Roteiros (IA)
         </a>
+          </div>
+        </div>
+        <div class="nav-group" data-group="sistema">
+          <button type="button" class="nav-group-head" aria-expanded="true" aria-controls="ng-sistema">
+            <span class="nav-group-title">Sistema</span>
+            <svg class="nav-chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"></path></svg>
+          </button>
+          <div class="nav-group-body" id="ng-sistema">
         <div class="sidebar-link" data-view="settings">
           <svg class="si" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"></path></svg>
           Configurações
@@ -130,6 +187,9 @@
           <svg class="si" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
           Ajuda
         </div>
+          </div>
+        </div>
+        </nav>
       </aside>
       <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
 
@@ -267,6 +327,21 @@
             </thead>
             <tbody id="leads-tbody"></tbody>
           </table>
+        </section>
+
+        <section class="view" id="view-leadgen">
+          <div class="pipeline-header">
+            <h2>Gerador de Leads</h2>
+            <div class="header-actions">
+              <a class="btn-secondary" href="/api/leadgen/export.csv" id="lg-export">Exportar planilha</a>
+            </div>
+          </div>
+          <div id="lg-root"><p style="color:var(--vg-text-muted)">Carregando...</p></div>
+        </section>
+
+        <section class="view" id="view-materiais">
+          <div class="pipeline-header"><h2>Materiais e Preços</h2></div>
+          <div id="mt-root"><p style="color:var(--vg-text-muted)">Carregando...</p></div>
         </section>
 
         <!-- ===== ORGANIZATIONS ===== -->
@@ -1508,5 +1583,7 @@
 
   <script src="/js/app.js"></script>
   <script src="/js/margem.js"></script>
+  <script src="/js/leadgen-ui.js"></script>
+  <script src="/js/nav-materiais.js"></script>
 </body>
 </html>
