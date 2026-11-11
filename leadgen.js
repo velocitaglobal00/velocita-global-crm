@@ -84,6 +84,16 @@ function haversineKm(a, b) {
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
+
+// Leitura rápida dos comentários do Google (até 5 mais relevantes): elogios x reclamações.
+const NEG = /golpe|enganou|engana|fraude|n[aã]o entregou|nunca entreg|p[eé]ssim|horr[ií]vel|descaso|n[aã]o recomendo|calote|atraso|demora|mau atendimento|desrespeit|n[aã]o resolveu|reclama/i;
+const POS = /excelente|[oó]timo|[oó]tima|recomendo|r[aá]pido|atencioso|qualidade|pontual|confi[aá]vel|perfeito|parab[eé]ns/i;
+function reviewSentiment(list) {
+  let pos = 0; let neg = 0;
+  (list || []).forEach((r) => { const t = r.text || ''; if (NEG.test(t) || (r.stars && r.stars <= 2)) neg++; else if (POS.test(t) || r.stars >= 4) pos++; });
+  return { pos, neg };
+}
+
 /**
  * Pontuação de 0 a 100 = chance de virar negócio para a Velocita.
  *  - Contato (até 28): telefone, WhatsApp (celular), site, e-mail
@@ -102,6 +112,8 @@ function scoreLead(l) {
     if (r >= 4.5) { s += 14; why.push(`nota ${r}`); } else if (r >= 4.0) { s += 11; why.push(`nota ${r}`); } else if (r >= 3.5) s += 6; else if (r >= 3) s += 2; else { s -= 14; why.push(`nota baixa ${r}`); }
     if (n >= 200) { s += 16; why.push(`${n} avaliações`); } else if (n >= 50) { s += 12; why.push(`${n} avaliações`); } else if (n >= 20) s += 8; else if (n >= 5) s += 4;
   }
+  const sen = reviewSentiment(l.reviewsText);
+  if (sen.neg >= 2) { s -= 10; why.push('comentários citam problemas'); } else if (sen.pos >= 3 && sen.neg === 0) { s += 4; why.push('comentários elogiam'); }
   const seg = SEGMENTS[l.segment];
   if (seg) { s += seg.fit; why.push(seg.label.toLowerCase()); }
   if (NAME_HINTS.test(l.name || '')) s += 4;
@@ -129,6 +141,8 @@ function buildPitch(l) {
   if (seg === 'fabricantes' || seg === 'importadoras') out.push('Perfil de fornecedor: o produto fica no galpão dela; a Velocita cuida de cadastro, anúncio, etiqueta de envio e acompanhamento.');
   if (seg === 'atacado') out.push('Distribuidor: abrir canal de venda ao consumidor final sem conflito com a carteira de revendedores.');
   if ((l.reviews || 0) >= 50 && (l.rating || 0) >= 4) out.push(`Clientes aprovam (${String(l.rating).replace('.', ',')} com ${l.reviews} avaliações): a demanda existe, falta escala.`);
+  const sn = reviewSentiment(l.reviewsText);
+  if (sn.neg >= 2) out.push('Comentários no Google citam problemas (atendimento/entrega): ofereça acompanhamento e organização como diferencial.');
   if (l.ra && l.ra.nota !== '' && Number(l.ra.nota) < 5) out.push('Atenção: nota baixa no Reclame Aqui. Priorize atendimento e reputação na conversa.');
   return out.join(' ');
 }
@@ -206,9 +220,10 @@ function parseCityUf(address, fallback) {
   return m ? { city: m[1].trim(), uf: m[2] } : fallback;
 }
 
-async function googleSearch({ key, textQuery, bias, pageLimit = 3, country }) {
+async function googleSearch({ key, textQuery, bias, pageLimit = 3, country, take }) {
   const out = []; let token = null;
   for (let page = 0; page < pageLimit; page++) {
+    if (take && !take()) { const e = new Error('LIMITE_DIARIO'); e.limit = true; throw e; }
     const body = { textQuery, languageCode: 'pt-BR', pageSize: 20 };
     if (country) body.regionCode = country;
     if (bias) body.locationBias = { circle: { center: { latitude: bias.lat, longitude: bias.lon }, radius: Math.min(50000, bias.radiusM || 50000) } };
@@ -217,7 +232,7 @@ async function googleSearch({ key, textQuery, bias, pageLimit = 3, country }) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json', 'X-Goog-Api-Key': key,
-        'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.nationalPhoneNumber,places.internationalPhoneNumber,places.websiteUri,places.businessStatus,places.types,places.googleMapsUri,nextPageToken'
+        'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.nationalPhoneNumber,places.internationalPhoneNumber,places.websiteUri,places.businessStatus,places.types,places.googleMapsUri,places.reviews,nextPageToken'
       },
       body: JSON.stringify(body)
     });
@@ -236,7 +251,8 @@ function mapGoogle(p, ctx) {
     lat: p.location ? p.location.latitude : null, lon: p.location ? p.location.longitude : null,
     phone: ph.phone, whatsapp: ph.whatsapp, website: p.websiteUri || '', email: '',
     rating: p.rating || 0, reviews: p.userRatingCount || 0, mapsUrl: p.googleMapsUri || '', source: 'google', placeId: p.id,
-    status_business: p.businessStatus || 'OPERATIONAL', types: (p.types || []).slice(0, 4), segment: ctx.segment
+    status_business: p.businessStatus || 'OPERATIONAL', types: (p.types || []).slice(0, 4), segment: ctx.segment,
+    reviewsText: (p.reviews || []).slice(0, 5).map((r) => ({ stars: r.rating || 0, text: String((r.text && r.text.text) || (r.originalText && r.originalText.text) || '').slice(0, 260), when: r.relativePublishTimeDescription || '' })).filter((r) => r.text)
   };
 }
 
@@ -273,6 +289,20 @@ async function osmSearch({ segKey, center, radiusM, uf, country }) {
   });
 }
 
+
+// Limite de buscas no Google: o Google dá cerca de 1.000 buscas grátis por mês nesta faixa. O teto mensal (padrão 1.000)
+// é dividido pelos dias que faltam no mês, assim o gerador nunca gasta tudo logo no começo.
+function budgetInfo(lg, todayStr) {
+  const month = todayStr.slice(0, 7);
+  const u = lg.usage && lg.usage.month === month ? lg.usage : { month, requests: 0, days: {} };
+  const cap = Number(lg.settings.monthlyCap) || 1000;
+  const [y, m, d] = todayStr.split('-').map(Number);
+  const daysLeft = new Date(y, m, 0).getDate() - d + 1;
+  const usedToday = u.days[todayStr] || 0; const usedBefore = u.requests - usedToday;
+  const allowance = Math.max(0, Math.min(Math.floor((cap - usedBefore) / daysLeft), cap - usedBefore));
+  return { cap, used: u.requests, usedToday, daysLeft, allowanceToday: allowance, remainingToday: Math.max(0, Math.min(allowance - usedToday, cap - u.requests)) };
+}
+
 // ---------- registro das rotas ----------
 function register(app, { db, requireAuth, newId, logHistory }) {
   const today = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
@@ -289,7 +319,8 @@ function register(app, { db, requireAuth, newId, logHistory }) {
     res.json({
       google: !!process.env.GOOGLE_PLACES_API_KEY, ufs: UFS, cities: CITIES,
       segments: Object.fromEntries(Object.entries(SEGMENTS).map(([k, v]) => [k, v.label])),
-      dailyTarget: lg.settings.dailyTarget || 100, generatedToday: lg.items.filter((i) => i.genDate === d).length
+      dailyTarget: lg.settings.dailyTarget || 100, generatedToday: lg.items.filter((i) => i.genDate === d).length,
+      budget: budgetInfo(lg, d), canEditBudget: !!req.user && ['matriz', 'admin'].includes(req.user.role)
     });
   });
 
@@ -305,7 +336,11 @@ function register(app, { db, requireAuth, newId, logHistory }) {
 
   app.put('/api/leadgen/settings', requireAuth, (req, res) => {
     const data = db.read(); const lg = store(data);
-    lg.settings.dailyTarget = clamp(Number(req.body.dailyTarget) || 100, 10, 1000);
+    if (req.body.monthlyCap !== undefined) {
+      if (!req.user || !['matriz', 'admin'].includes(req.user.role)) return res.status(403).json({ error: 'Somente administradores.' });
+      lg.settings.monthlyCap = clamp(Number(req.body.monthlyCap) || 1000, 50, 100000);
+    }
+    if (req.body.dailyTarget !== undefined) lg.settings.dailyTarget = clamp(Number(req.body.dailyTarget) || 100, 10, 1000);
     db.write(data); res.json(lg.settings);
   });
 
@@ -358,6 +393,10 @@ function register(app, { db, requireAuth, newId, logHistory }) {
     let center = p.center;
     if (!center && p.city) { try { const g = await geocode(`${p.city}${p.uf ? ', ' + p.uf : ''}`, p.country); if (g[0]) center = { lat: g[0].lat, lon: g[0].lon }; } catch (e) { /* segue sem centro */ } }
 
+    const bud0 = budgetInfo(store(data0), today());
+    let remaining = key ? bud0.remainingToday : Infinity; let usedNow = 0; let limited = false;
+    const takeReq = () => { if (remaining <= 0) return false; remaining--; usedNow++; return true; };
+    if (key && remaining <= 0) { job.status = 'ok'; job.msg = `Limite de buscas no Google de hoje atingido (${bud0.usedToday} de ${bud0.allowanceToday}). Ele libera de novo amanhã, com o saldo do mês dividido pelos dias que faltam.`; return; }
     const found = [];
     const take = (raw, ctx) => {
       if (!raw.name) return;
@@ -386,7 +425,7 @@ function register(app, { db, requireAuth, newId, logHistory }) {
               if (found.length >= p.limit) break;
               const q = `${term} em ${c.city}${c.uf ? ', ' + c.uf : ''}, ${p.country === 'BR' ? 'Brasil' : p.country}`;
               const bias = center && p.city ? { lat: center.lat, lon: center.lon, radiusM: (p.radiusKm || 50) * 1000 } : null;
-              const places = await googleSearch({ key, textQuery: q, bias, country: p.country });
+              const places = await googleSearch({ key, textQuery: q, bias, country: p.country, take: takeReq });
               places.forEach((pl) => take(mapGoogle(pl, { city: c.city, uf: c.uf, country: p.country, segment: seg })));
               if (p.custom) break;
             }
@@ -396,7 +435,7 @@ function register(app, { db, requireAuth, newId, logHistory }) {
             rows.forEach((r) => { if (!r.city) r.city = c.city; take(r); });
             if (!p.city) break; // OSM por estado inteiro já cobre todas as cidades de uma vez
           }
-        } catch (e) { job.errors.push(`${c.city}/${seg}: ${e.message}`); }
+        } catch (e) { if (e.limit) { limited = true; break outer; } job.errors.push(`${c.city}/${seg}: ${e.message}`); }
       }
       if (!key && !p.city) break;
     }
@@ -418,13 +457,18 @@ function register(app, { db, requireAuth, newId, logHistory }) {
       const keep = lg.items.filter((i) => i.status !== 'novo'); const fresh = lg.items.filter((i) => i.status === 'novo').slice(-4000);
       lg.items = keep.concat(fresh);
     }
+    if (usedNow) {
+      const mth = d.slice(0, 7); if (!lg.usage || lg.usage.month !== mth) lg.usage = { month: mth, requests: 0, days: {} };
+      lg.usage.requests += usedNow; lg.usage.days[d] = (lg.usage.days[d] || 0) + usedNow;
+    }
     logHistory(data, 'lead', 'leadgen', p.attendantId, 'created', `Gerador de leads: ${picked.length} novos (${p.city || UFS[p.uf] || p.country})`);
     db.write(data);
     job.added = picked.length;
     job.status = 'ok';
-    job.msg = picked.length
+    job.limited = limited;
+    job.msg = (limited ? 'Parei porque o limite diário de buscas no Google acabou (o saldo do mês é dividido pelos dias que faltam). ' : '') + (picked.length
       ? `${picked.length} leads novos adicionados${key ? '' : ' (fonte gratuita OpenStreetMap: cobertura limitada, sem notas/avaliações)'}.`
-      : (job.errors.length ? `Nenhum lead novo. Problema na fonte: ${job.errors[0]}` : 'Nenhum lead novo com esses filtros (tudo já estava no CRM ou foi filtrado).');
+      : (job.errors.length ? `Nenhum lead novo. Problema na fonte: ${job.errors[0]}` : 'Nenhum lead novo com esses filtros (tudo já estava no CRM ou foi filtrado).'));
   }
 
   // ---- edição manual (Reclame Aqui, notas) ----
@@ -515,4 +559,4 @@ function register(app, { db, requireAuth, newId, logHistory }) {
   });
 }
 
-module.exports = { register, _t: { scanSite, safeUrl, buildPitch, scoreLead, normPhone, haversineKm, dedupeKeys, mapGoogle, parseCityUf, SEGMENTS, UFS, CITIES } };
+module.exports = { register, _t: { budgetInfo, reviewSentiment, scanSite, safeUrl, buildPitch, scoreLead, normPhone, haversineKm, dedupeKeys, mapGoogle, parseCityUf, SEGMENTS, UFS, CITIES } };

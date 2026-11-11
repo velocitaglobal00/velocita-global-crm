@@ -8,6 +8,7 @@ const jwt = require('jsonwebtoken');
 const zlib = require('zlib');
 const fs = require('fs');
 const db = require('./db');
+const team = require('./team');
 
 // Defina APP_PASSWORD nas variáveis de ambiente do Render para trocar a senha de
 // acesso sem mexer no código (o repositório é público).
@@ -83,17 +84,23 @@ function readCookie(req, name) {
   const m = (req.headers.cookie || '').split(/;\s*/).find((c) => c.startsWith(name + '='));
   return m ? decodeURIComponent(m.slice(name.length + 1)) : null;
 }
-function restoreFromCookie(req) {
-  if (req.session && req.session.authenticated) return true;
-  const token = readCookie(req, REMEMBER_COOKIE);
-  if (!token) return false;
-  try {
-    jwt.verify(token, authSecret());
-    req.session.authenticated = true;
-    return true;
-  } catch (e) {
-    return false;
+function currentUser(req) {
+  let uid = req.session && req.session.userId;
+  if (!uid) {
+    const token = readCookie(req, REMEMBER_COOKIE);
+    if (!token) return null;
+    try { uid = jwt.verify(token, authSecret()).uid; } catch (e) { return null; }
+    if (!uid) return null; // cookie antigo (senha única): pede login de novo
   }
+  const u = db.view().users.find((x) => x.id === uid && x.active !== false);
+  if (!u) return null;
+  req.session.userId = uid; req.session.authenticated = true;
+  return u;
+}
+function restoreFromCookie(req) {
+  const u = currentUser(req);
+  if (u) { req.user = u; return true; }
+  return false;
 }
 
 function requireAuth(req, res, next) {
@@ -128,29 +135,54 @@ function passwordMatches(password) {
 }
 
 app.post('/api/login', (req, res) => {
-  const { password } = req.body || {};
+  const { username, password } = req.body || {};
   if (tooManyLoginFailures(req.ip)) {
     return res.status(429).json({ error: 'Muitas tentativas erradas. Aguarde 15 minutos e tente de novo.' });
   }
-  if (passwordMatches(password)) {
+  const uname = team.cleanUsername(username);
+  const user = db.view().users.find((u) => u.username === uname && u.active !== false);
+  // com senha própria: só ela vale. Sem senha própria (transição): a senha antiga compartilhada.
+  const ok = !!user && (user.passHash ? team.verifyPassword(password, user.passHash) : passwordMatches(password));
+  if (ok) {
     loginFailures.delete(req.ip);
-    req.session.authenticated = true;
-    const token = jwt.sign({ ok: 1 }, authSecret(), { expiresIn: '60d' });
+    req.session.userId = user.id; req.session.authenticated = true;
+    const token = jwt.sign({ uid: user.id }, authSecret(), { expiresIn: '60d' });
     res.cookie(REMEMBER_COOKIE, token, { httpOnly: true, sameSite: 'lax', secure: req.secure, maxAge: 60 * 24 * 60 * 60 * 1000 });
-    return res.json({ ok: true });
+    team.onLogin(user);
+    return res.json({ ok: true, user: team.publicUser(user), needsPassword: !user.passHash });
   }
   registerLoginFailure(req.ip);
-  return res.status(401).json({ error: 'Senha incorreta' });
+  return res.status(401).json({ error: 'Usuário ou senha incorretos' });
 });
 
 app.post('/api/logout', (req, res) => {
+  const u = currentUser(req); if (u) team.onLogout(u);
   res.clearCookie(REMEMBER_COOKIE);
   req.session.destroy(() => res.json({ ok: true }));
 });
 
 app.get('/api/session', (req, res) => {
-  res.json({ authenticated: restoreFromCookie(req) });
+  const u = currentUser(req);
+  res.json({ authenticated: !!u, user: u ? { ...team.publicUser(u), hasPassword: !!u.passHash } : null });
 });
+
+// Em toda chamada da API: identifica quem é, força "quem fez" = usuário logado (matriz fica anônima) e conta a atividade.
+app.use('/api', (req, res, next) => {
+  if (restoreFromCookie(req)) { team.attribute(req); team.track(req, res); }
+  next();
+});
+
+// Perfil limitado: pode usar o CRM (leads, pipeline, e-mail...), mas não altera configurações, etapas, etiquetas nem integrações.
+const RESTRICTED_WRITE = [/^\/api\/settings(\/|$)/, /^\/api\/stages(\/|-reorder|$)/, /^\/api\/tags(\/|$)/, /^\/api\/users(\/|$)/, /^\/api\/team\//, /^\/api\/google\/.*(disconnect)/];
+app.use('/api', (req, res, next) => {
+  if (req.user && !team.isAdminLike(req.user) && req.method !== 'GET' && RESTRICTED_WRITE.some((re) => re.test(req.path_ || req.originalUrl.split('?')[0]))) {
+    // o próprio usuário ainda pode ajustar o cadastro dele (ramal, assinatura)
+    if (req.method === 'PUT' && /^\/api\/users\/[^/]+$/.test(req.originalUrl.split('?')[0]) && req.originalUrl.split('?')[0].endsWith(req.user.id)) return next();
+    return res.status(403).json({ error: 'Seu perfil não tem permissão para alterar configurações. Fale com um administrador.' });
+  }
+  next();
+});
+
 
 // Para o Render saber se o serviço está de pé (Health Check Path: /healthz).
 app.get('/healthz', (req, res) => res.json({ ok: true }));
@@ -212,10 +244,14 @@ app.get('/app', requirePageAuth, (req, res) => {
     .readFileSync(path.join(__dirname, 'views', 'app.html'), 'utf-8')
     .replace('/css/style.css"', `/css/style.css?v=${ASSET_VERSION}"`)
     .replace('/css/tema-v2.css"', `/css/tema-v2.css?v=${ASSET_VERSION}"`)
+    .replace('/js/ajuda-cenas.js"', `/js/ajuda-cenas.js?v=${ASSET_VERSION}"`)
     .replace('/js/app.js"', `/js/app.js?v=${ASSET_VERSION}"`)
     .replace('/js/margem.js"', `/js/margem.js?v=${ASSET_VERSION}"`)
     .replace('/js/leadgen-ui.js"', `/js/leadgen-ui.js?v=${ASSET_VERSION}"`)
-    .replace('/js/nav-materiais.js"', `/js/nav-materiais.js?v=${ASSET_VERSION}"`);
+    .replace('/js/nav-materiais.js"', `/js/nav-materiais.js?v=${ASSET_VERSION}"`)
+    .replace('/js/team-ui.js"', `/js/team-ui.js?v=${ASSET_VERSION}"`)
+    .replace('/js/pipeline-v2.js"', `/js/pipeline-v2.js?v=${ASSET_VERSION}"`)
+    .replace('/js/calls-ui.js"', `/js/calls-ui.js?v=${ASSET_VERSION}"`);
   res.set('Cache-Control', 'no-cache');
   res.type('html').send(html);
 });
@@ -287,6 +323,8 @@ app.put('/api/materials', requireAuth, (req, res) => {
 });
 
 // Gerador de Leads (busca de empresas, pontuação e envio ao pipeline) — ver leadgen.js
+team.register(app, { db, requireAuth, newId });
+require('./calls').register(app, { db, requireAuth });
 require('./leadgen').register(app, { db, requireAuth, newId, logHistory });
 
 // ---------- Notificações no celular (Web Push / PWA) ----------
@@ -435,7 +473,7 @@ function notifyUserWhatsApp(data, userId, text) {
 // ---------- Stages ----------
 app.get('/api/stages', requireAuth, (req, res) => {
   const data = db.view();
-  res.json(data.stages.sort((a, b) => a.order - b.order));
+  res.json([...data.stages].sort((a, b) => a.order - b.order));
 });
 
 app.post('/api/stages', requireAuth, (req, res) => {
@@ -701,7 +739,7 @@ app.post('/api/deals', requireAuth, (req, res) => {
     personId: req.body.personId || null,
     orgId: req.body.orgId || null,
     stage: stageId,
-    ownerId: req.body.ownerId || (data.users[0] && data.users[0].id) || null,
+    ownerId: req.body.ownerId || (req.user && req.user.role !== 'matriz' ? req.user.id : null) || (data.users.find((u) => u.role !== 'matriz') || {}).id || null,
     closeDate: req.body.closeDate || null,
     platform: req.body.platform || null,
     tags: Array.isArray(req.body.tags) ? req.body.tags : [],
@@ -939,29 +977,35 @@ app.get('/api/reminders', requireAuth, (req, res) => {
 
 // ---------- Users ----------
 app.get('/api/users', requireAuth, (req, res) => {
-  res.json(db.view().users);
+  res.json(team.sanitizeUsers(db.view().users));
 });
 
-app.post('/api/users', requireAuth, (req, res) => {
+const matrizOnly = (req, res, next) => (req.user && team.isAdminLike(req.user) ? next() : res.status(403).json({ error: 'Seu perfil não tem permissão para isso.' }));
+app.post('/api/users', requireAuth, matrizOnly, (req, res) => {
   const data = db.read();
-  const user = { id: newId('u'), name: req.body.name || 'Novo usuário', ramal: req.body.ramal || '' };
+  const user = { id: newId('u'), name: req.body.name || 'Novo usuário', ramal: req.body.ramal || '', role: 'socio', active: true };
   data.users.push(user);
+  team.ensureTeam(data);
   db.write(data);
-  res.status(201).json(user);
+  res.status(201).json(team.sanitizeUsers([data.users.find((u) => u.id === user.id)])[0]);
 });
 
 app.put('/api/users/:id', requireAuth, (req, res) => {
   const data = db.read();
   const user = data.users.find((u) => u.id === req.params.id);
   if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
-  Object.assign(user, req.body);
+  if (!team.isAdminLike(req.user) && req.user.id !== user.id) return res.status(403).json({ error: 'Você só pode alterar o seu próprio cadastro.' });
+  const { passHash, role, username, active, id, ...safe } = req.body || {};
+  Object.assign(user, safe);
   db.write(data);
-  res.json(user);
+  res.json(team.sanitizeUsers([user])[0] || {});
 });
 
-app.delete('/api/users/:id', requireAuth, (req, res) => {
+app.delete('/api/users/:id', requireAuth, matrizOnly, (req, res) => {
   const data = db.read();
-  if (data.users.length <= 1) return res.status(400).json({ error: 'É necessário ao menos um usuário' });
+  const target = data.users.find((u) => u.id === req.params.id);
+  if (target && target.role === 'matriz') return res.status(400).json({ error: 'A conta matriz não pode ser excluída.' });
+  if (data.users.filter((u) => u.role !== 'matriz').length <= 1) return res.status(400).json({ error: 'É necessário ao menos um usuário' });
   data.users = data.users.filter((u) => u.id !== req.params.id);
   db.write(data);
   res.json({ ok: true });
@@ -973,8 +1017,10 @@ app.delete('/api/users/:id', requireAuth, (req, res) => {
 const SERVER_ONLY_SETTINGS = ['authSecret', 'webPush'];
 
 app.get('/api/settings', requireAuth, (req, res) => {
-  const settings = db.view().settings;
+  const settings = { ...db.view().settings };
   SERVER_ONLY_SETTINGS.forEach((k) => delete settings[k]);
+  // perfil limitado não enxerga chaves e senhas de integrações
+  if (req.user && !team.isAdminLike(req.user)) delete settings.integrations;
   res.json(settings);
 });
 
@@ -2522,7 +2568,7 @@ app.use(
   '/roteiro-do-dia',
   (req, res, next) => {
     req.crmAuthenticated = restoreFromCookie(req);
-    req.crmUsers = req.crmAuthenticated ? db.read().users.map((u) => ({ id: u.id, name: u.name, email: u.email || u.googleEmail || '' })) : [];
+    req.crmUsers = req.crmAuthenticated ? db.view().users.filter((u) => u.role !== 'matriz').map((u) => ({ id: u.id, name: u.name, email: u.email || u.googleEmail || '' })) : [];
     next();
   },
   roteiroDoDia.app
@@ -2578,6 +2624,16 @@ async function migrateTeamChatAttachments() {
     process.exit(1);
   }
 
+  // usuários com login/perfil, conta matriz e dados de presença (quem está online, atividade)
+  try {
+    const d0 = db.read();
+    if (team.ensureTeam(d0)) db.write(d0);
+    team.load(db.view());
+    setInterval(() => team.flush(db), 60000);
+  } catch (e) {
+    console.error('Falha ao preparar os usuários da equipe:', e);
+  }
+
   try {
     await migrateTeamChatAttachments();
   } catch (e) {
@@ -2602,6 +2658,7 @@ async function migrateTeamChatAttachments() {
     console.log(`${signal} recebido, gravando dados pendentes...`);
     server.close();
     try {
+      team.flush(db);
       await Promise.race([db.flush(), new Promise((r) => setTimeout(r, 8000))]);
     } finally {
       process.exit(0);

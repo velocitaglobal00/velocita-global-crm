@@ -179,6 +179,10 @@
             <svg class="nav-chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"></path></svg>
           </button>
           <div class="nav-group-body" id="ng-sistema">
+        <div class="sidebar-link" data-view="equipe" hidden>
+          <svg class="si" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"></circle><path d="M2.5 20c0-3.6 2.9-6.5 6.5-6.5s6.5 2.9 6.5 6.5"></path><circle cx="17.5" cy="9" r="2.5"></circle><path d="M17 14c2.6.2 4.5 2.2 4.5 5"></path></svg>
+          Equipe e acessos
+        </div>
         <div class="sidebar-link" data-view="settings">
           <svg class="si" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"></path></svg>
           Configurações
@@ -293,6 +297,15 @@
             <h2>Pipeline de Vendas</h2>
             <button class="btn-primary" id="btn-add-deal">+ Adicionar Negócio</button>
           </div>
+          <details class="pl-help" id="pl-help">
+            <summary>Como funciona o Pipeline? <small>(clique para ver)</small></summary>
+            <div class="pl-help-grid">
+              <div><b>Negócio</b><p>Uma venda em andamento. Cada negócio é um cartão no quadro.</p></div>
+              <div><b>Pessoa</b><p>Com quem você fala: o contato. Fica em <i>Leads</i>.</p></div>
+              <div><b>Empresa</b><p>Onde a pessoa trabalha. Fica em <i>Empresas</i>.</p></div>
+              <div><b>Como usar</b><p>Clique em <b>Adicionar Negócio</b>, escolha ou cadastre a pessoa e a empresa na mesma tela e arraste o cartão de uma coluna para outra conforme a venda avança.</p></div>
+            </div>
+          </details>
           <div class="kanban-board" id="kanban-board"></div>
         </section>
 
@@ -342,6 +355,11 @@
         <section class="view" id="view-materiais">
           <div class="pipeline-header"><h2>Materiais e Preços</h2></div>
           <div id="mt-root"><p style="color:var(--vg-text-muted)">Carregando...</p></div>
+        </section>
+
+        <section class="view" id="view-equipe">
+          <div class="pipeline-header"><h2>Equipe e acessos</h2></div>
+          <div id="eq-root"><p style="color:var(--vg-text-muted)">Carregando...</p></div>
         </section>
 
         <!-- ===== ORGANIZATIONS ===== -->
@@ -702,9 +720,59 @@
             <h2 style="margin:0;">Ajuda</h2>
             <span class="k" id="ajuda-voice-status" style="font-size:11px; color:var(--vg-text-muted);"></span>
           </div>
-          <p class="empty-state" style="text-align:left; padding:0 0 14px;">
-            Tutorial narrado por voz, capítulo a capítulo, explicando cada aba do CRM e como preencher cada formulário.
-          </p>
+          <p class="aj-lead">Aprenda o CRM do seu jeito: assista aos vídeos curtos, siga os passo a passo ou ouça o tutorial completo, capítulo por capítulo.</p>
+
+          <div class="aj-quick" aria-label="Atalhos">
+            <button type="button" class="aj-q" data-goto="pipeline"><b>Pipeline</b><span>Cadastrar um negócio</span></button>
+            <button type="button" class="aj-q" data-goto="leadgen"><b>Gerador de Leads</b><span>Encontrar e contatar empresas</span></button>
+            <button type="button" class="aj-q" data-goto="chatequipe"><b>Chat da Equipe</b><span>Conversar e ligar</span></button>
+            <button type="button" class="aj-q" data-goto="materiais"><b>Materiais e Preços</b><span>Modelos e Drive</span></button>
+          </div>
+
+          <h3 class="aj-h">Passo a passo</h3>
+          <div class="aj-steps">
+            <details class="aj-d"><summary>Como cadastrar um negócio (pessoa e empresa juntas)</summary><ol>
+              <li>Abra <b>Pipeline</b> e clique em <b>Adicionar Negócio</b>.</li>
+              <li><b>Passo 1:</b> escolha a pessoa e a empresa na lista. Se forem novas, escolha <b>Cadastrar nova pessoa</b> ou <b>Cadastrar nova empresa</b> e preencha na hora.</li>
+              <li><b>Passo 2:</b> confira o nome do negócio (já vem sugerido) e digite o valor esperado.</li>
+              <li><b>Passo 3:</b> escolha a etapa e, se quiser, a data de fechamento e a plataforma.</li>
+              <li>Clique em <b>Salvar negócio</b>. O cartão aparece na coluna certa. Arraste-o para outra coluna quando a venda avançar.</li></ol></details>
+            <details class="aj-d"><summary>Como gerar leads e levar para o pipeline</summary><ol>
+              <li>Abra <b>Gerador de Leads</b> (grupo Vendas).</li>
+              <li>Escolha o <b>estado</b>, a <b>cidade</b> (opcional) e o <b>raio</b>. Marque os segmentos e clique em <b>Gerar leads qualificados</b>.</li>
+              <li>Use os filtros da lista (estado, cidade, temperatura, nota, distância, aderência). Eles respondem na hora.</li>
+              <li>Ligue ou chame no WhatsApp pelos botões do cartão. Leia <b>Como abordar</b> antes.</li>
+              <li>Escolha o <b>resultado do contato</b> e clique em <b>Salvar e subir ao pipeline</b>. Empresa, pessoa e negócio são criados sozinhos.</li>
+              <li>Para levar a lista para o Excel, use <b>Exportar planilha</b>.</li></ol></details>
+            <details class="aj-d"><summary>Como ligar as notas e comentários do Google (chave da API)</summary><ol>
+              <li>Entre em <a href="https://console.cloud.google.com/" target="_blank" rel="noopener">console.cloud.google.com</a> com a conta da empresa e crie (ou escolha) um projeto.</li>
+              <li>Em <b>Faturamento</b>, vincule uma forma de pagamento. O Google exige, mas oferece uma cota gratuita mensal.</li>
+              <li>Em <b>APIs e serviços &gt; Biblioteca</b>, procure <b>Places API (New)</b> e clique em <b>Ativar</b>.</li>
+              <li>Em <b>APIs e serviços &gt; Credenciais</b>, clique em <b>Criar credenciais &gt; Chave de API</b>. Em <b>Restrições da API</b>, limite a chave à <b>Places API (New)</b>.</li>
+              <li>Em <b>Faturamento &gt; Orçamentos e alertas</b>, crie um alerta de orçamento para não ter surpresa.</li>
+              <li>No <a href="https://dashboard.render.com/" target="_blank" rel="noopener">painel do Render</a>, abra o serviço do CRM &gt; <b>Environment</b> e crie a variável <b>GOOGLE_PLACES_API_KEY</b> com a chave. Salve: o CRM reinicia sozinho.</li>
+              <li>No Gerador de Leads, o aviso amarelo some e passam a aparecer nota, avaliações e comentários. O limite mensal de buscas é dividido pelos dias que faltam no mês.</li></ol></details>
+            <details class="aj-d"><summary>Como criar um usuário e trocar a senha</summary><ol>
+              <li><b>Trocar a minha senha:</b> clique em <b>Minha senha</b>, no topo, digite a nova senha duas vezes (mínimo 8 caracteres) e salve.</li>
+              <li><b>Criar usuário (administrador):</b> abra <b>Equipe e acessos &gt; Novo usuário</b>, preencha nome, usuário e senha, escolha o perfil e clique em <b>Criar usuário</b>.</li>
+              <li><b>Perfil limitado:</b> usa o CRM normalmente, mas não altera Configurações. <b>Administrador:</b> pode tudo.</li>
+              <li>Para quem saiu da equipe, use <b>Desativar</b>: a pessoa perde o acesso na hora.</li></ol></details>
+            <details class="aj-d"><summary>Como fazer uma chamada de voz, vídeo ou de tela</summary><ol>
+              <li>Abra <b>Chat da Equipe</b> e escolha uma <b>conversa privada</b> (não o Geral).</li>
+              <li>Clique em <b>Ligar</b>, <b>Vídeo</b> ou <b>Compartilhar tela</b>. Libere o microfone e a câmera quando o navegador pedir.</li>
+              <li>A outra pessoa ouve o toque e clica em <b>Atender</b>.</li>
+              <li>Na chamada: <b>Mudo</b>, <b>Câmera</b>, <b>Compartilhar tela</b> e <b>Desligar</b>.</li>
+              <li>Controlar o computador do colega não é possível pelo navegador. Use o <a href="https://remotedesktop.google.com/support" target="_blank" rel="noopener">Chrome Remote Desktop</a> junto com a tela compartilhada.</li></ol></details>
+            <details class="aj-d"><summary>Deu problema? Veja aqui</summary><ul>
+              <li><b>Esqueci a senha:</b> peça a um administrador para definir uma nova em Equipe e acessos.</li>
+              <li><b>Não ouço ou não vejo o colega:</b> confira a permissão de microfone e câmera no cadeado da barra de endereço e se os dois estão com o CRM aberto.</li>
+              <li><b>O Gerador não mostra nota nem avaliações:</b> falta a chave do Google (veja o passo a passo acima).</li>
+              <li><b>O menu lateral sumiu:</b> no Pipeline ele recolhe sozinho. Clique no botão de três tracinhos para abrir.</li>
+              <li><b>A primeira tela demora:</b> o servidor gratuito dorme depois de um tempo parado e leva alguns segundos para acordar.</li></ul></details>
+          </div>
+
+          <h3 class="aj-h">Tutorial completo, com narração</h3>
+          <p class="empty-state" style="text-align:left; padding:0 0 12px;">Ouça o tutorial capítulo por capítulo: cada tela do CRM e como preencher cada formulário.</p>
 
           <div class="panel ajuda-player">
             <div class="ajuda-stage-top">
@@ -971,69 +1039,98 @@
 
   <!-- ===== MODAL: Add/Edit Deal ===== -->
   <div class="modal-overlay" id="modal-deal">
-    <div class="modal">
+    <div class="modal wide deal-modal">
       <div class="modal-header">
         <h3 id="deal-modal-title">Adicionar Negócio</h3>
-        <button class="modal-close" data-close="modal-deal">&times;</button>
+        <button class="modal-close" data-close="modal-deal" aria-label="Fechar">&times;</button>
       </div>
       <div class="modal-body">
         <input type="hidden" id="deal-id" />
-        <div class="form-group">
-          <label>Título do Negócio</label>
-          <input type="text" id="deal-title" placeholder="Ex: Contrato de fornecimento" />
-        </div>
-        <div class="form-row">
+
+        <section class="dm-step">
+          <div class="dm-h"><span class="dm-n">1</span><div><b>Quem é o cliente?</b><small>Escolha uma pessoa e/ou uma empresa que já existe, ou cadastre aqui mesmo. Não precisa sair desta tela.</small></div></div>
+          <div class="dm-two">
+            <div class="dm-box">
+              <label class="dm-box-h" for="deal-person"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg> Pessoa <em>(com quem você fala)</em></label>
+              <select id="deal-person"></select>
+              <div class="dm-new" id="dm-newperson" hidden>
+                <input type="text" id="np-name" placeholder="Nome da pessoa *" autocomplete="off" />
+                <input type="text" id="np-phone" placeholder="Telefone / WhatsApp" autocomplete="off" />
+                <input type="email" id="np-email" placeholder="E-mail" autocomplete="off" />
+              </div>
+            </div>
+            <div class="dm-box">
+              <label class="dm-box-h" for="deal-org"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="3" width="12" height="18" rx="1"/><path d="M8 7h1M8 11h1M8 15h1M13 7h1M13 11h1M13 15h1M16 10h4v11h-4"/></svg> Empresa <em>(onde ela trabalha)</em></label>
+              <select id="deal-org"></select>
+              <div class="dm-new" id="dm-neworg" hidden>
+                <input type="text" id="no-name" placeholder="Nome da empresa *" autocomplete="off" />
+                <input type="text" id="no-cnpj" placeholder="CNPJ (opcional)" autocomplete="off" />
+                <input type="text" id="no-phone" placeholder="Telefone (opcional)" autocomplete="off" />
+              </div>
+            </div>
+          </div>
+          <div class="dm-hint" id="dm-client-hint" role="status"></div>
+        </section>
+
+        <section class="dm-step">
+          <div class="dm-h"><span class="dm-n">2</span><div><b>Sobre o negócio</b><small>Um nome fácil de reconhecer no quadro e quanto você espera vender.</small></div></div>
           <div class="form-group">
-            <label>Valor</label>
-            <input type="number" id="deal-value" placeholder="0,00" min="0" step="0.01" />
+            <label for="deal-title">Nome do negócio *</label>
+            <input type="text" id="deal-title" placeholder="Ex: Parceria de marketplaces com a Empresa X" />
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="deal-value">Valor esperado</label>
+              <input type="number" id="deal-value" placeholder="0,00" min="0" step="0.01" />
+            </div>
+            <div class="form-group">
+              <label for="deal-currency">Moeda</label>
+              <select id="deal-currency">
+                <option value="BRL">BRL (R$)</option>
+                <option value="USD">USD ($)</option>
+                <option value="EUR">EUR (€)</option>
+              </select>
+            </div>
+          </div>
+        </section>
+
+        <section class="dm-step">
+          <div class="dm-h"><span class="dm-n">3</span><div><b>Em que ponto da venda está?</b><small>A etapa define em qual coluna do quadro o cartão aparece. Você pode arrastar depois.</small></div></div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="deal-stage">Etapa</label>
+              <select id="deal-stage"></select>
+            </div>
+            <div class="form-group">
+              <label for="deal-close-date">Fechamento previsto</label>
+              <input type="date" id="deal-close-date" />
+            </div>
           </div>
           <div class="form-group">
-            <label>Moeda</label>
-            <select id="deal-currency">
-              <option value="BRL">BRL (R$)</option>
-              <option value="USD">USD ($)</option>
-              <option value="EUR">EUR (€)</option>
+            <label for="deal-platform">Plataforma de vendas <small>(opcional)</small></label>
+            <select id="deal-platform">
+              <option value="">Nenhuma / não se aplica</option>
+              <option value="Mercado Livre">Mercado Livre</option>
+              <option value="Shopee">Shopee</option>
+              <option value="Amazon">Amazon</option>
+              <option value="TikTok Shop">TikTok Shop</option>
+              <option value="Site Próprio">Site Próprio</option>
+              <option value="Outro">Outro</option>
             </select>
           </div>
-        </div>
-        <div class="form-group">
-          <label>Custo de Fornecimento (opcional)</label>
-          <input type="number" id="deal-supply-cost" placeholder="Ex: 12.000" min="0" step="0.01" />
-        </div>
-        <div class="form-group">
-          <label>Custo de Marketing Digital (opcional)</label>
-          <input type="number" id="deal-marketing-cost" placeholder="Ex: 3.500" min="0" step="0.01" />
-        </div>
-        <div class="form-group">
-          <label>Empresa / Pessoa</label>
-          <select id="deal-person"></select>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label>Estágio inicial</label>
-            <select id="deal-stage"></select>
+        </section>
+
+        <details class="dm-more">
+          <summary>Custos <small>(opcional, para calcular margem)</small></summary>
+          <div class="form-row">
+            <div class="form-group"><label for="deal-supply-cost">Custo de fornecimento</label><input type="number" id="deal-supply-cost" placeholder="Ex: 12000" min="0" step="0.01" /></div>
+            <div class="form-group"><label for="deal-marketing-cost">Custo de marketing digital</label><input type="number" id="deal-marketing-cost" placeholder="Ex: 3500" min="0" step="0.01" /></div>
           </div>
-          <div class="form-group">
-            <label>Data de fechamento esperada</label>
-            <input type="date" id="deal-close-date" />
-          </div>
-        </div>
-        <div class="form-group">
-          <label>Plataforma de Vendas (opcional)</label>
-          <select id="deal-platform">
-            <option value="">Nenhuma / não se aplica</option>
-            <option value="Mercado Livre">Mercado Livre</option>
-            <option value="Shopee">Shopee</option>
-            <option value="Amazon">Amazon</option>
-            <option value="TikTok Shop">TikTok Shop</option>
-            <option value="Site Próprio">Site Próprio</option>
-            <option value="Outro">Outro</option>
-          </select>
-        </div>
+        </details>
       </div>
       <div class="modal-footer">
         <button class="btn-secondary" data-close="modal-deal">Cancelar</button>
-        <button class="btn-primary" id="btn-save-deal">Salvar Negócio</button>
+        <button class="btn-primary" id="btn-save-deal">Salvar negócio</button>
       </div>
     </div>
   </div>
@@ -1581,9 +1678,13 @@
     </div>
   </div>
 
+  <script src="/js/ajuda-cenas.js"></script>
   <script src="/js/app.js"></script>
   <script src="/js/margem.js"></script>
   <script src="/js/leadgen-ui.js"></script>
   <script src="/js/nav-materiais.js"></script>
+  <script src="/js/team-ui.js"></script>
+  <script src="/js/pipeline-v2.js"></script>
+  <script src="/js/calls-ui.js"></script>
 </body>
 </html>

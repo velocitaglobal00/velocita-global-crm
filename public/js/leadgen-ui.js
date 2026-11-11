@@ -94,6 +94,7 @@
     const c = S.cfg; const pct = Math.min(100, Math.round((c.generatedToday / c.dailyTarget) * 100));
     const hot = S.items.filter((i) => i.tier === 'quente' && i.status === 'novo').length;
     $('lg-meta').innerHTML = `<div class="lg-metric"><b>${c.generatedToday}</b><span>gerados hoje (meta ${c.dailyTarget})</span><div class="lg-bar"><i style="width:${pct}%"></i></div></div>
+      ${c.google && c.budget ? `<div class="lg-metric"><b>${c.budget.usedToday}/${c.budget.allowanceToday}</b><span>buscas no Google hoje (mês: ${c.budget.used} de ${c.budget.cap}, ${c.budget.daysLeft} dia(s) restantes)</span><div class="lg-bar"><i style="width:${c.budget.allowanceToday ? Math.min(100, Math.round((c.budget.usedToday / c.budget.allowanceToday) * 100)) : 100}%"></i></div></div>` : ''}
       <div class="lg-metric"><b>${S.items.filter((i) => i.status === 'novo').length}</b><span>novos para contatar</span></div>
       <div class="lg-metric"><b>${hot}</b><span>quentes esperando</span></div>
       <div class="lg-metric"><b>${S.items.filter((i) => i.dealId).length}</b><span>já no pipeline</span></div>`;
@@ -174,6 +175,7 @@
           ${i.mapsUrl ? `<a class="lg-btn" href="${esc(i.mapsUrl)}" target="_blank" rel="noopener">Mapa</a>` : ''}
           <a class="lg-btn" href="${ra}" target="_blank" rel="noopener" title="Abre a busca no Reclame Aqui">Reclame Aqui</a>
           <label class="lg-ra">nota RA <input type="number" min="0" max="10" step="0.1" value="${esc((i.ra && i.ra.nota) === '' ? '' : (i.ra || {}).nota)}" data-act="ra" placeholder="0-10"></label></div>
+        ${(i.reviewsText && i.reviewsText.length) ? `<details class="lg-rev"><summary>O que dizem no Google (${i.reviewsText.length} comentários)</summary>${i.reviewsText.slice(0, 3).map((r) => `<p><b>${'★'.repeat(Math.round(r.stars || 0))}</b> ${esc(r.text)} <small>${esc(r.when)}</small></p>`).join('')}</details>` : ''}
         ${i.pitch ? `<div class="lg-pitch"><b>Como abordar:</b> ${esc(i.pitch)}</div>` : ''}
         <div class="lg-line lg-muted">${esc(i.address || '')}</div>
         ${i.outcome ? `<div class="lg-line lg-muted">Último contato: ${esc(i.outcome.label)}${i.outcome.note ? ' — ' + esc(i.outcome.note) : ''}</div>` : ''}

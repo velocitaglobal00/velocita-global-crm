@@ -81,5 +81,6 @@
     });
   }
 
+  document.addEventListener('click', (e) => { const b = e.target.closest('[data-goto]'); if (b && typeof window.switchView === 'function') window.switchView(b.dataset.goto); });
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initNav); else initNav();
 })();
