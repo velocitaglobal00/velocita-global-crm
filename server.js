@@ -151,7 +151,8 @@ app.post('/api/login', (req, res) => {
   const uname = team.cleanUsername(username);
   const user = db.view().users.find((u) => u.username === uname && u.active !== false);
   // com senha própria: só ela vale. Sem senha própria (transição): a senha antiga compartilhada.
-  const ok = !!user && (user.passHash ? team.verifyPassword(password, user.passHash) : passwordMatches(password));
+  // só vale a senha própria da pessoa. A antiga senha compartilhada não abre mais nenhuma conta.
+  const ok = !!user && !!user.passHash && team.verifyPassword(password, user.passHash);
   if (ok) {
     loginFailures.delete(req.ip);
     startSession(req, res, user);

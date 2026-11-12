@@ -63,6 +63,12 @@ function ensureTeam(data) {
     }
     data.settings.seedAccounts = true; changed = true;
   }
+  // conta matriz duplicada e sem senha (sobra de migração): remove, para não existir login administrativo sem senha
+  const matrizes = data.users.filter((u) => u.role === 'matriz');
+  if (matrizes.length > 1 && matrizes.some((u) => u.passHash)) {
+    const keepIds = new Set(matrizes.filter((u) => u.passHash).map((u) => u.id));
+    data.users = data.users.filter((u) => u.role !== 'matriz' || keepIds.has(u.id)); changed = true;
+  }
   return changed;
 }
 
