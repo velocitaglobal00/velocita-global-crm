@@ -112,6 +112,10 @@
           <svg class="si" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path><path d="M11 8v6M8 11h6"></path></svg>
           Gerador de Leads
         </div>
+        <div class="sidebar-link" data-view="orcamentos">
+          <svg class="si" viewBox="0 0 24 24"><path d="M6 2h9l5 5v15H6z"></path><path d="M14 2v6h6"></path><path d="M9 13h8M9 17h8M9 9h2"></path></svg>
+          Orçamentos
+        </div>
         <div class="sidebar-link" data-view="orgs">
           <svg class="si" viewBox="0 0 24 24"><rect x="4" y="3" width="12" height="18" rx="1"></rect><path d="M8 7h1M8 11h1M8 15h1M13 7h1M13 11h1M13 15h1"></path><path d="M16 10h4v11h-4"></path></svg>
           Empresas
@@ -365,6 +369,11 @@
         <section class="view" id="view-equipe">
           <div class="pipeline-header"><h2>Equipe e acessos</h2></div>
           <div id="eq-root"><p style="color:var(--vg-text-muted)">Carregando...</p></div>
+        </section>
+
+        <section class="view" id="view-orcamentos">
+          <div class="pipeline-header"><h2>Orçamentos</h2></div>
+          <div id="oc-root"><p style="color:var(--vg-text-muted)">Carregando...</p></div>
         </section>
 
         <!-- ===== ORGANIZATIONS ===== -->
@@ -757,6 +766,12 @@
               <li>Em <b>Faturamento &gt; Orçamentos e alertas</b>, crie um alerta de orçamento para não ter surpresa.</li>
               <li>No <a href="https://dashboard.render.com/" target="_blank" rel="noopener">painel do Render</a>, abra o serviço do CRM &gt; <b>Environment</b> e crie a variável <b>GOOGLE_PLACES_API_KEY</b> com a chave. Salve: o CRM reinicia sozinho.</li>
               <li>No Gerador de Leads, o aviso amarelo some e passam a aparecer nota, avaliações e comentários. O limite mensal de buscas é dividido pelos dias que faltam no mês.</li></ol></details>
+            <details class="aj-d"><summary>Como montar e imprimir um orçamento</summary><ol>
+              <li>Abra <b>Orçamentos &gt; Empresas emissoras</b> e confira os dados da empresa que emite (razão social, CNPJ, endereço). Quando virar LTDA, é só editar aqui.</li>
+              <li>Em <b>Catálogo de produtos</b>, cadastre equipamentos e serviços com SKU, valor e imposto. Dá para importar uma planilha CSV.</li>
+              <li>Clique em <b>Novo orçamento</b>. Escolha o cliente do CRM (ou digite) e digite o <b>SKU</b> de cada item: nome, valor e imposto entram sozinhos.</li>
+              <li>Ajuste quantidade, desconto e imposto por item, o desconto geral, o frete e as condições. O total aparece na barra de baixo.</li>
+              <li>Clique em <b>Salvar e imprimir</b>. A janela de impressão abre com o orçamento em A4: escolha a impressora ou <b>Salvar como PDF</b>.</li></ol></details>
             <details class="aj-d"><summary>Como criar um usuário e trocar a senha</summary><ol>
               <li><b>Trocar a minha senha:</b> clique em <b>Minha senha</b>, no topo, digite a nova senha duas vezes (mínimo 8 caracteres) e salve.</li>
               <li><b>Criar usuário (administrador):</b> abra <b>Equipe e acessos &gt; Novo usuário</b>, preencha nome, usuário e senha, escolha o perfil e clique em <b>Criar usuário</b>.</li>
@@ -1695,6 +1710,7 @@
   <script src="/js/leadgen-ui.js"></script>
   <script src="/js/nav-materiais.js"></script>
   <script src="/js/passkey-ui.js"></script>
+  <script src="/js/quotes-ui.js"></script>
   <script src="/js/team-ui.js"></script>
   <script src="/js/pipeline-v2.js"></script>
   <script src="/js/calls-ui.js"></script>

@@ -258,6 +258,7 @@ app.get('/app', requirePageAuth, (req, res) => {
     .replace('/js/margem.js"', `/js/margem.js?v=${ASSET_VERSION}"`)
     .replace('/js/leadgen-ui.js"', `/js/leadgen-ui.js?v=${ASSET_VERSION}"`)
     .replace('/js/nav-materiais.js"', `/js/nav-materiais.js?v=${ASSET_VERSION}"`)
+    .replace('/js/quotes-ui.js"', `/js/quotes-ui.js?v=${ASSET_VERSION}"`)
     .replace('/js/passkey-ui.js"', `/js/passkey-ui.js?v=${ASSET_VERSION}"`)
     .replace('/js/team-ui.js"', `/js/team-ui.js?v=${ASSET_VERSION}"`)
     .replace('/js/pipeline-v2.js"', `/js/pipeline-v2.js?v=${ASSET_VERSION}"`)
@@ -350,6 +351,7 @@ app.put('/api/materials', requireAuth, (req, res) => {
 // Gerador de Leads (busca de empresas, pontuação e envio ao pipeline) — ver leadgen.js
 team.register(app, { db, requireAuth, newId });
 require('./passkey').register(app, { db, requireAuth, startSession, tooManyFailures: tooManyLoginFailures, registerFailure: registerLoginFailure });
+require('./quotes').register(app, { db, requireAuth, newId });
 require('./calls').register(app, { db, requireAuth, pushToTeam });
 require('./leadgen').register(app, { db, requireAuth, newId, logHistory });
 
