@@ -83,6 +83,16 @@
       <div class="mt-card"><h3>Acessos e senhas</h3><p class="mt-note">Quem ainda está em "usa a senha antiga" entra com o próprio usuário e a senha antiga do CRM. Ao definir uma senha aqui, a antiga deixa de valer para essa pessoa.</p>${rows}
       <h3 style="margin-top:18px">Novo usuário</h3><div class="mt-row eq-new"><input id="nu-name" placeholder="Nome"><input id="nu-user" placeholder="Usuário (sem espaços)"><input id="nu-pw" type="password" placeholder="Senha (8+)" autocomplete="new-password"><select id="nu-role"><option value="socio">Perfil limitado</option><option value="admin">Administrador</option></select><button class="btn-primary" id="nu-add">Criar usuário</button></div></div>`;
     $('eq-root').querySelectorAll('[data-r]').forEach((b) => b.addEventListener('click', () => { T.range = b.dataset.r; draw(); }));
+    (async () => {
+      try {
+        const bk = await api('/api/admin/backups'); const card = document.createElement('div'); card.className = 'mt-card';
+        card.innerHTML = `<h3>Backup dos dados</h3><p class="mt-note">O CRM guarda um backup por dia, por 30 dias, de tudo (leads, negócios, orçamentos, financeiro). "Baixar" salva um arquivo sem senhas e chaves; "completo" inclui tudo e deve ficar só com você.</p>
+          <div class="mt-actions"><button class="btn-primary btn-sm" id="bk-now">Criar backup agora</button></div>
+          ${bk.length ? `<table class="data-table"><thead><tr><th>Dia</th><th>Tamanho</th><th></th></tr></thead><tbody>${bk.slice(0, 10).map((b) => `<tr><td>${b.day.split('-').reverse().join('/')}</td><td>${(b.size / 1024).toFixed(0)} KB</td><td class="oc-acts"><a class="btn-secondary btn-sm" href="/api/admin/backups/${b.day}/download">Baixar</a><a class="btn-secondary btn-sm" href="/api/admin/backups/${b.day}/download?full=1">Baixar completo</a></td></tr>`).join('')}</tbody></table>` : '<p class="mt-note">Nenhum backup ainda: o primeiro é criado automaticamente.</p>'}`;
+        $('eq-root').appendChild(card);
+        $('bk-now').onclick = async () => { try { await api('/api/admin/backups', { method: 'POST' }); toast('Backup criado.'); draw(); } catch (e) { toast(e.message); } };
+      } catch (e) { /* sem permissão */ }
+    })();
     $('eq-root').querySelectorAll('.eq-user').forEach((row) => {
       const id = row.dataset.id;
       row.querySelector('[data-save]').addEventListener('click', async () => {

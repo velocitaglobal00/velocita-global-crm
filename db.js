@@ -195,4 +195,42 @@ async function deleteFiles(ids) {
   }
 }
 
-module.exports = { init, read, view, write, flush, putFile, getFile, deleteFiles, useTurso };
+
+// ---------- Backups diários ----------
+// Um instantâneo por dia (horário de São Paulo), guardado por 30 dias: no Turso, numa tabela própria; sem Turso, em ./backups.
+const BACKUP_KEEP = 30;
+const BACKUP_DIR = path.join(__dirname, 'backups');
+const dayBR = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
+
+async function ensureBackupTable() {
+  await client.execute('CREATE TABLE IF NOT EXISTS crm_backups (day TEXT PRIMARY KEY, data TEXT NOT NULL, created_at INTEGER NOT NULL)');
+}
+async function createBackup(day, { overwrite = false } = {}) {
+  const key = day || dayBR(); const json = JSON.stringify(cache);
+  if (useTurso) {
+    await ensureBackupTable();
+    if (overwrite) await client.execute({ sql: 'INSERT OR REPLACE INTO crm_backups (day, data, created_at) VALUES (?, ?, ?)', args: [key, json, Date.now()] });
+    else await client.execute({ sql: 'INSERT OR IGNORE INTO crm_backups (day, data, created_at) VALUES (?, ?, ?)', args: [key, json, Date.now()] });
+    await client.execute({ sql: 'DELETE FROM crm_backups WHERE day NOT IN (SELECT day FROM crm_backups ORDER BY day DESC LIMIT ?)', args: [BACKUP_KEEP] });
+  } else {
+    fs.mkdirSync(BACKUP_DIR, { recursive: true }); const f = path.join(BACKUP_DIR, `db-${key}.json`);
+    if (overwrite || !fs.existsSync(f)) fs.writeFileSync(f, json, 'utf-8');
+    const all = fs.readdirSync(BACKUP_DIR).filter((n) => /^db-\d{4}-\d{2}-\d{2}\.json$/.test(n)).sort().reverse();
+    all.slice(BACKUP_KEEP).forEach((n) => fs.rmSync(path.join(BACKUP_DIR, n), { force: true }));
+  }
+  return key;
+}
+async function listBackups() {
+  if (useTurso) { await ensureBackupTable(); const r = await client.execute('SELECT day, length(data) AS size, created_at FROM crm_backups ORDER BY day DESC'); return r.rows.map((x) => ({ day: String(x.day), size: Number(x.size), createdAt: Number(x.created_at) })); }
+  if (!fs.existsSync(BACKUP_DIR)) return [];
+  return fs.readdirSync(BACKUP_DIR).filter((n) => /^db-\d{4}-\d{2}-\d{2}\.json$/.test(n)).sort().reverse().map((n) => { const st = fs.statSync(path.join(BACKUP_DIR, n)); return { day: n.slice(3, 13), size: st.size, createdAt: st.mtimeMs }; });
+}
+async function getBackup(day) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return null;
+  if (useTurso) { await ensureBackupTable(); const r = await client.execute({ sql: 'SELECT data FROM crm_backups WHERE day = ?', args: [day] }); return r.rows.length ? String(r.rows[0].data) : null; }
+  const f = path.join(BACKUP_DIR, `db-${day}.json`); return fs.existsSync(f) ? fs.readFileSync(f, 'utf-8') : null;
+}
+// Só o instantâneo de hoje, se ainda não existir (chamado ao ligar e a cada 30 minutos).
+async function backupIfNeeded() { if (!cache) return null; return createBackup(dayBR()); }
+
+module.exports = { backupIfNeeded, createBackup, listBackups, getBackup, init, read, view, write, flush, putFile, getFile, deleteFiles, useTurso };

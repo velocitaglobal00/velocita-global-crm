@@ -261,6 +261,7 @@ app.get('/app', requirePageAuth, (req, res) => {
     .replace('/js/nav-materiais.js"', `/js/nav-materiais.js?v=${ASSET_VERSION}"`)
     .replace('/js/quotes-ui.js"', `/js/quotes-ui.js?v=${ASSET_VERSION}"`)
     .replace('/js/finance-ui.js"', `/js/finance-ui.js?v=${ASSET_VERSION}"`)
+    .replace('/js/deal-pay-ui.js"', `/js/deal-pay-ui.js?v=${ASSET_VERSION}"`)
     .replace('/js/passkey-ui.js"', `/js/passkey-ui.js?v=${ASSET_VERSION}"`)
     .replace('/js/team-ui.js"', `/js/team-ui.js?v=${ASSET_VERSION}"`)
     .replace('/js/pipeline-v2.js"', `/js/pipeline-v2.js?v=${ASSET_VERSION}"`)
@@ -348,6 +349,23 @@ app.put('/api/materials', requireAuth, (req, res) => {
   };
   db.write(data);
   res.json(data.materials);
+});
+
+
+// ---------- Backup dos dados (somente administradores) ----------
+const SECRET_KEYS = /^(passHash|passkeys|googleRefreshToken|refreshToken|accessToken|clientSecret|smtpPass|apiKey|authSecret|webPush|privateKey|appSecret|pageAccessToken|verifyToken)$/;
+function stripSecrets(o) {
+  if (Array.isArray(o)) return o.map(stripSecrets);
+  if (o && typeof o === 'object') { const out = {}; for (const [k, v] of Object.entries(o)) out[k] = SECRET_KEYS.test(k) ? '(removido)' : stripSecrets(v); return out; }
+  return o;
+}
+const adminOnlyBackup = (req, res, next) => (team.isAdminLike(req.user) ? next() : res.status(403).json({ error: 'Somente administradores.' }));
+app.get('/api/admin/backups', requireAuth, adminOnlyBackup, async (req, res) => { try { res.json(await db.listBackups()); } catch (e) { res.status(500).json({ error: e.message }); } });
+app.post('/api/admin/backups', requireAuth, adminOnlyBackup, async (req, res) => { try { const day = await db.createBackup(undefined, { overwrite: true }); res.json({ ok: true, day }); } catch (e) { res.status(500).json({ error: e.message }); } });
+app.get('/api/admin/backups/:day/download', requireAuth, adminOnlyBackup, async (req, res) => {
+  const raw = await db.getBackup(req.params.day).catch(() => null); if (!raw) return res.status(404).json({ error: 'Backup não encontrado' });
+  const full = req.query.full === '1'; const body = full ? raw : JSON.stringify(stripSecrets(JSON.parse(raw)), null, 2);
+  res.set({ 'Content-Type': 'application/json; charset=utf-8', 'Content-Disposition': `attachment; filename="crm-velocita-${req.params.day}${full ? '-COMPLETO' : ''}.json"` }).send(body);
 });
 
 // Gerador de Leads (busca de empresas, pontuação e envio ao pipeline) — ver leadgen.js
@@ -2675,6 +2693,8 @@ async function migrateTeamChatAttachments() {
     if (team.ensureTeam(d0)) db.write(d0);
     team.load(db.view());
     setInterval(() => team.flush(db), 60000);
+    db.backupIfNeeded().catch((e) => console.error('Backup diário falhou:', e.message));
+    setInterval(() => db.backupIfNeeded().catch((e) => console.error('Backup diário falhou:', e.message)), 30 * 60 * 1000);
   } catch (e) {
     console.error('Falha ao preparar os usuários da equipe:', e);
   }
