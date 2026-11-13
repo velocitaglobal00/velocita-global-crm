@@ -303,6 +303,25 @@ function budgetInfo(lg, todayStr) {
   return { cap, used: u.requests, usedToday, daysLeft, allowanceToday: allowance, remainingToday: Math.max(0, Math.min(allowance - usedToday, cap - u.requests)) };
 }
 
+// A chave do Google (Places API) pode vir do Render (GOOGLE_PLACES_API_KEY) ou ser salva pelo administrador no próprio CRM.
+function placesKey(data) {
+  const fromEnv = process.env.GOOGLE_PLACES_API_KEY;
+  if (fromEnv) return { key: fromEnv, source: 'render' };
+  const k = data && data.settings && data.settings.integrations && data.settings.integrations.googlePlaces && data.settings.integrations.googlePlaces.apiKey;
+  return k ? { key: k, source: 'crm' } : { key: '', source: null };
+}
+// Traduz o erro do Google para o que a pessoa precisa fazer.
+function explainGoogleError(e) {
+  const m = String(e && e.message || e);
+  if (/API_KEY_INVALID|API key not valid/i.test(m)) return 'A chave não é válida. Copie de novo, inteira, em Credenciais no Google Cloud.';
+  if (/has not been used|is disabled|SERVICE_DISABLED/i.test(m)) return 'A "Places API (New)" ainda não está ativada neste projeto. Ative em APIs e serviços > Biblioteca > Places API (New).';
+  if (/billing|BILLING/i.test(m)) return 'O faturamento não está vinculado ao projeto. Vincule uma forma de pagamento em Faturamento no Google Cloud.';
+  if (/API_KEY_SERVICE_BLOCKED|blocked|restricted/i.test(m)) return 'A chave está restrita a outra API. Em Credenciais > sua chave > Restrições da API, inclua "Places API (New)".';
+  if (/PERMISSION_DENIED|403/i.test(m)) return 'O Google negou o uso. Confira faturamento, a API ativada e as restrições da chave.';
+  if (/429|RESOURCE_EXHAUSTED|quota/i.test(m)) return 'A cota do Google acabou por agora. Tente mais tarde.';
+  return 'O Google respondeu com erro: ' + m.slice(0, 200);
+}
+
 // ---------- registro das rotas ----------
 function register(app, { db, requireAuth, newId, logHistory }) {
   const today = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
@@ -317,7 +336,7 @@ function register(app, { db, requireAuth, newId, logHistory }) {
     const lg = store(db.read());
     const d = today();
     res.json({
-      google: !!process.env.GOOGLE_PLACES_API_KEY, ufs: UFS, cities: CITIES,
+      google: !!placesKey(db.view()).key, keySource: placesKey(db.view()).source, ufs: UFS, cities: CITIES,
       segments: Object.fromEntries(Object.entries(SEGMENTS).map(([k, v]) => [k, v.label])),
       dailyTarget: lg.settings.dailyTarget || 100, generatedToday: lg.items.filter((i) => i.genDate === d).length,
       budget: budgetInfo(lg, d), canEditBudget: !!req.user && ['matriz', 'admin'].includes(req.user.role)
@@ -342,6 +361,30 @@ function register(app, { db, requireAuth, newId, logHistory }) {
     }
     if (req.body.dailyTarget !== undefined) lg.settings.dailyTarget = clamp(Number(req.body.dailyTarget) || 100, 10, 1000);
     db.write(data); res.json(lg.settings);
+  });
+
+
+  // ---- chave do Google (somente administradores) ----
+  const adminOnly = (req, res, next) => (req.user && ['matriz', 'admin'].includes(req.user.role) ? next() : res.status(403).json({ error: 'Somente administradores.' }));
+  app.put('/api/leadgen/key', requireAuth, adminOnly, (req, res) => {
+    const key = String((req.body || {}).key || '').trim();
+    if (!/^AIza[0-9A-Za-z_-]{30,60}$/.test(key)) return res.status(400).json({ error: 'Essa não parece uma chave de API do Google (ela começa com "AIza" e não tem espaços). Copie de novo.' });
+    const data = db.read(); if (!data.settings.integrations) data.settings.integrations = {};
+    data.settings.integrations.googlePlaces = { apiKey: key, savedAt: new Date().toISOString() };
+    db.write(data); res.json({ ok: true });
+  });
+  app.delete('/api/leadgen/key', requireAuth, adminOnly, (req, res) => {
+    const data = db.read(); if (data.settings.integrations) delete data.settings.integrations.googlePlaces; db.write(data); res.json({ ok: true });
+  });
+  app.post('/api/leadgen/key/test', requireAuth, adminOnly, async (req, res) => {
+    const { key, source } = placesKey(db.view());
+    if (!key) return res.json({ ok: false, message: 'Ainda não há chave salva.' });
+    try {
+      const places = await googleSearch({ key, textQuery: 'distribuidora em Ribeirão Preto, SP, Brasil', pageLimit: 1, country: 'BR' });
+      const data = db.read(); const lg = store(data); const d = today(); const mth = d.slice(0, 7);
+      if (!lg.usage || lg.usage.month !== mth) lg.usage = { month: mth, requests: 0, days: {} }; lg.usage.requests += 1; lg.usage.days[d] = (lg.usage.days[d] || 0) + 1; db.write(data);
+      res.json({ ok: true, source, found: places.length, message: `Funcionando: o Google respondeu com ${places.length} empresa(s) no teste.` });
+    } catch (e) { res.json({ ok: false, source, message: explainGoogleError(e) }); }
   });
 
   // ---- busca (roda em segundo plano; o painel consulta o andamento) ----
@@ -375,8 +418,7 @@ function register(app, { db, requireAuth, newId, logHistory }) {
   });
 
   async function runJob(job) {
-    const p = job.p; const key = process.env.GOOGLE_PLACES_API_KEY;
-    const data0 = db.read();
+    const p = job.p; const data0 = db.read(); const key = placesKey(data0).key;
     const known = new Set();
     data0.contacts.forEach((c) => { const d = digits(c.phone); if (d.length >= 10) known.add('p:' + d.slice(-10)); });
     data0.organizations.forEach((o) => { const d = digits(o.phone); if (d.length >= 10) known.add('p:' + d.slice(-10)); known.add('n:' + norm(o.name) + '|'); });
@@ -435,7 +477,7 @@ function register(app, { db, requireAuth, newId, logHistory }) {
             rows.forEach((r) => { if (!r.city) r.city = c.city; take(r); });
             if (!p.city) break; // OSM por estado inteiro já cobre todas as cidades de uma vez
           }
-        } catch (e) { if (e.limit) { limited = true; break outer; } job.errors.push(`${c.city}/${seg}: ${e.message}`); }
+        } catch (e) { if (e.limit) { limited = true; break outer; } job.errors.push(key ? explainGoogleError(e) : `${c.city}/${seg}: ${e.message}`); if (key) break outer; }
       }
       if (!key && !p.city) break;
     }

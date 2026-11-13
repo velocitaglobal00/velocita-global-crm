@@ -38,8 +38,9 @@
     const ufOpts = Object.entries(c.ufs).map(([k, v]) => `<option value="${k}">${k} — ${esc(v)}</option>`).join('');
     const segs = Object.entries(c.segments).map(([k, v]) => `<label class="lg-check"><input type="checkbox" name="lg-seg" value="${k}" checked> ${esc(v)}</label>`).join('');
     $('lg-root').innerHTML = `
-      ${c.google ? '' : `<div class="lg-warn"><b>Fonte gratuita ativa (OpenStreetMap).</b> Ela traz telefone e site de parte das empresas, mas <b>não traz nota nem avaliações</b>.
-        Para pontuar por estrelas e comentários, ligue o Google Places: crie uma chave de API (Places API New) e salve como <code>GOOGLE_PLACES_API_KEY</code> nas variáveis do Render.</div>`}
+      <div class="lg-warn lg-key" id="lg-key">${c.google ? '' : '<b>O gerador ainda não está ligado ao Google.</b> Sem a chave, ele não consegue buscar empresas.<br>'}
+        ${c.canEditBudget ? `<div class="lg-key-row"><input type="password" id="lg-keyinput" placeholder="${c.google ? 'Chave salva' + (c.keySource === 'render' ? ' no Render' : ' no CRM') + ' · cole outra para trocar' : 'Cole aqui a chave de API do Google (começa com AIza...)'}" autocomplete="off"><button class="btn-primary btn-sm" id="lg-keysave">Salvar e testar</button>${c.google ? '<button class="btn-secondary btn-sm" id="lg-keytest">Testar de novo</button>' : ''}</div><div id="lg-keymsg" class="lg-keymsg"></div>
+        <details class="lg-how"><summary>Como conseguir a chave (passo a passo)</summary><ol><li>Em <b>console.cloud.google.com</b>, escolha o projeto do CRM.</li><li><b>Faturamento:</b> vincule uma forma de pagamento (o Google exige; há cota gratuita mensal).</li><li><b>APIs e serviços &gt; Biblioteca:</b> ative <b>Places API (New)</b>.</li><li><b>APIs e serviços &gt; Credenciais &gt; Criar credenciais &gt; Chave de API.</b> Em <b>Restrições da API</b>, limite à <b>Places API (New)</b>.</li><li>Copie a chave, cole acima e clique em <b>Salvar e testar</b>.</li></ol></details>` : '<span>Peça a um administrador para cadastrar a chave do Google nesta tela.</span>'}</div>
       <div class="lg-meta" id="lg-meta"></div>
       <div class="lg-card">
         <h3>1. Gerar novos leads</h3>
@@ -77,6 +78,10 @@
         <div id="f-refinfo" class="lg-refinfo"></div>
         <div id="lg-list"></div>
       </div>`;
+    const km = (txt, ok) => { const e = $('lg-keymsg'); if (e) { e.textContent = txt; e.className = 'lg-keymsg ' + (ok ? 'ok' : 'err'); } };
+    const testKey = async () => { km('Testando com o Google...', true); try { const r = await call('/api/leadgen/key/test', { method: 'POST' }); km(r.message, r.ok); if (r.ok) { S.cfg = await call('/api/leadgen/config'); setTimeout(() => location.reload(), 1800); } } catch (e) { km(e.message, false); } };
+    if ($('lg-keysave')) $('lg-keysave').onclick = async () => { const v = $('lg-keyinput').value.trim(); if (!v) return km('Cole a chave primeiro.', false); try { await call('/api/leadgen/key', { method: 'PUT', body: JSON.stringify({ key: v }) }); $('lg-keyinput').value = ''; await testKey(); } catch (e) { km(e.message, false); } };
+    if ($('lg-keytest')) $('lg-keytest').onclick = testKey;
     $('lg-uf').addEventListener('change', fillCities);
     $('lg-go').addEventListener('click', startSearch);
     $('f-ref-go').addEventListener('click', locateRef);
