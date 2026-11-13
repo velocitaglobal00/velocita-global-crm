@@ -25,12 +25,48 @@
       try { S.cfg = await call('/api/leadgen/config'); } catch (e) { $('lg-root').innerHTML = `<p>Não foi possível abrir o gerador: ${esc(e.message)}</p>`; return; }
       buildShell(); S.loaded = true;
     }
-    refresh();
+    wireHeader(); refresh();
   };
 
   async function refresh() {
     try { S.items = await call('/api/leadgen/items'); S.cfg = await call('/api/leadgen/config'); } catch (e) { return; }
     renderMeta(); renderList();
+  }
+
+  // ---------- Salvar e zerar + Histórico ----------
+  const fd = (iso) => (iso ? String(iso).slice(0, 10).split('-').reverse().join('/') : '');
+  function wireHeader() {
+    const arch = $('lg-archive'); if (!arch || arch.dataset.w) return; arch.dataset.w = '1';
+    arch.onclick = async () => {
+      const n = S.items.length; if (!n) { window.showToast && window.showToast('A lista atual está vazia.'); return; }
+      const name = window.prompt(`Salvar estas ${n} empresas no histórico e limpar a tela.\n\nDê um nome para a lista (ex.: Leads Paraná). Deixe em branco para nome automático:`, '');
+      if (name === null) return;
+      try { const r = await call('/api/leadgen/archive', { method: 'POST', body: JSON.stringify({ name }) }); window.showToast && window.showToast(`Lista "${r.name}" salva no histórico. Tela limpa para uma nova busca.`); S.shown = 40; await refresh(); if ($('lg-hist').style.display !== 'none') showHistory(); } catch (e) { window.showToast && window.showToast(e.message); }
+    };
+    $('lg-hist-btn').onclick = () => { const hb = $('lg-hist'); if (hb.style.display === 'none') showHistory(); else hb.style.display = 'none'; };
+  }
+  async function showHistory(openId) {
+    const box = $('lg-hist'); box.style.display = ''; box.innerHTML = '<p class="lg-muted">Carregando histórico...</p>';
+    let list; try { list = await call('/api/leadgen/batches'); } catch (e) { box.innerHTML = `<p>${esc(e.message)}</p>`; return; }
+    const head = '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><h3 style="margin:0">Histórico de listas</h3><button type="button" class="btn-secondary btn-sm" id="lgh-close">Fechar</button></div>';
+    if (!list.length) { box.innerHTML = head + '<p class="lg-muted" style="padding:10px 0">Nenhuma lista salva ainda. Quando terminar de trabalhar uma lista, clique em <b>Salvar e zerar</b>: ela fica guardada aqui, com resultados e observações.</p>'; $('lgh-close').onclick = () => { box.style.display = 'none'; }; return; }
+    box.innerHTML = head + list.map((b) => `<div class="lgh-item" data-b="${b.id}"><div class="lgh-top"><b>${esc(b.name)}</b><small>${fd(b.createdAt)}${b.byName ? ' · ' + esc(b.byName) : ''}</small></div>
+      <div class="lgh-kpis"><span><b>${b.stats.total}</b> empresas</span><span><b>${b.stats.contacted}</b> contatadas</span><span><b>${b.stats.meetings.length}</b> reuniões</span><span><b>${b.stats.inPipeline}</b> no pipeline</span></div>
+      <p class="lgh-sum">${esc(b.summary)}</p>
+      <div class="lgh-acts"><button type="button" class="btn-secondary btn-sm" data-h="open">Ver empresas</button><a class="btn-secondary btn-sm" href="/api/leadgen/export.csv?batch=${b.id}">Planilha</a><a class="btn-secondary btn-sm" href="/api/leadgen/report?batch=${b.id}">Relatório</a><button type="button" class="btn-secondary btn-sm" data-h="rename">Renomear</button><button type="button" class="btn-secondary btn-sm" data-h="restore" title="Devolve estas empresas para a tela de trabalho">Reabrir na tela</button></div>
+      <div class="lgh-body" style="display:none"></div></div>`).join('');
+    $('lgh-close').onclick = () => { box.style.display = 'none'; };
+    box.querySelectorAll('.lgh-item').forEach((el) => {
+      const id = el.dataset.b; const body = el.querySelector('.lgh-body');
+      el.querySelector('[data-h=open]').onclick = async () => {
+        if (body.style.display !== 'none') { body.style.display = 'none'; return; }
+        body.style.display = ''; body.innerHTML = '<p class="lg-muted">Carregando...</p>';
+        const d = await call(`/api/leadgen/batches/${id}`);
+        body.innerHTML = `<div class="lgh-table"><table class="data-table"><thead><tr><th>Empresa</th><th>Cidade</th><th>Telefone</th><th>Resultado</th><th>Falou com</th><th>Quem contatou</th><th>Observação</th></tr></thead><tbody>${d.items.sort((a, b2) => (b2.outcome ? 1 : 0) - (a.outcome ? 1 : 0) || b2.score - a.score).map((i) => { const o = i.outcome || {}; return `<tr><td>${esc(i.name)}${i.dealId ? ' <span class="lg-pill lg-ok">pipeline</span>' : ''}</td><td>${esc(i.city || '')}${i.uf ? '/' + esc(i.uf) : ''}</td><td>${esc(i.phone || '')}</td><td>${o.label ? esc(o.label) + (o.meetingDate ? '<br><small>reunião ' + fd(o.meetingDate) + (o.meetingDate.length > 10 ? ' ' + esc(o.meetingDate.slice(11, 16)) : '') + '</small>' : '') : '<span class="lg-muted">não contatada</span>'}</td><td>${esc(o.person || '')}</td><td>${esc(o.byName || '')}${o.at ? '<br><small>' + fd(o.at) + '</small>' : ''}</td><td>${esc([o.note, i.notes].filter(Boolean).join(' | '))}</td></tr>`; }).join('')}</tbody></table></div>`;
+      };
+      el.querySelector('[data-h=rename]').onclick = async () => { const n = window.prompt('Novo nome da lista:', ''); if (!n || !n.trim()) return; try { await call(`/api/leadgen/batches/${id}`, { method: 'PUT', body: JSON.stringify({ name: n }) }); showHistory(); } catch (e) { window.showToast && window.showToast(e.message); } };
+      el.querySelector('[data-h=restore]').onclick = async () => { if (!window.confirm('Devolver estas empresas para a tela de trabalho? A lista sai do histórico.')) return; try { await call(`/api/leadgen/batches/${id}/restore`, { method: 'POST' }); window.showToast && window.showToast('Lista reaberta na tela.'); await refresh(); showHistory(); } catch (e) { window.showToast && window.showToast(e.message); } };
+    });
   }
 
   function buildShell() {
@@ -178,9 +214,9 @@
         ${(i.reviewsText && i.reviewsText.length) ? `<details class="lg-rev"><summary>O que dizem no Google (${i.reviewsText.length} comentários)</summary>${i.reviewsText.slice(0, 3).map((r) => `<p><b>${'★'.repeat(Math.round(r.stars || 0))}</b> ${esc(r.text)} <small>${esc(r.when)}</small></p>`).join('')}</details>` : ''}
         ${i.pitch ? `<div class="lg-pitch"><b>Como abordar:</b> ${esc(i.pitch)}</div>` : ''}
         <div class="lg-line lg-muted">${esc(i.address || '')}</div>
-        ${i.outcome ? `<div class="lg-line lg-muted">Último contato: ${esc(i.outcome.label)}${i.outcome.note ? ' — ' + esc(i.outcome.note) : ''}</div>` : ''}
+        ${i.outcome ? `<div class="lg-line lg-muted">Último contato: ${esc(i.outcome.label)}${i.outcome.person ? ' · falou com ' + esc(i.outcome.person) : ''}${i.outcome.meetingDate ? ' · reunião ' + esc(i.outcome.meetingDate.slice(0, 10).split('-').reverse().join('/') + (i.outcome.meetingDate.length > 10 ? ' ' + i.outcome.meetingDate.slice(11, 16) : '')) : ''}${i.outcome.byName ? ' · por ' + esc(i.outcome.byName) : ''}${i.outcome.note ? ' — ' + esc(i.outcome.note) : ''}</div>` : ''}
         <div class="lg-line lg-outcome"><select data-act="result"><option value="">Registrar resultado do contato...</option>${OUTCOMES.map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select>
-          <input data-act="note" placeholder="Observação (opcional)"><button class="btn-primary btn-sm" data-act="save">Salvar e subir ao pipeline</button>
+          <input data-act="person" placeholder="Falou com (nome)"><input data-act="mdate" type="datetime-local" title="Dia e hora da reunião" style="display:none"><input data-act="note" placeholder="Observação (opcional)"><button class="btn-primary btn-sm" data-act="save">Salvar e subir ao pipeline</button>
           <button class="btn-secondary btn-sm" data-act="discard" title="Tirar da lista">Descartar</button></div>
       </div></div>`;
   }
@@ -199,18 +235,20 @@
       try { await call(`/api/leadgen/items/${id}`, { method: 'PUT', body: JSON.stringify({ status: 'descartado' }) }); refresh(); } catch (er) { window.showToast && window.showToast(er.message); }
     }
     if (b.dataset.act === 'save') {
-      const result = root.querySelector('[data-act="result"]').value; const note = root.querySelector('[data-act="note"]').value;
+      const result = root.querySelector('[data-act="result"]').value; const note = root.querySelector('[data-act="note"]').value; const person = root.querySelector('[data-act="person"]').value; const mdate = root.querySelector('[data-act="mdate"]').value;
       if (!result) { window.showToast && window.showToast('Escolha o resultado do contato.'); return; }
       b.disabled = true;
       try {
-        const r = await call(`/api/leadgen/items/${id}/outcome`, { method: 'POST', body: JSON.stringify({ result, note, attendantId: attendant() }) });
-        window.showToast && window.showToast(r.lost ? 'Registrado. Negócio criado e marcado como perdido.' : `Registrado. Negócio criado em "${r.stage}".`);
+        const r = await call(`/api/leadgen/items/${id}/outcome`, { method: 'POST', body: JSON.stringify({ result, note, person, meetingDate: result === 'reuniao' ? mdate : '', attendantId: attendant() }) });
+        window.showToast && window.showToast(r.lost ? 'Registrado. Negócio criado e marcado como perdido.' : `Registrado. Negócio criado no pipeline, etapa "${r.stage}".`);
+        try { if (window.loadAllData) await window.loadAllData(); } catch (e2) { /* a tela do pipeline recarrega ao abrir */ }
         refresh();
       } catch (er) { b.disabled = false; window.showToast && window.showToast(er.message); }
     }
   }
 
   async function onListChange(e) {
+    if (e.target.dataset.act === 'result') { const m = e.target.closest('.lg-lead').querySelector('[data-act="mdate"]'); if (m) m.style.display = e.target.value === 'reuniao' ? '' : 'none'; return; }
     if (e.target.dataset.act !== 'ra') return;
     const id = e.target.closest('.lg-lead').dataset.id;
     try { await call(`/api/leadgen/items/${id}`, { method: 'PUT', body: JSON.stringify({ ra: { nota: e.target.value, url: '' } }) }); window.showToast && window.showToast('Nota do Reclame Aqui salva. Pontuação atualizada.'); refresh(); } catch (er) { window.showToast && window.showToast(er.message); }

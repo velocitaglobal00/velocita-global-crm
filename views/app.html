@@ -355,9 +355,13 @@
           <div class="pipeline-header">
             <h2>Gerador de Leads</h2>
             <div class="header-actions">
-              <a class="btn-secondary" href="/api/leadgen/export.csv" id="lg-export">Exportar planilha</a>
+              <a class="btn-secondary" href="/api/leadgen/export.csv" id="lg-export" title="Baixa a lista que está na tela, com resultados e observações">Exportar planilha</a>
+              <a class="btn-secondary" href="/api/leadgen/report" id="lg-report" title="Relatório para enviar: resumo, reuniões marcadas e empresas trabalhadas">Exportar relatório</a>
+              <button class="btn-secondary" id="lg-hist-btn" type="button" title="Listas que você já salvou">Histórico</button>
+              <button class="btn-primary" id="lg-archive" type="button" title="Guarda esta lista no histórico e limpa a tela para uma nova busca">Salvar e zerar</button>
             </div>
           </div>
+          <div id="lg-hist" class="lg-card" style="display:none"></div>
           <div id="lg-root"><p style="color:var(--vg-text-muted)">Carregando...</p></div>
         </section>
 

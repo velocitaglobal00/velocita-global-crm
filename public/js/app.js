@@ -227,6 +227,7 @@ const Api = {
 
 // ============ Init ============
 async function init() {
+  window.loadAllData = loadAllData; // o Gerador de Leads recarrega negócios depois de subir um lead ao pipeline
   window.state = state; // os módulos novos (leadgen, equipe, pipeline) leem estes dois
   window.Api = Api;
   try {

@@ -328,6 +328,7 @@ function register(app, { db, requireAuth, newId, logHistory }) {
   const store = (data) => {
     if (!data.leadgen) data.leadgen = { items: [], settings: { dailyTarget: 100 } };
     if (!data.leadgen.settings) data.leadgen.settings = { dailyTarget: 100 };
+    if (!Array.isArray(data.leadgen.batches)) data.leadgen.batches = [];
     return data.leadgen;
   };
   const jobs = new Map();
@@ -349,8 +350,9 @@ function register(app, { db, requireAuth, newId, logHistory }) {
     try { res.json(await geocode(q, String(req.query.country || '').slice(0, 2))); } catch (e) { res.status(502).json({ error: 'Busca de lugares indisponível agora: ' + e.message }); }
   });
 
+  // A tela mostra só a lista em andamento; o que foi "salvo e zerado" fica no histórico
   app.get('/api/leadgen/items', requireAuth, (req, res) => {
-    res.json(store(db.read()).items);
+    res.json(store(db.read()).items.filter((i) => !i.archived));
   });
 
   app.put('/api/leadgen/settings', requireAuth, (req, res) => {
@@ -496,7 +498,7 @@ function register(app, { db, requireAuth, newId, logHistory }) {
       });
     }
     if (lg.items.length > 6000) { // limpeza: remove os mais antigos que nunca foram trabalhados
-      const keep = lg.items.filter((i) => i.status !== 'novo'); const fresh = lg.items.filter((i) => i.status === 'novo').slice(-4000);
+      const keep = lg.items.filter((i) => i.status !== 'novo' || i.archived); const fresh = lg.items.filter((i) => i.status === 'novo' && !i.archived).slice(-4000);
       lg.items = keep.concat(fresh);
     }
     if (usedNow) {
@@ -549,6 +551,7 @@ function register(app, { db, requireAuth, newId, logHistory }) {
     if (!oc) return res.status(400).json({ error: 'Resultado inválido' });
     const attendantId = req.body.attendantId || null; const note = String(req.body.note || '').slice(0, 1000);
     const now = new Date().toISOString();
+    const person = String(req.body.person || '').slice(0, 120); const mDate = /^\d{4}-\d{2}-\d{2}/.test(req.body.meetingDate || '') ? String(req.body.meetingDate).slice(0, 16) : '';
 
     let org = it.orgId && data.organizations.find((o) => o.id === it.orgId);
     if (!org) org = data.organizations.find((o) => norm(o.name) === norm(it.name));
@@ -582,22 +585,94 @@ function register(app, { db, requireAuth, newId, logHistory }) {
     if (oc.lost) { deal.status = 'lost'; deal.lostReason = `${oc.label}${note ? ': ' + note : ''}`; } else if (deal.status === 'lost') { deal.status = 'open'; delete deal.lostReason; }
 
     data.activities.push({
-      id: newId('a'), leadId: contact.id, dealId: deal.id, type: 'call', text: `Gerador de Leads: ${oc.label}${note ? ' — ' + note : ''}`, date: now, done: true,
+      id: newId('a'), leadId: contact.id, dealId: deal.id, type: 'call', text: `Gerador de Leads: ${oc.label}${person ? ' (falou com ' + person + ')' : ''}${req.body.result === 'reuniao' && mDate ? ' em ' + mDate.split('T')[0].split('-').reverse().join('/') : ''}${note ? ' — ' + note : ''}`, date: now, done: true,
       attendantId, attendantName: (data.users.find((u) => u.id === attendantId) || {}).name || null
     });
     it.orgId = org.id; it.contactId = contact.id; it.dealId = deal.id; it.status = oc.status;
-    it.outcome = { result: req.body.result, label: oc.label, note, at: now, by: attendantId };
+    const byName = (data.users.find((u) => u.id === attendantId) || {}).name || (req.user && req.user.name) || '';
+    it.outcome = { result: req.body.result, label: oc.label, note, at: now, by: attendantId, byName, person, meetingDate: req.body.result === 'reuniao' ? mDate : '' };
     logHistory(data, 'deal', deal.id, attendantId, 'updated', `Contato pelo Gerador de Leads: ${oc.label}`);
     db.write(data);
     res.json({ item: it, orgId: org.id, contactId: contact.id, dealId: deal.id, stage: stage.name, lost: oc.lost });
   });
 
+  // ---- listas salvas (histórico) ----
+  const OUT_LABEL = Object.fromEntries(Object.entries(OUTCOMES).map(([k, v]) => [k, v.label]));
+  const fmtD = (iso) => (iso ? String(iso).slice(0, 10).split('-').reverse().join('/') : '');
+  const batchStats = (items) => {
+    const by = {}; for (const i of items) if (i.outcome) by[i.outcome.result] = (by[i.outcome.result] || 0) + 1;
+    const meetings = items.filter((i) => i.outcome && i.outcome.result === 'reuniao').map((i) => ({ name: i.name, city: i.city, uf: i.uf, date: i.outcome.meetingDate || '', person: i.outcome.person || '', by: i.outcome.byName || '', note: i.outcome.note || '' }));
+    return { total: items.length, contacted: items.filter((i) => i.outcome).length, inPipeline: items.filter((i) => i.dealId).length, byResult: by, meetings, hot: items.filter((i) => i.tier === 'quente').length };
+  };
+  const summaryText = (name, s) => {
+    const parts = [`${s.total} empresas na lista`, `${s.contacted} contatadas`];
+    if (s.byResult.interessado) parts.push(`${s.byResult.interessado} com interesse`);
+    if (s.byResult.retornar) parts.push(`${s.byResult.retornar} pediram retorno`);
+    if (s.byResult.sem_resposta) parts.push(`${s.byResult.sem_resposta} sem resposta`);
+    const lost = (s.byResult.sem_interesse || 0) + (s.byResult.numero_errado || 0) + (s.byResult.contato_errado || 0); if (lost) parts.push(`${lost} sem interesse ou contato inválido`);
+    let txt = `${name}: ${parts.join(', ')}.`;
+    if (s.meetings.length) txt += ' Reuniões: ' + s.meetings.map((m) => `${m.name}${m.date ? ' (dia ' + fmtD(m.date) + (m.date.length > 10 ? ' às ' + m.date.slice(11, 16) : '') + ')' : ' (data a definir)'}${m.person ? ', com ' + m.person : ''}`).join('; ') + '.';
+    else txt += ' Nenhuma reunião marcada até agora.';
+    return txt;
+  };
+  const batchRow = (lg, bt) => { const items = lg.items.filter((i) => i.batchId === bt.id); const s = batchStats(items); return { ...bt, stats: s, summary: summaryText(bt.name, s) }; };
+  const autoName = (items, d) => { const c = {}; for (const i of items) { const k = i.city ? `${i.city}${i.uf ? '/' + i.uf : ''}` : (i.uf || ''); if (k) c[k] = (c[k] || 0) + 1; } const top = Object.entries(c).sort((a, b) => b[1] - a[1]).map((x) => x[0]).slice(0, 2); return `Leads ${top.join(' e ') || 'sem região'} · ${fmtD(d)}`; };
+
+  app.post('/api/leadgen/archive', requireAuth, (req, res) => {
+    const data = db.read(); const lg = store(data); const cur = lg.items.filter((i) => !i.archived);
+    if (!cur.length) return res.status(400).json({ error: 'A lista atual está vazia.' });
+    const now = new Date().toISOString(); const user = req.user || {};
+    const bt = { id: newId('lgb'), name: String(req.body.name || '').trim().slice(0, 100) || autoName(cur, now), createdAt: now, by: user.id || null, byName: user.name || '' };
+    for (const i of cur) { i.archived = true; i.batchId = bt.id; i.archivedAt = now; }
+    lg.batches.push(bt); db.write(data); res.status(201).json(batchRow(lg, bt));
+  });
+  app.get('/api/leadgen/batches', requireAuth, (req, res) => { const lg = store(db.read()); res.json(lg.batches.slice().reverse().map((b) => batchRow(lg, b))); });
+  app.get('/api/leadgen/batches/:id', requireAuth, (req, res) => {
+    const lg = store(db.read()); const bt = lg.batches.find((b) => b.id === req.params.id); if (!bt) return res.status(404).json({ error: 'Lista não encontrada' });
+    res.json({ batch: batchRow(lg, bt), items: lg.items.filter((i) => i.batchId === bt.id) });
+  });
+  app.put('/api/leadgen/batches/:id', requireAuth, (req, res) => {
+    const data = db.read(); const lg = store(data); const bt = lg.batches.find((b) => b.id === req.params.id); if (!bt) return res.status(404).json({ error: 'Lista não encontrada' });
+    const nm = String(req.body.name || '').trim().slice(0, 100); if (nm) bt.name = nm; db.write(data); res.json(batchRow(lg, bt));
+  });
+  // reabre uma lista antiga na tela (junta com a lista atual)
+  app.post('/api/leadgen/batches/:id/restore', requireAuth, (req, res) => {
+    const data = db.read(); const lg = store(data); const bt = lg.batches.find((b) => b.id === req.params.id); if (!bt) return res.status(404).json({ error: 'Lista não encontrada' });
+    for (const i of lg.items) if (i.batchId === bt.id) { i.archived = false; delete i.batchId; delete i.archivedAt; }
+    lg.batches = lg.batches.filter((b) => b.id !== bt.id); db.write(data); res.json({ ok: true });
+  });
+
+  const pick = (lg, which) => { // current | all | <id do histórico>
+    if (!which || which === 'current') return { name: 'Lista atual', items: lg.items.filter((i) => !i.archived) };
+    if (which === 'all') return { name: 'Todas as listas', items: lg.items };
+    const bt = lg.batches.find((b) => b.id === which); return bt ? { name: bt.name, items: lg.items.filter((i) => i.batchId === bt.id) } : null;
+  };
   app.get('/api/leadgen/export.csv', requireAuth, (req, res) => {
-    const esc = (v) => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
-    const rows = store(db.read()).items;
-    const head = ['Empresa', 'Cidade', 'UF', 'Telefone', 'WhatsApp', 'Site', 'E-mail', 'Nota', 'Avaliações', 'Pontuação', 'Temperatura', 'Segmento', 'Status', 'Endereço', 'Mapa'];
-    const lines = [head.map(esc).join(';')].concat(rows.map((i) => [i.name, i.city, i.uf, i.phone, i.whatsapp ? 'sim' : '', i.website, i.email, i.rating || '', i.reviews || '', i.score, i.tier, (SEGMENTS[i.segment] || {}).label || '', i.status, i.address, i.mapsUrl].map(esc).join(';')));
-    res.set('Content-Type', 'text/csv; charset=utf-8').set('Content-Disposition', 'attachment; filename="leads-velocita.csv"').send('﻿' + lines.join('\r\n'));
+    const esc = (v) => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`; const lg = store(db.read());
+    const sel = pick(lg, req.query.batch); if (!sel) return res.status(404).json({ error: 'Lista não encontrada' });
+    const bname = (i) => (lg.batches.find((b) => b.id === i.batchId) || {}).name || (i.archived ? '' : 'Lista atual');
+    const head = ['Lista', 'Empresa', 'Cidade', 'UF', 'Telefone', 'WhatsApp', 'Site', 'E-mail', 'Nota', 'Avaliações', 'Pontuação', 'Temperatura', 'Segmento', 'Status', 'Resultado do contato', 'Falou com', 'Contato feito por', 'Data do contato', 'Reunião em', 'Observação', 'No pipeline', 'Endereço', 'Mapa'];
+    const lines = [head.map(esc).join(';')].concat(sel.items.map((i) => { const o = i.outcome || {}; return [bname(i), i.name, i.city, i.uf, i.phone, i.whatsapp ? 'sim' : '', i.website, i.email, i.rating || '', i.reviews || '', i.score, i.tier, (SEGMENTS[i.segment] || {}).label || '', i.status, o.label || '', o.person || '', o.byName || '', fmtD(o.at), fmtD(o.meetingDate) + (o.meetingDate && o.meetingDate.length > 10 ? ' ' + o.meetingDate.slice(11, 16) : ''), [o.note, i.notes].filter(Boolean).join(' | '), i.dealId ? 'sim' : '', i.address, i.mapsUrl].map(esc).join(';'); }));
+    const fname = `leads-${String(sel.name).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50) || 'velocita'}.csv`;
+    res.set('Content-Type', 'text/csv; charset=utf-8').set('Content-Disposition', `attachment; filename="${fname}"`).send('﻿' + lines.join('\r\n'));
+  });
+  // Relatório para enviar: resumo + empresas trabalhadas (página HTML que abre em qualquer navegador e imprime em PDF)
+  app.get('/api/leadgen/report', requireAuth, (req, res) => {
+    const lg = store(db.read()); const sel = pick(lg, req.query.batch); if (!sel) return res.status(404).json({ error: 'Lista não encontrada' });
+    const h = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const s = batchStats(sel.items); const worked = sel.items.filter((i) => i.outcome); const dt = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    const rows = worked.sort((a, b) => String(b.outcome.at).localeCompare(a.outcome.at)).map((i) => { const o = i.outcome; return `<tr><td><b>${h(i.name)}</b><br><small>${h(i.city || '')}${i.uf ? '/' + h(i.uf) : ''} · ${h(i.phone || '')}</small></td><td>${h(o.label)}${o.meetingDate ? `<br><b>Reunião: ${h(fmtD(o.meetingDate))}${o.meetingDate.length > 10 ? ' às ' + h(o.meetingDate.slice(11, 16)) : ''}</b>` : ''}</td><td>${h(o.person || '')}</td><td>${h(o.byName || '')}<br><small>${h(fmtD(o.at))}</small></td><td>${h(o.note || '')}${i.notes ? '<br>' + h(i.notes) : ''}</td></tr>`; }).join('');
+    const resumo = Object.entries(s.byResult).map(([k, n]) => `<li>${h(OUT_LABEL[k] || k)}: <b>${n}</b></li>`).join('');
+    const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Relatório de leads: ${h(sel.name)}</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font-family:Arial,Helvetica,sans-serif;color:#0c1528;max-width:980px;margin:24px auto;padding:0 16px}h1{margin:0 0 4px}h1 span{color:#f4821f}.sub{color:#5b6b8c;margin:0 0 18px}.k{display:flex;gap:12px;flex-wrap:wrap;margin:14px 0}.k div{border:1px solid #d8deea;border-radius:10px;padding:10px 16px;min-width:130px}.k b{display:block;font-size:24px}table{width:100%;border-collapse:collapse;font-size:13px}th{background:#0c1528;color:#fff;text-align:left;padding:8px}td{border-bottom:1px solid #e3e8f2;padding:8px;vertical-align:top}.box{background:#fff6ec;border-left:4px solid #f4821f;padding:12px 16px;border-radius:6px;margin:14px 0}@media print{.noprint{display:none}}</style></head><body>
+<h1>Relatório de leads <span>· Velocita Global</span></h1><p class="sub">${h(sel.name)} · gerado em ${h(dt)}</p>
+<button class="noprint" onclick="print()">Imprimir ou salvar em PDF</button>
+<div class="k"><div><b>${s.total}</b>empresas na lista</div><div><b>${s.contacted}</b>contatadas</div><div><b>${s.meetings.length}</b>reuniões marcadas</div><div><b>${s.inPipeline}</b>no pipeline</div></div>
+<div class="box">${h(summaryText(sel.name, s))}</div>
+${resumo ? `<h3>Resultados dos contatos</h3><ul>${resumo}</ul>` : ''}
+<h3>Empresas trabalhadas</h3>${rows ? `<table><thead><tr><th>Empresa</th><th>Resultado</th><th>Falou com</th><th>Quem contatou</th><th>Observações</th></tr></thead><tbody>${rows}</tbody></table>` : '<p>Nenhuma empresa foi contatada ainda.</p>'}
+</body></html>`;
+    if (req.query.view === '1') return res.set('Content-Type', 'text/html; charset=utf-8').send(html);
+    res.set('Content-Type', 'text/html; charset=utf-8').set('Content-Disposition', 'attachment; filename="relatorio-leads-velocita.html"').send(html);
   });
 }
 
