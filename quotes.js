@@ -137,6 +137,25 @@ function register(app, { db, requireAuth, newId }) {
       toReceiveTotal: r2(toReceive + manualToReceive), payablesOpen: r2(payOpen), payablesManual: r2(payOpenManual), cash: r2(num(f.cash.value)),
       projected: r2(num(f.cash.value) + toReceive + manualToReceive - payOpen) };
   }
+  // Entradas e saídas dos últimos 6 meses (dinheiro que de fato entrou e saiu). Saídas só para administradores.
+  function monthlySeries(data, withOut) {
+    const o = store(data); const f = fin(data); const now = new Date(today() + 'T12:00:00'); const months = [];
+    for (let i = 5; i >= 0; i--) { const d = new Date(now.getFullYear(), now.getMonth() - i, 1); const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; months.push({ key, label: d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', ''), inQuotes: 0, inDeals: 0, inManual: 0, outPayables: 0, outMaterial: 0 }); }
+    const slot = (iso) => months.find((m) => m.key === String(iso || '').slice(0, 7));
+    for (const q of o.quotes) {
+      if (q.status === 'recusado') continue;
+      for (const x of (q.pay && q.pay.payments) || []) { const m = slot(x.date); if (m) m.inQuotes += num(x.amount); }
+      const mm = slot(q.date); if (mm && counts(q)) mm.outMaterial += Math.min(num(q.materialPaid), (q.totals || {}).materialCost || 0);
+    }
+    for (const d of data.deals || []) { if (d.status === 'lost') continue; for (const x of dealPays(d)) { const m = slot(x.date); if (m) m.inDeals += num(x.amount); } }
+    for (const x of f.receivables) if (x.received) { const m = slot(x.receivedDate || x.due); if (m) m.inManual += num(x.value); }
+    for (const x of f.payables) if (x.paid) { const m = slot(x.paidDate || x.due); if (m) m.outPayables += num(x.value); }
+    return months.map((m) => { const inn = r2(m.inQuotes + m.inDeals + m.inManual); const r = { key: m.key, label: m.label, in: inn, inQuotes: r2(m.inQuotes), inDeals: r2(m.inDeals), inManual: r2(m.inManual) };
+      if (withOut) { r.out = r2(m.outPayables + m.outMaterial); r.outPayables = r2(m.outPayables); r.outMaterial = r2(m.outMaterial); r.net = r2(inn - r.out); } return r; });
+  }
+  app.get('/api/finance/monthly', requireAuth, (req, res) => { const data = db.view(); res.json({ admin: adminLike(req.user), months: monthlySeries(data, adminLike(req.user)), goal: financeSummary(data).goal }); });
+  // Meta do mês (Dashboard): mesmo número do BI Financeiro, aberto a todos (só o total, sem detalhes)
+  app.get('/api/goal-progress', requireAuth, (req, res) => { const s = financeSummary(db.view()); res.json({ month: s.month, goal: s.goal, received: s.receivedMonth, missing: s.missingToGoal, pct: s.goalPct }); });
   app.get('/api/finance', requireAuth, needAdmin, (req, res) => { const data = db.view(); res.json({ ...JSON.parse(JSON.stringify(fin(data))), summary: financeSummary(data) }); });
   const addMonth = (iso) => { const [y, m, d] = iso.split('-').map(Number); const nm = m === 12 ? 1 : m + 1; const ny = m === 12 ? y + 1 : y; const last = new Date(ny, nm, 0).getDate(); return `${ny}-${String(nm).padStart(2, '0')}-${String(Math.min(d, last)).padStart(2, '0')}`; };
   app.put('/api/finance', requireAuth, needAdmin, (req, res) => {
@@ -146,7 +165,7 @@ function register(app, { db, requireAuth, newId }) {
     const item = (x, extraFn) => ({ id: str(x.id, 40) || newId('fi'), desc: str(x.desc, 140), value: r2(Math.max(0, num(x.value))), due: okDate(x.due), ...extraFn(x) });
     if (Array.isArray(b.payables)) {
       const prev = new Map(f.payables.map((x) => [x.id, x]));
-      f.payables = b.payables.slice(0, 400).map((x) => item(x, (y) => ({ paid: !!y.paid, category: str(y.category, 40), recurring: !!y.recurring, next: !!(prev.get(str(y.id, 40)) || {}).next }))).filter((x) => x.desc || x.value);
+      f.payables = b.payables.slice(0, 400).map((x) => item(x, (y) => { const pv = prev.get(str(y.id, 40)) || {}; return { paid: !!y.paid, paidDate: y.paid ? (pv.paidDate || (pv.paid ? '' : today())) : '', category: str(y.category, 40), recurring: !!y.recurring, next: !!pv.next }; })).filter((x) => x.desc || x.value);
       // conta fixa (todo mês): garante que o mês seguinte já aparece na lista
       for (const it of f.payables.slice()) if (it.recurring && it.due && !it.next) { f.payables.push({ id: newId('fi'), desc: it.desc, value: it.value, due: addMonth(it.due), paid: false, category: it.category, recurring: true, next: false }); it.next = true; }
     }

@@ -59,5 +59,41 @@
     });
   }
 
+
+  // ---------- Dashboard: meta do mês igual à do BI ----------
+  window.refreshGoalProgress = async function () {
+    try {
+      const g = await api('/api/goal-progress'); const fill = $('goal-fill'); const txt = $('goal-text'); if (!fill || !txt) return;
+      fill.style.width = `${g.pct}%`; txt.textContent = `${brl(g.received)} de ${brl(g.goal)} (${Math.round(g.pct)}%)`;
+      txt.title = `Recebido neste mês (orçamentos, pagamentos nos negócios e avulsos). Falta ${brl(g.missing)} para a meta.`;
+    } catch (e) { /* mantém o cálculo antigo */ }
+  };
+  setInterval(() => { const v = $('view-dashboard'); if (v && v.classList.contains('active') && !document.hidden) window.refreshGoalProgress(); }, 30000);
+
+  // ---------- BI > Visão Geral: entradas e saídas por mês ----------
+  let MC = null;
+  const short = (n) => { const a = Math.abs(n); const s = a >= 1e6 ? (a / 1e6).toFixed(1).replace('.', ',') + ' mi' : a >= 1000 ? (a / 1000).toFixed(1).replace('.', ',') + ' mil' : String(Math.round(a)); return (n < 0 ? '-' : '') + s; };
+  window.biLoadMonthly = async function () {
+    const el = $('bi-rev-chart'); if (!el) return; if (MC) drawMonthly(el, MC);
+    try { MC = await api('/api/finance/monthly'); const e2 = $('bi-rev-chart'); if (e2) drawMonthly(e2, MC); } catch (e) { /* mantém */ }
+  };
+  function drawMonthly(el, d) {
+    const ms = d.months; const cur = ms[ms.length - 1]; const W = 680, H = 230, padL = 10, padB = 34, padT = 24; const innerH = H - padB - padT;
+    const max = Math.max(1, ...ms.map((m) => Math.max(m.in, d.admin ? m.out : 0))); const gw = (W - padL * 2) / ms.length; const bw = d.admin ? gw * 0.3 : gw * 0.5;
+    const bars = ms.map((m, i) => {
+      const x0 = padL + i * gw + gw / 2; const hi = (m.in / max) * innerH; const ho = d.admin ? (m.out / max) * innerH : 0;
+      const tipIn = `Entrou: ${brl(m.in)} (orçamentos ${brl(m.inQuotes)} · negócios ${brl(m.inDeals)} · avulsos ${brl(m.inManual)})`; const tipOut = d.admin ? `Saiu: ${brl(m.out)} (contas ${brl(m.outPayables)} · material ${brl(m.outMaterial)})` : '';
+      return `<g><rect x="${x0 - (d.admin ? bw + 2 : bw / 2)}" y="${padT + innerH - hi}" width="${bw}" height="${Math.max(hi, m.in ? 2 : 0)}" rx="4" fill="#22c55e"><title>${esc(tipIn)}</title></rect>
+        ${m.in ? `<text x="${x0 - (d.admin ? bw / 2 + 2 : 0)}" y="${padT + innerH - hi - 5}" text-anchor="middle" font-size="10" fill="currentColor">${short(m.in)}</text>` : ''}
+        ${d.admin ? `<rect x="${x0 + 2}" y="${padT + innerH - ho}" width="${bw}" height="${Math.max(ho, m.out ? 2 : 0)}" rx="4" fill="#ef4444"><title>${esc(tipOut)}</title></rect>${m.out ? `<text x="${x0 + bw / 2 + 2}" y="${padT + innerH - ho - 5}" text-anchor="middle" font-size="10" fill="currentColor">${short(m.out)}</text>` : ''}` : ''}
+        <text x="${x0}" y="${H - 12}" text-anchor="middle" font-size="12" fill="currentColor" opacity=".8">${esc(m.label)}</text></g>`;
+    }).join('');
+    const kp = (l, v, c) => `<div><span>${l}</span><b class="${c || ''}">${v}</b></div>`;
+    el.innerHTML = `<div class="oc-kpis">${kp('Entrou neste mês', brl(cur.in), 'oc-g')}${d.admin ? kp('Saiu neste mês', brl(cur.out), 'oc-r') + kp('Saldo do mês', brl(cur.net), cur.net >= 0 ? 'oc-g' : 'oc-r') : ''}${kp('Meta do mês', d.goal ? Math.round((cur.in / d.goal) * 100) + '%' : '—')}</div>
+      <svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Entradas e saídas por mês" style="color:var(--vg-text);max-height:260px">${bars}</svg>
+      <div class="bi-legend"><span><i style="background:#22c55e"></i> Entrou (orçamentos, negócios e avulsos)</span>${d.admin ? '<span><i style="background:#ef4444"></i> Saiu (contas pagas e material)</span>' : ''}</div>
+      <p class="mt-note">Passe o mouse nas barras para ver de onde veio cada valor. ${d.admin ? 'Se uma despesa estiver lançada em "Contas a pagar" e também como material no orçamento, ela aparece duas vezes: apague uma delas.' : ''}</p>`;
+  }
+
   window.addEventListener('crm-ready', () => { const tab = document.querySelector('[data-bitab=financeiro]'); if (tab && !isAdmin()) tab.style.display = 'none'; });
 })();

@@ -709,6 +709,7 @@ function renderDashboard() {
   const goalPct = goal === 0 ? 0 : Math.min(100, Math.round((wonValue / goal) * 100));
   document.getElementById('goal-fill').style.width = `${goalPct}%`;
   document.getElementById('goal-text').textContent = `${fmtMoney(wonValue)} de ${fmtMoney(goal)} (${goalPct}%)`;
+  if (window.refreshGoalProgress) window.refreshGoalProgress(); // a meta passa a seguir o que realmente entrou no mês (igual ao BI)
 
   renderReminders();
 
@@ -5307,8 +5308,8 @@ function renderBI() {
 
   const chartsPanel = `
     <div class="panel">
-      <h3>Faturamento por mês (últimos 6 meses)</h3>
-      ${biMonthlyRevenueChart()}
+      <h3>Entradas e saídas por mês (últimos 6 meses)</h3>
+      <div id="bi-rev-chart">${biMonthlyRevenueChart()}</div>
     </div>
     <div class="panel">
       <h3>Leads por canal de origem</h3>
@@ -5316,6 +5317,7 @@ function renderBI() {
     </div>
   `;
 
+  setTimeout(() => window.biLoadMonthly && window.biLoadMonthly(), 0);
   container.innerHTML = chartsPanel + categories
     .map((cat) => {
       const leadIds = state.contacts.filter((c) => contactCategoryIds(c).includes(cat.id)).map((c) => c.id);
