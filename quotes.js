@@ -167,7 +167,9 @@ function register(app, { db, requireAuth, newId }) {
       const prev = new Map(f.payables.map((x) => [x.id, x]));
       f.payables = b.payables.slice(0, 400).map((x) => item(x, (y) => { const pv = prev.get(str(y.id, 40)) || {}; return { paid: !!y.paid, paidDate: y.paid ? (pv.paidDate || (pv.paid ? '' : today())) : '', category: str(y.category, 40), recurring: !!y.recurring, next: !!pv.next }; })).filter((x) => x.desc || x.value);
       // conta fixa (todo mês): garante que o mês seguinte já aparece na lista
-      for (const it of f.payables.slice()) if (it.recurring && it.due && !it.next) { f.payables.push({ id: newId('fi'), desc: it.desc, value: it.value, due: addMonth(it.due), paid: false, category: it.category, recurring: true, next: false }); it.next = true; }
+      // (só gera o mês seguinte quando o vencimento já chegou: apagar a cópia do mês que vem não faz ela voltar)
+      const thisMonth = today().slice(0, 7); const same = (a, b) => String(a.desc).trim().toLowerCase() === String(b.desc).trim().toLowerCase();
+      for (const it of f.payables.slice()) if (it.recurring && it.due && !it.next && it.due.slice(0, 7) <= thisMonth && !f.payables.some((o) => o !== it && same(o, it) && o.due === addMonth(it.due))) { f.payables.push({ id: newId('fi'), desc: it.desc, value: it.value, due: addMonth(it.due), paid: false, category: it.category, recurring: true, next: false }); it.next = true; }
     }
     if (Array.isArray(b.receivables)) f.receivables = b.receivables.slice(0, 400).map((x) => item(x, (y) => ({ received: !!y.received, receivedDate: y.received ? (okDate(y.receivedDate) || today()) : '' }))).filter((x) => x.desc || x.value);
     db.write(data); res.json({ ...JSON.parse(JSON.stringify(f)), summary: financeSummary(data) });

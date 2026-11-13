@@ -38,9 +38,7 @@
     const ufOpts = Object.entries(c.ufs).map(([k, v]) => `<option value="${k}">${k} — ${esc(v)}</option>`).join('');
     const segs = Object.entries(c.segments).map(([k, v]) => `<label class="lg-check"><input type="checkbox" name="lg-seg" value="${k}" checked> ${esc(v)}</label>`).join('');
     $('lg-root').innerHTML = `
-      <div class="lg-warn lg-key" id="lg-key">${c.google ? '' : '<b>O gerador ainda não está ligado ao Google.</b> Sem a chave, ele não consegue buscar empresas.<br>'}
-        ${c.canEditBudget ? `<div class="lg-key-row"><input type="password" id="lg-keyinput" placeholder="${c.google ? 'Chave salva' + (c.keySource === 'render' ? ' no Render' : ' no CRM') + ' · cole outra para trocar' : 'Cole aqui a chave de API do Google (começa com AIza...)'}" autocomplete="off"><button class="btn-primary btn-sm" id="lg-keysave">Salvar e testar</button>${c.google ? '<button class="btn-secondary btn-sm" id="lg-keytest">Testar de novo</button>' : ''}</div><div id="lg-keymsg" class="lg-keymsg"></div>
-        <details class="lg-how"><summary>Como conseguir a chave (passo a passo)</summary><ol><li>Em <b>console.cloud.google.com</b>, escolha o projeto do CRM.</li><li><b>Faturamento:</b> vincule uma forma de pagamento (o Google exige; há cota gratuita mensal).</li><li><b>APIs e serviços &gt; Biblioteca:</b> ative <b>Places API (New)</b>.</li><li><b>APIs e serviços &gt; Credenciais &gt; Criar credenciais &gt; Chave de API.</b> Em <b>Restrições da API</b>, limite à <b>Places API (New)</b>.</li><li>Copie a chave, cole acima e clique em <b>Salvar e testar</b>.</li></ol></details>` : '<span>Peça a um administrador para cadastrar a chave do Google nesta tela.</span>'}</div>
+      ${c.google ? '' : `<div class="lg-warn"><b>O gerador ainda não está ligado ao Google.</b> ${c.canEditBudget ? 'Cadastre a chave em <a href="#" id="lg-gotoint">Configurações › Integrações</a>.' : 'Peça a um administrador para cadastrar a chave em Configurações › Integrações.'}</div>`}
       <div class="lg-meta" id="lg-meta"></div>
       <div class="lg-card">
         <h3>1. Gerar novos leads</h3>
@@ -78,10 +76,7 @@
         <div id="f-refinfo" class="lg-refinfo"></div>
         <div id="lg-list"></div>
       </div>`;
-    const km = (txt, ok) => { const e = $('lg-keymsg'); if (e) { e.textContent = txt; e.className = 'lg-keymsg ' + (ok ? 'ok' : 'err'); } };
-    const testKey = async () => { km('Testando com o Google...', true); try { const r = await call('/api/leadgen/key/test', { method: 'POST' }); km(r.message, r.ok); if (r.ok) { S.cfg = await call('/api/leadgen/config'); setTimeout(() => location.reload(), 1800); } } catch (e) { km(e.message, false); } };
-    if ($('lg-keysave')) $('lg-keysave').onclick = async () => { const v = $('lg-keyinput').value.trim(); if (!v) return km('Cole a chave primeiro.', false); try { await call('/api/leadgen/key', { method: 'PUT', body: JSON.stringify({ key: v }) }); $('lg-keyinput').value = ''; await testKey(); } catch (e) { km(e.message, false); } };
-    if ($('lg-keytest')) $('lg-keytest').onclick = testKey;
+    if ($('lg-gotoint')) $('lg-gotoint').onclick = (e) => { e.preventDefault(); window.switchView('settings'); setTimeout(() => { const tab = document.querySelector('[data-stab=integrations]'); if (tab) tab.click(); }, 50); };
     $('lg-uf').addEventListener('change', fillCities);
     $('lg-go').addEventListener('click', startSearch);
     $('f-ref-go').addEventListener('click', locateRef);
@@ -220,4 +215,22 @@
     const id = e.target.closest('.lg-lead').dataset.id;
     try { await call(`/api/leadgen/items/${id}`, { method: 'PUT', body: JSON.stringify({ ra: { nota: e.target.value, url: '' } }) }); window.showToast && window.showToast('Nota do Reclame Aqui salva. Pontuação atualizada.'); refresh(); } catch (er) { window.showToast && window.showToast(er.message); }
   }
+
+  // ---------- Configurações > Integrações: chave do Google Places ----------
+  async function renderKeyCard() {
+    const box = $('int-gplaces'); if (!box) return;
+    let c; try { c = await call('/api/leadgen/config'); } catch (e) { box.innerHTML = ''; return; }
+    const km = (txt, ok) => { const e = $('lg-keymsg'); if (e) { e.textContent = txt; e.className = 'lg-keymsg ' + (ok ? 'ok' : 'err'); } };
+    box.innerHTML = `<h3>Google Places (Gerador de Leads)</h3>
+      <p class="empty-state" style="text-align:left;padding:0 0 10px">${c.google ? '<b style="color:var(--ok,#16a34a)">Chave cadastrada' + (c.keySource === 'render' ? ' no Render' : ' no CRM') + '.</b> Cole outra para trocar.' : '<b>Ainda sem chave.</b> Sem ela o gerador não busca empresas.'}</p>
+      ${c.canEditBudget ? `<div class="lg-key-row"><input type="password" id="lg-keyinput" placeholder="Cole aqui a chave de API do Google (começa com AIza...)" autocomplete="off"><button type="button" class="btn-primary btn-sm" id="lg-keysave">Salvar e testar</button>${c.google ? '<button type="button" class="btn-secondary btn-sm" id="lg-keytest">Testar de novo</button>' : ''}</div><div id="lg-keymsg" class="lg-keymsg"></div>
+      <details class="lg-how"><summary>Como conseguir a chave (passo a passo)</summary><ol><li>Em <b>console.cloud.google.com</b>, escolha o projeto do CRM.</li><li><b>Faturamento:</b> vincule uma forma de pagamento (o Google exige; há cota gratuita mensal).</li><li><b>APIs e serviços &gt; Biblioteca:</b> ative <b>Places API (New)</b>.</li><li><b>APIs e serviços &gt; Credenciais &gt; Criar credenciais &gt; Chave de API.</b> Em <b>Restrições da API</b>, limite à <b>Places API (New)</b>.</li><li>Copie a chave, cole acima e clique em <b>Salvar e testar</b>.</li></ol></details>` : '<p class="empty-state" style="text-align:left;padding:0">Somente administradores cadastram a chave.</p>'}`;
+    const testKey = async () => { km('Testando com o Google...', true); try { const r = await call('/api/leadgen/key/test', { method: 'POST' }); km(r.message, r.ok); if (r.ok) setTimeout(renderKeyCard, 2500); } catch (e) { km(e.message, false); } };
+    if ($('lg-keysave')) $('lg-keysave').onclick = async () => { const v = $('lg-keyinput').value.trim(); if (!v) return km('Cole a chave primeiro.', false); try { await call('/api/leadgen/key', { method: 'PUT', body: JSON.stringify({ key: v }) }); $('lg-keyinput').value = ''; await testKey(); } catch (e) { km(e.message, false); } };
+    if ($('lg-keytest')) $('lg-keytest').onclick = testKey;
+  }
+  window.addEventListener('crm-ready', () => {
+    renderKeyCard();
+    document.addEventListener('click', (e) => { if (e.target.closest && e.target.closest('[data-stab=integrations]')) renderKeyCard(); });
+  });
 })();
