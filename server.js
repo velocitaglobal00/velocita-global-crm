@@ -2053,6 +2053,8 @@ app.get('/api/google/oauth-start', requireAuth, (req, res) => {
     return res.status(400).send('Configure o Client ID e o Client Secret do Google em Configurações > Integrações antes de conectar um usuário.');
   }
   if (!user) return res.status(404).send('Usuário não encontrado.');
+  if (!team.isAdminLike(req.user) && req.user.id !== user.id) return res.status(403).send('Você só pode conectar a sua própria conta Google.');
+  const nonce = crypto.randomBytes(16).toString('hex'); req.session.gOauth = nonce;
 
   const params = new URLSearchParams({
     client_id: gcal.clientId,
@@ -2061,7 +2063,7 @@ app.get('/api/google/oauth-start', requireAuth, (req, res) => {
     access_type: 'offline',
     prompt: 'consent',
     scope: 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/userinfo.email',
-    state: user.id
+    state: `${user.id}|${nonce}`
   });
   res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
 });
@@ -2077,6 +2079,8 @@ app.get('/api/google/gmail-oauth-start', requireAuth, (req, res) => {
   if (!gcal.clientId || !gcal.clientSecret) {
     return res.status(400).send('Configure o Client ID e o Client Secret do Google em Configurações > Integrações antes de conectar a caixa de entrada.');
   }
+  if (!team.isAdminLike(req.user)) return res.status(403).send('Somente administradores conectam a caixa compartilhada.');
+  const nonce = crypto.randomBytes(16).toString('hex'); req.session.gOauth = nonce;
   const params = new URLSearchParams({
     client_id: gcal.clientId,
     redirect_uri: googleRedirectUri(req),
@@ -2084,7 +2088,7 @@ app.get('/api/google/gmail-oauth-start', requireAuth, (req, res) => {
     access_type: 'offline',
     prompt: 'consent',
     scope: 'https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/userinfo.email',
-    state: 'gmail-inbox'
+    state: `gmail-inbox|${nonce}`
   });
   res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
 });
@@ -2095,6 +2099,14 @@ app.get('/api/google/oauth-callback', async (req, res) => {
   };
 
   if (req.query.error) return closePopup({ googleCalendarError: String(req.query.error) });
+
+  // quem volta do Google precisa ser a mesma pessoa (mesma sessão) que iniciou a conexão
+  const [stateTarget, stateNonce] = String(req.query.state || '').split('|');
+  if (!restoreFromCookie(req) || !stateNonce || !req.session.gOauth || stateNonce !== req.session.gOauth) {
+    return closePopup({ googleCalendarError: 'A conexão expirou ou não foi iniciada por você. Feche esta janela e tente conectar de novo.' });
+  }
+  if (stateTarget !== 'gmail-inbox' && !team.isAdminLike(req.user) && req.user.id !== stateTarget) return closePopup({ googleCalendarError: 'Você só pode conectar a sua própria conta Google.' });
+  req.session.gOauth = null; req.query.state = stateTarget;
 
   const data = db.read();
   const gcal = data.settings.integrations.googleCalendar || {};
