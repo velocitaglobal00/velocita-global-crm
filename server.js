@@ -995,8 +995,12 @@ app.delete('/api/tags/:id', requireAuth, (req, res) => {
 app.get('/api/reminders', requireAuth, (req, res) => {
   const data = db.view();
   const now = new Date();
+  // Quem vê o quê: a conta matriz vê tudo; administradores veem as próprias tarefas e as gerais (sem responsável);
+  // o perfil limitado vê só as tarefas atribuídas a ele.
+  const u = req.user;
+  const visible = (a) => !u || u.role === 'matriz' || a.attendantId === u.id || (team.isAdminLike(u) && !a.attendantId);
   const reminders = data.activities
-    .filter((a) => a.type === 'task' && !a.done)
+    .filter((a) => a.type === 'task' && !a.done && visible(a) && !(a.dealId && !data.deals.some((d) => d.id === a.dealId)))
     .map((a) => {
       if (a.leadId) {
         const lead = data.contacts.find((c) => c.id === a.leadId);
@@ -1013,9 +1017,9 @@ app.get('/api/reminders', requireAuth, (req, res) => {
       const deal = data.deals.find((d) => d.id === a.dealId);
       return {
         id: a.id,
-        dealId: a.dealId,
+        dealId: a.dealId || null,
         leadId: null,
-        dealTitle: deal ? deal.title : 'Negócio removido',
+        dealTitle: deal ? deal.title : (a.attendantName ? `Para: ${a.attendantName}` : 'Tarefa geral (todos)'),
         text: a.text,
         date: a.date,
         overdue: new Date(a.date) < now

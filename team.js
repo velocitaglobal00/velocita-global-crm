@@ -118,7 +118,9 @@ function attribute(req) {
   const u = req.user; if (!u || !req.body || typeof req.body !== 'object' || Array.isArray(req.body)) return;
   if (req.method === 'GET') return;
   const id = u.role === 'matriz' ? null : u.id;
-  req.body.attendantId = id;
+  // Nas tarefas (atividades), attendantId é o RESPONSÁVEL escolhido na tela: não pode ser trocado por quem criou ou editou.
+  const taskRoute = /^\/api\/(activities(\/[^/]+)?|deals\/[^/]+\/activities|leads\/[^/]+\/activities)$/.test((req.originalUrl || '').split('?')[0]);
+  if (!taskRoute) req.body.attendantId = id;
   if ('createdBy' in req.body) req.body.createdBy = id;
   if ('outcomeBy' in req.body) req.body.outcomeBy = id;
 }

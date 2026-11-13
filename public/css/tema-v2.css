@@ -456,3 +456,25 @@ input:focus, select:focus, textarea:focus { outline: 3px solid var(--focus); out
 .oc-cat-form { grid-template-columns: 1fr 2fr 2fr 80px 110px 110px 110px 90px 1fr auto; }
 
 .bi-legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12.5px; color: var(--vg-text-muted); margin-top: 4px; } .bi-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; }
+
+/* ============ Caixas de marcar no padrão da empresa (laranja e azul-marinho) ============ */
+input[type='checkbox'], input[type='radio'] {
+  -webkit-appearance: none; appearance: none; width: 22px; height: 22px; min-height: 22px; min-width: 22px; margin: 0; padding: 0; flex: none;
+  border: 2px solid #7f8db0; background: var(--vg-surface); display: inline-grid; place-content: center; cursor: pointer; vertical-align: middle;
+  transition: background .12s, border-color .12s, box-shadow .12s;
+}
+input[type='checkbox'] { border-radius: 7px; } input[type='radio'] { border-radius: 50%; }
+input[type='checkbox']:hover, input[type='radio']:hover { border-color: var(--vg-orange); }
+input[type='checkbox']:checked, input[type='radio']:checked { background: var(--vg-orange); border-color: var(--vg-orange); }
+input[type='checkbox']::after { content: ''; width: 6px; height: 11px; border: solid #0c1528; border-width: 0 3px 3px 0; transform: rotate(45deg) scale(0); margin-top: -2px; transition: transform .12s; }
+input[type='checkbox']:checked::after { transform: rotate(45deg) scale(1); }
+input[type='radio']::after { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #0c1528; transform: scale(0); transition: transform .12s; } input[type='radio']:checked::after { transform: scale(1); }
+input[type='checkbox']:focus-visible, input[type='radio']:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+input[type='checkbox']:disabled, input[type='radio']:disabled { opacity: .5; cursor: not-allowed; }
+.lg-check, .fi-chk { gap: 10px; cursor: pointer; } .lg-check { min-height: 32px; }
+/* concluir tarefa no Dashboard */
+.reminder-item { display: flex; align-items: center; gap: 12px; }
+.rt-check { flex: none; width: 26px; height: 26px; border-radius: 50%; border: 2px solid #7f8db0; background: var(--vg-surface); cursor: pointer; display: grid; place-content: center; padding: 0; transition: background .12s, border-color .12s; }
+.rt-check:hover { border-color: var(--vg-orange); background: rgba(244, 130, 31, .15); }
+.rt-check::after { content: ''; width: 6px; height: 11px; border: solid #0c1528; border-width: 0 3px 3px 0; transform: rotate(45deg) scale(0); margin-top: -2px; transition: transform .12s; }
+.rt-check:hover::after { transform: rotate(45deg) scale(.7); border-color: var(--vg-orange-dark); } .rt-check.on { background: var(--vg-orange); border-color: var(--vg-orange); } .rt-check.on::after { transform: rotate(45deg) scale(1); border-color: #0c1528; }

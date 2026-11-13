@@ -9,7 +9,7 @@
 
   const fmtDur = (sec) => { sec = Math.round(sec || 0); const h = Math.floor(sec / 3600); const m = Math.floor((sec % 3600) / 60); return h ? `${h}h ${String(m).padStart(2, '0')}min` : `${m} min`; };
   const ago = (iso) => { if (!iso) return 'nunca acessou'; const s = (Date.now() - new Date(iso).getTime()) / 1000; if (s < 90) return 'agora'; if (s < 3600) return `há ${Math.round(s / 60)} min`; if (s < 86400) return `há ${Math.round(s / 3600)} h`; return `há ${Math.round(s / 86400)} dia(s)`; };
-  const VIEWS = { dashboard: 'Dashboard', roteiro: 'Roteiro do Dia', pipeline: 'Pipeline', leads: 'Leads', leadgen: 'Gerador de Leads', orgs: 'Empresas', email: 'E-mail', mensagens: 'Notificações', bi: 'BI', margem: 'Margem', calendario: 'Calendário', chatequipe: 'Chat da Equipe', materiais: 'Materiais', settings: 'Configurações', ajuda: 'Ajuda', equipe: 'Equipe' };
+  const VIEWS = { dashboard: 'Dashboard', roteiro: 'Tarefas', pipeline: 'Pipeline', leads: 'Leads', leadgen: 'Gerador de Leads', orgs: 'Empresas', email: 'E-mail', mensagens: 'Notificações', bi: 'BI', margem: 'Margem', calendario: 'Calendário', chatequipe: 'Chat da Equipe', materiais: 'Materiais', settings: 'Configurações', ajuda: 'Ajuda', equipe: 'Equipe' };
 
   // ---------- presença: avisa o servidor, a cada 45 s, que esta pessoa está com o CRM aberto ----------
   function startPresence() {

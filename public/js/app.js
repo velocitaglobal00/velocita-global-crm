@@ -387,10 +387,10 @@ async function renderPwaCard() {
   const sub = await currentPushSubscription();
   const on = !!sub && Notification.permission === 'granted';
   status.innerHTML = on
-    ? `<span class="pwa-on">● Ativadas neste aparelho</span> para <b>${escapeHtml((currentAttendant() || {}).name || '—')}</b>: chat, tarefas do Roteiro, mensagens de leads e alterações do time.`
+    ? `<span class="pwa-on">● Ativadas neste aparelho</span> para <b>${escapeHtml((currentAttendant() || {}).name || '—')}</b>: chat, suas tarefas, mensagens de leads e alterações do time.`
     : Notification.permission === 'denied'
       ? 'As notificações estão bloqueadas neste navegador. Libere em Configurações do site (cadeado ao lado do endereço) e tente de novo.'
-      : 'Receba no celular as mensagens do chat, tarefas do Roteiro, mensagens de leads e alterações feitas pelo time.';
+      : 'Receba no celular as mensagens do chat, suas tarefas, mensagens de leads e alterações feitas pelo time.';
   toggleBtn.style.display = '';
   toggleBtn.textContent = on ? 'Desativar neste aparelho' : 'Ativar notificações';
   toggleBtn.className = on ? 'btn-secondary' : 'btn-primary';
@@ -745,7 +745,8 @@ function renderReminders() {
     .map(
       (r) => `
     <div class="reminder-item ${r.overdue ? 'overdue' : ''}" data-open-deal="${r.dealId || ''}" data-open-lead="${r.leadId || ''}">
-      <div>
+      <button type="button" class="rt-check" data-done="${r.id}" title="Concluir esta tarefa" aria-label="Concluir tarefa: ${escapeHtml(r.text)}"></button>
+      <div style="flex:1;min-width:0">
         <div class="rt-text">${r.overdue ? svgIcon('warning') + ' ' : ''}${escapeHtml(r.text)}</div>
         <div class="rt-deal">${escapeHtml(r.dealTitle)}</div>
       </div>
@@ -755,8 +756,18 @@ function renderReminders() {
     )
     .join('');
 
+  container.querySelectorAll('.rt-check').forEach((b) => {
+    b.addEventListener('click', async (e) => {
+      e.stopPropagation(); b.disabled = true; b.classList.add('on');
+      try {
+        await api(`/api/activities/${b.dataset.done}`, { method: 'PUT', body: JSON.stringify({ done: true, progress: 'concluida' }) });
+        state.reminders = (state.reminders || []).filter((x) => x.id !== b.dataset.done); renderReminders(); showToast('Tarefa concluída.');
+      } catch (err) { b.disabled = false; b.classList.remove('on'); showToast('Não foi possível concluir a tarefa.'); }
+    });
+  });
   container.querySelectorAll('.reminder-item').forEach((el) => {
     el.addEventListener('click', () => {
+      if (!el.dataset.openDeal && !el.dataset.openLead) { switchView('roteiro'); return; }
       if (el.dataset.openDeal) {
         switchView('pipeline');
         openDealDetail(el.dataset.openDeal);
