@@ -63,6 +63,7 @@
     $('deal-title').value = deal ? deal.title : '';
     $('deal-value').value = deal ? deal.value : '';
     $('deal-currency').value = deal ? deal.currency : 'BRL';
+    $('deal-paid').value = deal && deal.paidAmount ? deal.paidAmount : '';
     $('deal-supply-cost').value = deal && deal.supplyCost ? deal.supplyCost : '';
     $('deal-marketing-cost').value = deal && deal.marketingCost ? deal.marketingCost : '';
     const personId = deal ? deal.personId : presetPersonId || null;
@@ -102,7 +103,7 @@
         if (c && !c.orgId) { const up = await A.updateContact(c.id, { orgId, attendantId: me }); Object.assign(c, up); }
       }
       const payload = {
-        title, value: Number($('deal-value').value) || 0, currency: $('deal-currency').value,
+        title, value: Number($('deal-value').value) || 0, paidAmount: Math.max(0, Number($('deal-paid').value) || 0), currency: $('deal-currency').value,
         supplyCost: Number($('deal-supply-cost').value) || 0, marketingCost: Number($('deal-marketing-cost').value) || 0,
         personId: personId || null, orgId: orgId || null, stage: $('deal-stage').value, closeDate: $('deal-close-date').value || null, platform: $('deal-platform').value || null
       };
@@ -118,6 +119,12 @@
   window.buildDealCard = function buildDealCard(deal) {
     const card = baseCard(deal); const st = window.state;
     const c = st.contacts.find((x) => x.id === deal.personId); const o = st.organizations.find((x) => x.id === (deal.orgId || (c && c.orgId)));
+    if (deal.paidAmount > 0) {
+      const pct = deal.value > 0 ? Math.min(100, Math.round((deal.paidAmount / deal.value) * 100)) : 100; const val = card.querySelector('.deal-value');
+      const pd = document.createElement('div'); pd.className = 'deal-paid';
+      pd.innerHTML = `<span>Pago ${deal.paidAmount.toLocaleString('pt-BR', { style: 'currency', currency: deal.currency || 'BRL' })}${deal.value > 0 ? ' · ' + pct + '%' : ''}</span><div class="deal-paid-bar"><i style="width:${pct}%"></i></div>`;
+      if (val) val.after(pd);
+    }
     if (c || o) {
       const div = document.createElement('div'); div.className = 'deal-client';
       div.innerHTML = (c ? `<span>${ICON_P}${esc(c.name)}</span>` : '') + (o ? `<span>${ICON_O}${esc(o.name)}</span>` : '');

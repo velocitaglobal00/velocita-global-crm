@@ -540,6 +540,7 @@
             <button class="settings-tab active" data-bitab="geral">Visão Geral</button>
             <button class="settings-tab" data-bitab="trafego">Tráfego Pago</button>
             <button class="settings-tab" data-bitab="marketplaces">Marketplaces</button>
+            <button class="settings-tab" data-bitab="financeiro">Financeiro</button>
           </div>
           <div id="bi-tab-geral" class="bi-tab-panel">
             <div id="bi-container"></div>
@@ -549,6 +550,9 @@
           </div>
           <div id="bi-tab-marketplaces" class="bi-tab-panel" style="display:none;">
             <div id="bi-marketplaces-container"></div>
+          </div>
+          <div id="bi-tab-financeiro" class="bi-tab-panel" style="display:none;">
+            <div id="bi-financeiro-container"></div>
           </div>
         </section>
 
@@ -1108,6 +1112,10 @@
             <div class="form-group">
               <label for="deal-value">Valor esperado</label>
               <input type="number" id="deal-value" placeholder="0,00" min="0" step="0.01" />
+            </div>
+            <div class="form-group">
+              <label for="deal-paid">Valor já pago pelo cliente</label>
+              <input type="number" id="deal-paid" placeholder="0,00" min="0" step="0.01" />
             </div>
             <div class="form-group">
               <label for="deal-currency">Moeda</label>
@@ -1711,6 +1719,7 @@
   <script src="/js/nav-materiais.js"></script>
   <script src="/js/passkey-ui.js"></script>
   <script src="/js/quotes-ui.js"></script>
+  <script src="/js/finance-ui.js"></script>
   <script src="/js/team-ui.js"></script>
   <script src="/js/pipeline-v2.js"></script>
   <script src="/js/calls-ui.js"></script>

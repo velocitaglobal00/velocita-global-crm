@@ -10,19 +10,31 @@ const str = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
 // Imposto "por fora" (somado ao preço) ou "incluso" (já faz parte do preço).
 function calcTotals(q) {
   const mode = q.taxMode === 'included' ? 'included' : 'add';
-  let gross = 0; let itemDiscount = 0; let subtotal = 0; let tax = 0; let itemsTotal = 0;
+  let gross = 0; let itemDiscount = 0; let subtotal = 0; let tax = 0; let itemsTotal = 0; let materialCost = 0;
   const lines = (q.items || []).map((it) => {
     const g = num(it.qty) * num(it.price); const d = g * clamp(num(it.discountPct), 0, 100) / 100; const net = g - d;
     const rate = clamp(num(it.taxPct), 0, 100) / 100;
     const t = mode === 'add' ? net * rate : net - net / (1 + rate);
     const total = mode === 'add' ? net + t : net;
-    gross += g; itemDiscount += d; subtotal += net; tax += t; itemsTotal += total;
+    gross += g; itemDiscount += d; subtotal += net; tax += t; itemsTotal += total; materialCost += num(it.qty) * Math.max(0, num(it.cost));
     return { gross: r2(g), discount: r2(d), net: r2(net), tax: r2(t), total: r2(total) };
   });
   const globalDiscount = itemsTotal * clamp(num(q.discountPct), 0, 100) / 100 + Math.max(0, num(q.discountValue));
   const freight = Math.max(0, num(q.freight));
   const total = Math.max(0, itemsTotal - globalDiscount) + freight;
-  return { lines, gross: r2(gross), itemDiscount: r2(itemDiscount), subtotal: r2(subtotal), tax: r2(tax), itemsTotal: r2(itemsTotal), globalDiscount: r2(globalDiscount), freight: r2(freight), total: r2(total), taxMode: mode };
+  // Sobra = o que entra (sem o imposto) menos o que foi gasto comprando o material pedido pelo cliente.
+  const revenueNet = total - tax; const profit = revenueNet - materialCost;
+  return { lines, gross: r2(gross), itemDiscount: r2(itemDiscount), subtotal: r2(subtotal), tax: r2(tax), itemsTotal: r2(itemsTotal), globalDiscount: r2(globalDiscount), freight: r2(freight), total: r2(total), taxMode: mode,
+    materialCost: r2(materialCost), revenueNet: r2(revenueNet), profit: r2(profit), marginPct: revenueNet > 0 ? r2((profit / revenueNet) * 100) : 0 };
+}
+
+// Pagamento: lista de recebimentos (data, valor, observação). O status sai da conta, nunca é digitado.
+function payInfo(q) {
+  const list = Array.isArray(q.pay && q.pay.payments) ? q.pay.payments : [];
+  const received = r2(list.reduce((a, x) => a + Math.max(0, num(x.amount)), 0));
+  const total = (q.totals && q.totals.total) || 0;
+  const status = received <= 0 ? 'pendente' : received >= total - 0.005 ? 'pago' : 'parcial';
+  return { received, remaining: r2(Math.max(0, total - received)), status };
 }
 
 // Emissor inicial: só o que é público. Razão social, CNPJ e endereço ficam em branco para preencher na aba
@@ -57,7 +69,7 @@ function register(app, { db, requireAuth, newId }) {
   });
 
   // ---- catálogo ----
-  const cleanProduct = (b) => ({ sku: str(b.sku, 40), name: str(b.name, 140), description: str(b.description, 600), unit: str(b.unit, 12) || 'un', price: r2(Math.max(0, num(b.price))), taxPct: r2(clamp(num(b.taxPct), 0, 100)), category: str(b.category, 40), active: b.active !== false });
+  const cleanProduct = (b) => ({ sku: str(b.sku, 40), name: str(b.name, 140), description: str(b.description, 600), unit: str(b.unit, 12) || 'un', price: r2(Math.max(0, num(b.price))), cost: r2(Math.max(0, num(b.cost))), taxPct: r2(clamp(num(b.taxPct), 0, 100)), category: str(b.category, 40), active: b.active !== false });
   app.get('/api/quotes/catalog', requireAuth, (req, res) => res.json(store(db.view()).catalog));
   app.post('/api/quotes/catalog', requireAuth, (req, res) => {
     const data = db.read(); const o = store(data); const p = cleanProduct(req.body || {});
@@ -86,6 +98,46 @@ function register(app, { db, requireAuth, newId }) {
     const data = db.read(); const o = store(data); o.catalog = o.catalog.filter((x) => x.id !== req.params.id); db.write(data); res.json({ ok: true });
   });
 
+
+  // ---- financeiro (BI): caixa, a pagar e a receber preenchidos pela diretoria + o que vem dos orçamentos ----
+  const needAdmin = (req, res, next) => (adminLike(req.user) ? next() : res.status(403).json({ error: 'Os números financeiros são só da administração.' }));
+  const fin = (data) => { if (!data.finance) data.finance = { cash: { value: 0, note: '', updatedAt: null }, payables: [], receivables: [] }; return data.finance; };
+  function financeSummary(data) {
+    const o = store(data); const month = today().slice(0, 7); const f = fin(data);
+    let quoted = 0, received = 0, receivedMonth = 0, toReceive = 0, toReceiveMonth = 0, cost = 0, profit = 0, profitReceived = 0, open = 0;
+    for (const q of o.quotes) {
+      if (q.status === 'recusado') continue; const pi = payInfo(q); const t = q.totals || {};
+      for (const x of (q.pay && q.pay.payments) || []) if ((x.date || '').startsWith(month)) receivedMonth += num(x.amount);
+      if (q.status === 'rascunho') { open += t.total || 0; continue; }
+      quoted += t.total || 0; received += pi.received; toReceive += pi.remaining; cost += t.materialCost || 0; profit += t.profit || 0;
+      if (t.total > 0) profitReceived += (t.profit || 0) * Math.min(1, pi.received / t.total);
+      if (pi.remaining > 0 && (q.validUntil || q.date || '').startsWith(month)) toReceiveMonth += pi.remaining;
+    }
+    const manualRecv = f.receivables.filter((x) => !x.received); const manualRecvDone = f.receivables.filter((x) => x.received && (x.receivedDate || '').startsWith(month));
+    const manualReceivedMonth = manualRecvDone.reduce((a, x) => a + num(x.value), 0); const manualToReceive = manualRecv.reduce((a, x) => a + num(x.value), 0);
+    const payOpen = f.payables.filter((x) => !x.paid).reduce((a, x) => a + num(x.value), 0);
+    // Pipeline: valor dos negócios e o que o cliente já pagou (negócios com orçamento vinculado entram pelo orçamento, para não contar duas vezes)
+    const linked = new Set(o.quotes.filter((q) => q.dealId && q.status !== 'recusado').map((q) => q.dealId));
+    const stageName = (id) => ((data.stages || []).find((s) => s.id === id) || {}).name || '';
+    const dl = (data.deals || []).filter((d) => d.status !== 'lost' && !linked.has(d.id)).map((d) => ({ id: d.id, title: d.title, stage: stageName(d.stage), status: d.status, value: r2(num(d.value)), paid: r2(num(d.paidAmount)), remaining: r2(Math.max(0, num(d.value) - num(d.paidAmount))) }));
+    const pipeline = { deals: dl.length, value: r2(dl.reduce((a, x) => a + x.value, 0)), paid: r2(dl.reduce((a, x) => a + x.paid, 0)), remaining: r2(dl.reduce((a, x) => a + x.remaining, 0)), won: r2(dl.filter((x) => x.status === 'won').reduce((a, x) => a + x.paid, 0)),
+      list: dl.filter((x) => x.paid > 0 || x.value > 0).sort((a, b) => b.remaining - a.remaining).slice(0, 40), linkedToQuotes: linked.size };
+    const goal = Number((data.settings && data.settings.monthlyGoal) || 0); const recMonth = r2(receivedMonth + manualReceivedMonth);
+    return { pipeline, month, goal, receivedMonth: recMonth, missingToGoal: r2(Math.max(0, goal - recMonth)), goalPct: goal > 0 ? Math.min(100, r2((recMonth / goal) * 100)) : 0,
+      quotes: { quoted: r2(quoted), received: r2(received), toReceive: r2(toReceive), toReceiveMonth: r2(toReceiveMonth), materialCost: r2(cost), profit: r2(profit), profitReceived: r2(profitReceived), drafts: r2(open) },
+      toReceiveTotal: r2(toReceive + manualToReceive), payablesOpen: r2(payOpen), cash: r2(num(f.cash.value)),
+      projected: r2(num(f.cash.value) + toReceive + manualToReceive - payOpen) };
+  }
+  app.get('/api/finance', requireAuth, needAdmin, (req, res) => { const data = db.view(); res.json({ ...JSON.parse(JSON.stringify(fin(data))), summary: financeSummary(data) }); });
+  app.put('/api/finance', requireAuth, needAdmin, (req, res) => {
+    const data = db.read(); const f = fin(data); const b = req.body || {};
+    if (b.cash) f.cash = { value: r2(num(b.cash.value)), note: str(b.cash.note, 160), updatedAt: new Date().toISOString() };
+    const item = (x, extraFn) => ({ id: str(x.id, 40) || newId('fi'), desc: str(x.desc, 140), value: r2(Math.max(0, num(x.value))), due: /^\d{4}-\d{2}-\d{2}$/.test(x.due || '') ? x.due : '', ...extraFn(x) });
+    if (Array.isArray(b.payables)) f.payables = b.payables.slice(0, 400).map((x) => item(x, (y) => ({ paid: !!y.paid, category: str(y.category, 40) }))).filter((x) => x.desc || x.value);
+    if (Array.isArray(b.receivables)) f.receivables = b.receivables.slice(0, 400).map((x) => item(x, (y) => ({ received: !!y.received, receivedDate: y.received ? (/^\d{4}-\d{2}-\d{2}$/.test(y.receivedDate || '') ? y.receivedDate : today()) : '' }))).filter((x) => x.desc || x.value);
+    db.write(data); res.json({ ...JSON.parse(JSON.stringify(f)), summary: financeSummary(data) });
+  });
+
   // ---- orçamentos ----
   const clean = (b, settings) => {
     const issuer = settings.issuers.find((i) => i.id === b.issuerId) || settings.issuers[0];
@@ -96,23 +148,24 @@ function register(app, { db, requireAuth, newId }) {
       status: ['rascunho', 'enviado', 'aprovado', 'recusado'].includes(b.status) ? b.status : 'rascunho',
       issuerId: issuer.id, issuer: { ...issuer },
       customer: { orgId: str(c.orgId, 40) || null, contactId: str(c.contactId, 40) || null, name: str(c.name, 140), doc: str(c.doc, 24), contactName: str(c.contactName, 100), email: str(c.email, 100), phone: str(c.phone, 30), address: str(c.address, 220) },
-      items: (Array.isArray(b.items) ? b.items : []).slice(0, 300).map((it) => ({ sku: str(it.sku, 40), name: str(it.name, 160), description: str(it.description, 600), unit: str(it.unit, 12) || 'un', qty: Math.max(0, num(it.qty)), price: Math.max(0, num(it.price)), discountPct: clamp(num(it.discountPct), 0, 100), taxPct: clamp(num(it.taxPct), 0, 100) })).filter((it) => it.name || it.sku),
+      items: (Array.isArray(b.items) ? b.items : []).slice(0, 300).map((it) => ({ sku: str(it.sku, 40), name: str(it.name, 160), description: str(it.description, 600), unit: str(it.unit, 12) || 'un', qty: Math.max(0, num(it.qty)), price: Math.max(0, num(it.price)), cost: Math.max(0, num(it.cost)), discountPct: clamp(num(it.discountPct), 0, 100), taxPct: clamp(num(it.taxPct), 0, 100) })).filter((it) => it.name || it.sku),
       taxMode: b.taxMode === 'included' ? 'included' : 'add', discountPct: clamp(num(b.discountPct), 0, 100), discountValue: Math.max(0, num(b.discountValue)), freight: Math.max(0, num(b.freight)),
+      pay: { payments: (Array.isArray(b.pay && b.pay.payments) ? b.pay.payments : []).slice(0, 60).map((x) => ({ id: str(x.id, 40) || newId('pg'), date: /^\d{4}-\d{2}-\d{2}$/.test(x.date || '') ? x.date : today(), amount: r2(Math.max(0, num(x.amount))), note: str(x.note, 120) })).filter((x) => x.amount > 0) },
       payment: str(b.payment, 300), delivery: str(b.delivery, 300), warranty: str(b.warranty, 300), notes: str(b.notes, 1500), terms: str(b.terms, 1500), dealId: str(b.dealId, 40) || null
     };
   };
   app.get('/api/quotes', requireAuth, (req, res) => {
-    res.json(store(db.view()).quotes.map((q) => ({ id: q.id, number: q.number, date: q.date, status: q.status, customerName: q.customer.name, total: q.totals.total, issuerName: q.issuer.name, createdByName: q.createdByName, dealId: q.dealId, itemCount: q.items.length })).reverse());
+    res.json(store(db.view()).quotes.map((q) => ({ id: q.id, number: q.number, date: q.date, status: q.status, customerName: q.customer.name, total: q.totals.total, profit: q.totals.profit, materialCost: q.totals.materialCost, pay: payInfo(q), issuerName: q.issuer.name, createdByName: q.createdByName, dealId: q.dealId, itemCount: q.items.length })).reverse());
   });
   app.get('/api/quotes/:id', requireAuth, (req, res) => {
-    const q = store(db.view()).quotes.find((x) => x.id === req.params.id); if (!q) return res.status(404).json({ error: 'Orçamento não encontrado' }); res.json(q);
+    const q = store(db.view()).quotes.find((x) => x.id === req.params.id); if (!q) return res.status(404).json({ error: 'Orçamento não encontrado' }); res.json({ ...q, payInfo: payInfo(q) });
   });
   app.post('/api/quotes', requireAuth, (req, res) => {
     const data = db.read(); const o = store(data); const y = Number(today().slice(0, 4));
     if (o.settings.counter.year !== y) o.settings.counter = { year: y, n: 0 };
     o.settings.counter.n += 1;
     const q = { id: newId('q'), number: `ORC-${y}-${String(o.settings.counter.n).padStart(4, '0')}`, ...clean(req.body || {}, o.settings), createdBy: req.user && req.user.role !== 'matriz' ? req.user.id : null, createdByName: authorName(req.user), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-    q.totals = calcTotals(q); o.quotes.push(q); db.write(data); res.status(201).json(q);
+    q.totals = calcTotals(q); o.quotes.push(q); db.write(data); res.status(201).json({ ...q, payInfo: payInfo(q) });
   });
   app.put('/api/quotes/:id', requireAuth, (req, res) => {
     const data = db.read(); const o = store(data); const q = o.quotes.find((x) => x.id === req.params.id); if (!q) return res.status(404).json({ error: 'Orçamento não encontrado' });
@@ -131,4 +184,4 @@ function register(app, { db, requireAuth, newId }) {
   });
 }
 
-module.exports = { register, calcTotals };
+module.exports = { register, calcTotals, payInfo };

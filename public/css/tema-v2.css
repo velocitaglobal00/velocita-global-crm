@@ -424,3 +424,22 @@ input:focus, select:focus, textarea:focus { outline: 3px solid var(--focus); out
 .lg-keymsg { font-size: 13px; font-weight: 600; min-height: 18px; } .lg-keymsg.ok { color: #14683a; } .lg-keymsg.err { color: #b42318; }
 .lg-how { margin-top: 8px; } .lg-how summary { cursor: pointer; font-weight: 600; min-height: 30px; } .lg-how ol { margin: 6px 0 0; padding-left: 20px; line-height: 1.6; font-size: 13px; }
 :root[data-theme='dark'] .lg-keymsg.ok { color: #6ee7a5; } :root[data-theme='dark'] .lg-keymsg.err { color: #ff9b9b; }
+
+.oc-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 12px; } .oc-kpis div, .oc-paysum div { background: var(--vg-surface); border: 1px solid var(--vg-border); border-radius: 12px; padding: 10px 12px; display: grid; gap: 2px; } .oc-kpis span, .oc-paysum span { font-size: 11px; color: var(--vg-text-muted); text-transform: uppercase; letter-spacing: .07em; } .oc-kpis b, .oc-paysum b { font: 700 18px 'Poppins', sans-serif; color: var(--vg-heading); }
+.oc-paysum { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 8px; } .oc-paysum b small { font-size: 12px; font-weight: 500; }
+.oc-g { color: #14803f !important; } .oc-o { color: var(--vg-orange-dark) !important; } .oc-r { color: #b42318 !important; } :root[data-theme='dark'] .oc-g { color: #6ee7a5 !important; } :root[data-theme='dark'] .oc-r { color: #ff9b9b !important; }
+.oc-pay-pago { background: #d9f2e3 !important; color: #14683a !important; } .oc-pay-parcial { background: #fff0d1 !important; color: #8a5a00 !important; } .oc-pay-pendente { background: #fbe0e0 !important; color: #9b1c1c !important; }
+.oc-payrow { display: grid; grid-template-columns: 150px 170px 1fr auto; gap: 8px; margin-bottom: 8px; } .oc-payrow input { padding: 8px 10px; background: var(--vg-surface); color: var(--vg-text); }
+@media (max-width: 760px) { .oc-payrow { grid-template-columns: 1fr; } }
+
+/* ============ BI Financeiro ============ */
+.fi-goal { background: var(--vg-surface); border: 1px solid var(--vg-border); border-radius: 16px; padding: 14px 16px; margin-bottom: 14px; } .fi-goal-top { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+.fi-goal span, .fi-card > span { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--vg-text-muted); display: block; } .fi-goal b { font: 700 26px 'Poppins', sans-serif; color: var(--vg-heading); } .fi-goal b small { font-size: 14px; font-weight: 500; color: var(--vg-text-muted); } .fi-goal-miss { text-align: right; } .fi-goal-miss b { color: var(--vg-orange-dark); }
+.fi-bar { height: 12px; background: var(--vg-column-bg); border-radius: 8px; overflow: hidden; margin: 10px 0 4px; } .fi-bar i { display: block; height: 100%; background: linear-gradient(90deg, #f4821f, #ffb066); border-radius: 8px; }
+.fi-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin-bottom: 14px; } .fi-card { background: var(--vg-surface); border: 1px solid var(--vg-border); border-radius: 16px; padding: 14px; display: grid; gap: 6px; align-content: start; } .fi-card > b { font: 700 24px 'Poppins', sans-serif; color: var(--vg-heading); } .fi-card small { color: var(--vg-text-muted); font-size: 12px; } .fi-proj { border-color: var(--vg-orange); }
+.fi-edit { display: grid; gap: 6px; } .fi-edit input { padding: 8px 10px; background: var(--vg-surface); color: var(--vg-text); }
+.fi-head, .fi-row { display: grid; grid-template-columns: 2fr 1fr 1fr 110px 44px; gap: 8px; align-items: center; margin-bottom: 8px; } .fi-head span { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--vg-text-muted); } .fi-row input[data-k] { padding: 8px 10px; background: var(--vg-surface); color: var(--vg-text); } .fi-chk { display: flex; gap: 6px; align-items: center; font-size: 13px; } .fi-chk input { min-height: 20px; width: 20px; }
+@media (max-width: 760px) { .fi-head { display: none; } .fi-row { grid-template-columns: 1fr 1fr; } }
+
+.deal-paid { font-size: 11.5px; color: #14803f; margin: 2px 0 4px; font-weight: 600; } :root[data-theme='dark'] .deal-paid { color: #6ee7a5; }
+.deal-paid-bar { height: 5px; background: var(--vg-column-bg); border-radius: 4px; overflow: hidden; margin-top: 3px; } .deal-paid-bar i { display: block; height: 100%; background: #22c55e; }

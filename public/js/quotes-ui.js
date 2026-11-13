@@ -13,18 +13,21 @@
   const dBR = (iso) => (iso && /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso.split('-').reverse().join('/') : '');
   const isAdmin = () => window.state && window.state.me && ['matriz', 'admin'].includes(window.state.me.role);
   const STATUS = { rascunho: 'Rascunho', enviado: 'Enviado', aprovado: 'Aprovado', recusado: 'Recusado' };
-  const Q = { tab: 'lista', settings: null, catalog: [], list: [], d: null, loaded: false, filter: '', status: '' };
+  const PAYST = { pendente: 'Pendente', parcial: 'Parcial', pago: 'Pago' };
+  const Q = { payFilter: '', tab: 'lista', settings: null, catalog: [], list: [], d: null, loaded: false, filter: '', status: '' };
 
   // mesma conta do servidor (o servidor recalcula ao salvar)
+  const payOf = (q) => { const list = (q.pay && q.pay.payments) || []; const received = r2(list.reduce((a, x) => a + Math.max(0, num(x.amount)), 0)); const total = calc(q).total; return { received, remaining: r2(Math.max(0, total - received)), status: received <= 0 ? 'pendente' : received >= total - 0.005 ? 'pago' : 'parcial' }; };
   function calc(q) {
-    const mode = q.taxMode === 'included' ? 'included' : 'add'; let gross = 0, itemDiscount = 0, subtotal = 0, tax = 0, itemsTotal = 0;
+    const mode = q.taxMode === 'included' ? 'included' : 'add'; let gross = 0, itemDiscount = 0, subtotal = 0, tax = 0, itemsTotal = 0, materialCost = 0;
     const lines = (q.items || []).map((it) => {
       const g = num(it.qty) * num(it.price); const d = g * clamp(num(it.discountPct), 0, 100) / 100; const net = g - d; const rate = clamp(num(it.taxPct), 0, 100) / 100;
       const t = mode === 'add' ? net * rate : net - net / (1 + rate); const total = mode === 'add' ? net + t : net;
-      gross += g; itemDiscount += d; subtotal += net; tax += t; itemsTotal += total; return { gross: r2(g), discount: r2(d), net: r2(net), tax: r2(t), total: r2(total) };
+      gross += g; itemDiscount += d; subtotal += net; tax += t; itemsTotal += total; materialCost += num(it.qty) * Math.max(0, num(it.cost)); return { gross: r2(g), discount: r2(d), net: r2(net), tax: r2(t), total: r2(total) };
     });
     const gd = itemsTotal * clamp(num(q.discountPct), 0, 100) / 100 + Math.max(0, num(q.discountValue)); const fr = Math.max(0, num(q.freight));
-    return { lines, gross: r2(gross), itemDiscount: r2(itemDiscount), subtotal: r2(subtotal), tax: r2(tax), itemsTotal: r2(itemsTotal), globalDiscount: r2(gd), freight: r2(fr), total: r2(Math.max(0, itemsTotal - gd) + fr), taxMode: mode };
+    const total = r2(Math.max(0, itemsTotal - gd) + fr); const revenueNet = total - tax; const profit = revenueNet - materialCost;
+    return { lines, gross: r2(gross), itemDiscount: r2(itemDiscount), subtotal: r2(subtotal), tax: r2(tax), itemsTotal: r2(itemsTotal), globalDiscount: r2(gd), freight: r2(fr), total, taxMode: mode, materialCost: r2(materialCost), revenueNet: r2(revenueNet), profit: r2(profit), marginPct: revenueNet > 0 ? r2((profit / revenueNet) * 100) : 0 };
   }
 
   window.initOrcamentos = async function () {
@@ -44,15 +47,18 @@
 
   // ---------------- lista ----------------
   function renderList() {
-    const f = Q.filter.toLowerCase(); const rows = Q.list.filter((q) => (!Q.status || q.status === Q.status) && (!f || `${q.number} ${q.customerName}`.toLowerCase().includes(f)));
-    const tot = rows.reduce((s, q) => s + (q.total || 0), 0);
-    shell(`<div class="oc-bar"><input id="oc-q" class="filter-input" placeholder="Buscar por número ou cliente..." value="${esc(Q.filter)}"><select id="oc-st" class="filter-input"><option value="">Todos os status</option>${Object.entries(STATUS).map(([k, v]) => `<option value="${k}"${Q.status === k ? ' selected' : ''}>${v}</option>`).join('')}</select><button class="btn-primary" id="oc-new">+ Novo orçamento</button></div>
+    const f = Q.filter.toLowerCase(); const rows = Q.list.filter((q) => (!Q.status || q.status === Q.status) && (!Q.payFilter || (q.pay && q.pay.status) === Q.payFilter) && (!f || `${q.number} ${q.customerName}`.toLowerCase().includes(f)));
+    const live = rows.filter((q) => q.status !== 'recusado' && q.status !== 'rascunho');
+    const sum = (fn) => live.reduce((a, q) => a + (fn(q) || 0), 0); const tot = rows.reduce((s, q) => s + (q.total || 0), 0);
+    shell(`<div class="oc-bar"><input id="oc-q" class="filter-input" placeholder="Buscar por número ou cliente..." value="${esc(Q.filter)}"><select id="oc-st" class="filter-input"><option value="">Todos os status</option>${Object.entries(STATUS).map(([k, v]) => `<option value="${k}"${Q.status === k ? ' selected' : ''}>${v}</option>`).join('')}</select><select id="oc-pay" class="filter-input"><option value="">Todos os pagamentos</option>${Object.entries(PAYST).map(([k, v]) => `<option value="${k}"${Q.payFilter === k ? ' selected' : ''}>${v}</option>`).join('')}</select><button class="btn-primary" id="oc-new">+ Novo orçamento</button></div>
+      <div class="oc-kpis"><div><span>Orçado (enviados/aprovados)</span><b>${brl(sum((q) => q.total))}</b></div><div><span>Já recebido</span><b class="oc-g">${brl(sum((q) => q.pay && q.pay.received))}</b></div><div><span>A receber</span><b class="oc-o">${brl(sum((q) => q.pay && q.pay.remaining))}</b></div><div><span>Gasto com material</span><b>${brl(sum((q) => q.materialCost))}</b></div><div><span>Sobra da receita</span><b class="oc-g">${brl(sum((q) => q.profit))}</b></div></div>
       <div class="mt-card"><p class="mt-note">${rows.length} orçamento(s) · soma ${brl(tot)}</p>
-      ${rows.length ? `<table class="data-table oc-table"><thead><tr><th>Nº</th><th>Cliente</th><th>Data</th><th>Total</th><th>Status</th><th></th></tr></thead><tbody>${rows.map((q) => `<tr data-id="${q.id}"><td><b>${esc(q.number)}</b></td><td>${esc(q.customerName || '—')}<div class="eq-sub">${esc(q.issuerName)} · ${esc(q.createdByName || '')}</div></td><td>${dBR(q.date)}</td><td><b>${brl(q.total)}</b></td><td><span class="lg-pill oc-st-${q.status}">${STATUS[q.status]}</span></td>
+      ${rows.length ? `<table class="data-table oc-table"><thead><tr><th>Nº</th><th>Cliente</th><th>Data</th><th>Total</th><th>Pagamento</th><th>Sobra</th><th>Status</th><th></th></tr></thead><tbody>${rows.map((q) => `<tr data-id="${q.id}"><td><b>${esc(q.number)}</b></td><td>${esc(q.customerName || '—')}<div class="eq-sub">${esc(q.issuerName)} · ${esc(q.createdByName || '')}</div></td><td>${dBR(q.date)}</td><td><b>${brl(q.total)}</b></td><td><span class="lg-pill oc-pay-${q.pay ? q.pay.status : 'pendente'}">${PAYST[q.pay ? q.pay.status : 'pendente']}</span><div class="eq-sub">${q.pay ? brl(q.pay.received) + ' recebido' : ''}</div></td><td>${q.materialCost || q.profit ? brl(q.profit) : '<span class="lg-muted">—</span>'}</td><td><span class="lg-pill oc-st-${q.status}">${STATUS[q.status]}</span></td>
         <td class="oc-acts"><button class="btn-secondary btn-sm" data-a="open">Abrir</button><button class="btn-primary btn-sm" data-a="print">Imprimir</button><button class="btn-secondary btn-sm" data-a="dup">Duplicar</button><button class="btn-secondary btn-sm" data-a="del">Excluir</button></td></tr>`).join('')}</tbody></table>` : '<p class="mt-note">Nenhum orçamento ainda. Clique em <b>Novo orçamento</b>.</p>'}</div>`);
     $('oc-new').onclick = () => newQuote();
     $('oc-q').oninput = (e) => { Q.filter = e.target.value; const p = e.target.selectionStart; renderList(); const el = $('oc-q'); el.focus(); el.setSelectionRange(p, p); };
     $('oc-st').onchange = (e) => { Q.status = e.target.value; renderList(); };
+    $('oc-pay').onchange = (e) => { Q.payFilter = e.target.value; renderList(); };
     $('oc-root').querySelectorAll('tr[data-id] [data-a]').forEach((b) => b.addEventListener('click', async () => {
       const id = b.closest('tr').dataset.id; const a = b.dataset.a;
       try {
@@ -68,10 +74,10 @@
   function newQuote() {
     const df = Q.settings.defaults; const dt = new Date(); const iso = (x) => x.toLocaleDateString('sv-SE'); const v = new Date(dt.getTime() + df.validityDays * 86400000);
     Q.d = { id: null, number: '(novo)', date: iso(dt), validUntil: iso(v), status: 'rascunho', issuerId: Q.settings.issuers[0].id, customer: { orgId: null, contactId: null, name: '', doc: '', contactName: '', email: '', phone: '', address: '' },
-      items: [blankItem()], taxMode: df.taxMode, discountPct: 0, discountValue: 0, freight: 0, payment: df.payment, delivery: df.delivery, warranty: df.warranty, notes: '', terms: df.terms, dealId: null };
+      pay: { payments: [] }, items: [blankItem()], taxMode: df.taxMode, discountPct: 0, discountValue: 0, freight: 0, payment: df.payment, delivery: df.delivery, warranty: df.warranty, notes: '', terms: df.terms, dealId: null };
     renderEditor();
   }
-  const blankItem = () => ({ sku: '', name: '', description: '', unit: 'un', qty: 1, price: 0, discountPct: 0, taxPct: 0 });
+  const blankItem = () => ({ sku: '', name: '', description: '', unit: 'un', qty: 1, price: 0, cost: 0, discountPct: 0, taxPct: 0 });
 
   function renderEditor() {
     const d = Q.d; const st = window.state; const orgs = st.organizations.slice().sort((a, b) => (a.name || '').localeCompare(b.name || ''));
@@ -89,7 +95,7 @@
         <div class="form-row"><div class="form-group"><label>Data</label><input type="date" id="f-date" value="${esc(d.date)}"></div><div class="form-group"><label>Válido até</label><input type="date" id="f-valid" value="${esc(d.validUntil)}"></div><div class="form-group"><label>Status</label><select id="f-status">${Object.entries(STATUS).map(([k, v]) => `<option value="${k}"${d.status === k ? ' selected' : ''}>${v}</option>`).join('')}</select></div><div class="form-group"><label>Negócio do Pipeline</label><select id="f-deal"><option value="">Sem vínculo</option>${deals.map((x) => `<option value="${x.id}"${x.id === d.dealId ? ' selected' : ''}>${esc(x.title)}</option>`).join('')}</select></div></div></section>
 
       <section class="dm-step"><div class="dm-h"><span class="dm-n">2</span><div><b>Itens: produtos, equipamentos e serviços</b><small>Digite o SKU para puxar do catálogo, ou preencha na mão. O total de cada linha atualiza sozinho.</small></div></div>
-        <div class="oc-items-wrap"><table class="oc-items"><thead><tr><th>SKU</th><th>Produto / equipamento e descrição</th><th>Un</th><th>Qtd</th><th>Valor unit. (R$)</th><th>Desc. %</th><th>Imposto %</th><th>Total</th><th></th></tr></thead><tbody id="oc-rows"></tbody></table></div>
+        <div class="oc-items-wrap"><table class="oc-items"><thead><tr><th>SKU</th><th>Produto / equipamento e descrição</th><th>Un</th><th>Qtd</th><th>Valor unit. (R$)</th><th title="Quanto você paga pelo material (uso interno)">Custo unit. (R$)</th><th>Desc. %</th><th>Imposto %</th><th>Total</th><th></th></tr></thead><tbody id="oc-rows"></tbody></table></div>
         <datalist id="oc-skus">${Q.catalog.filter((p) => p.active !== false && p.sku).map((p) => `<option value="${esc(p.sku)}">${esc(p.name)}</option>`).join('')}</datalist>
         <div class="oc-row-acts"><button class="btn-secondary" id="oc-add">+ Adicionar item</button><button class="btn-secondary" id="oc-addcat">+ Do catálogo (por nome)</button></div></section>
 
@@ -97,8 +103,10 @@
         <div class="form-row"><div class="form-group"><label>Imposto</label><select id="f-taxmode"><option value="add"${d.taxMode === 'add' ? ' selected' : ''}>Somado ao valor</option><option value="included"${d.taxMode === 'included' ? ' selected' : ''}>Já incluso no valor</option></select></div><div class="form-group"><label>Desconto geral %</label><input id="f-dpct" inputmode="decimal" value="${d.discountPct || ''}"></div><div class="form-group"><label>Desconto em R$</label><input id="f-dval" inputmode="decimal" value="${d.discountValue || ''}"></div><div class="form-group"><label>Frete / outras despesas (R$)</label><input id="f-freight" inputmode="decimal" value="${d.freight || ''}"></div></div>
         <div class="form-row"><div class="form-group"><label>Condições de pagamento</label><input id="f-pay" value="${esc(d.payment)}"></div><div class="form-group"><label>Prazo de entrega</label><input id="f-del" value="${esc(d.delivery)}"></div><div class="form-group"><label>Garantia</label><input id="f-war" value="${esc(d.warranty)}"></div></div>
         <div class="form-group"><label>Observações (aparecem no orçamento)</label><textarea id="f-notes" rows="2">${esc(d.notes)}</textarea></div><div class="form-group"><label>Termos e condições</label><textarea id="f-terms" rows="2">${esc(d.terms)}</textarea></div></section>
+      <section class="dm-step"><div class="dm-h"><span class="dm-n">4</span><div><b>Pagamento e sobra <em style="font-weight:400;color:var(--vg-text-muted)">(uso interno: não aparece no orçamento impresso)</em></b><small>Registre cada valor que o cliente pagar. O status (pendente, parcial, pago) sai da conta. O custo do material é o que você preenche em cada item.</small></div></div>
+        <div id="oc-paybox"></div></section>
       <div class="oc-total" id="oc-totals"></div></div>`);
-    drawRows(); drawTotals();
+    drawRows(); drawTotals(); drawPay();
     $('oc-back').onclick = async () => { Q.d = null; try { Q.list = await api('/api/quotes'); } catch (e) { /* ok */ } render(); };
     $('oc-save').onclick = () => save(false); $('oc-print').onclick = () => save(true);
     $('oc-add').onclick = () => { Q.d.items.push(blankItem()); drawRows(); };
@@ -112,8 +120,8 @@
     [['c-name', 'name'], ['c-doc', 'doc'], ['c-email', 'email'], ['c-phone', 'phone'], ['c-address', 'address']].forEach(([id, k]) => bind(id, (e) => { Q.d.customer[k] = e.target.value; }));
     bind('c-contact', (e) => { Q.d.customer.contactName = e.target.value; const c = window.state.contacts.find((x) => x.name === e.target.value && (!Q.d.customer.orgId || x.orgId === Q.d.customer.orgId)); if (c) { Q.d.customer.contactId = c.id; if (c.email && !$('c-email').value) { $('c-email').value = c.email; Q.d.customer.email = c.email; } if (c.phone && !$('c-phone').value) { $('c-phone').value = c.phone; Q.d.customer.phone = c.phone; } } });
     bind('f-date', (e) => { Q.d.date = e.target.value; }); bind('f-valid', (e) => { Q.d.validUntil = e.target.value; }); bind('f-status', (e) => { Q.d.status = e.target.value; }); bind('f-deal', (e) => { Q.d.dealId = e.target.value || null; });
-    bind('f-taxmode', (e) => { Q.d.taxMode = e.target.value; drawRows(); drawTotals(); });
-    [['f-dpct', 'discountPct'], ['f-dval', 'discountValue'], ['f-freight', 'freight']].forEach(([id, k]) => bind(id, (e) => { Q.d[k] = num(e.target.value); drawTotals(); }));
+    bind('f-taxmode', (e) => { Q.d.taxMode = e.target.value; drawRows(); drawTotals(); drawPay(); });
+    [['f-dpct', 'discountPct'], ['f-dval', 'discountValue'], ['f-freight', 'freight']].forEach(([id, k]) => bind(id, (e) => { Q.d[k] = num(e.target.value); drawTotals(); drawPay(); }));
     [['f-pay', 'payment'], ['f-del', 'delivery'], ['f-war', 'warranty'], ['f-notes', 'notes'], ['f-terms', 'terms']].forEach(([id, k]) => bind(id, (e) => { Q.d[k] = e.target.value; }));
   }
 
@@ -122,18 +130,18 @@
     $('oc-rows').innerHTML = Q.d.items.map((it, i) => `<tr data-i="${i}"><td><input data-k="sku" list="oc-skus" value="${esc(it.sku)}" placeholder="SKU" style="min-width:90px"></td>
       <td><input data-k="name" value="${esc(it.name)}" placeholder="Nome do produto ou equipamento"><input data-k="description" value="${esc(it.description)}" placeholder="Descrição detalhada (opcional)" class="oc-desc"></td>
       <td><input data-k="unit" value="${esc(it.unit)}" style="width:54px"></td><td><input data-k="qty" inputmode="decimal" value="${it.qty}" style="width:70px"></td><td><input data-k="price" inputmode="decimal" value="${it.price || ''}" style="width:110px"></td>
-      <td><input data-k="discountPct" inputmode="decimal" value="${it.discountPct || ''}" style="width:62px"></td><td><input data-k="taxPct" inputmode="decimal" value="${it.taxPct || ''}" style="width:62px"></td><td class="oc-line-total">${brl((c[i] || {}).total)}</td><td><button class="btn-secondary btn-sm" data-del aria-label="Remover item">✕</button></td></tr>`).join('');
+      <td><input data-k="cost" inputmode="decimal" value="${it.cost || ''}" style="width:100px" placeholder="interno"></td><td><input data-k="discountPct" inputmode="decimal" value="${it.discountPct || ''}" style="width:62px"></td><td><input data-k="taxPct" inputmode="decimal" value="${it.taxPct || ''}" style="width:62px"></td><td class="oc-line-total">${brl((c[i] || {}).total)}</td><td><button class="btn-secondary btn-sm" data-del aria-label="Remover item">✕</button></td></tr>`).join('');
     $('oc-rows').querySelectorAll('tr').forEach((tr) => {
       const i = Number(tr.dataset.i);
       tr.querySelectorAll('input[data-k]').forEach((inp) => inp.addEventListener('input', () => {
-        const k = inp.dataset.k; const it = Q.d.items[i]; it[k] = ['qty', 'price', 'discountPct', 'taxPct'].includes(k) ? num(inp.value) : inp.value;
+        const k = inp.dataset.k; const it = Q.d.items[i]; it[k] = ['qty', 'price', 'cost', 'discountPct', 'taxPct'].includes(k) ? num(inp.value) : inp.value;
         if (k === 'sku') { const p = Q.catalog.find((x) => x.sku && x.sku.toLowerCase() === inp.value.trim().toLowerCase()); if (p) { fillFromProduct(it, p); drawRows(); } }
-        const lines = calc(Q.d).lines; tr.querySelector('.oc-line-total').textContent = brl((lines[i] || {}).total); drawTotals();
+        const lines = calc(Q.d).lines; tr.querySelector('.oc-line-total').textContent = brl((lines[i] || {}).total); drawTotals(); drawPay();
       }));
       tr.querySelector('[data-del]').onclick = () => { Q.d.items.splice(i, 1); if (!Q.d.items.length) Q.d.items.push(blankItem()); drawRows(); drawTotals(); };
     });
   }
-  function fillFromProduct(it, p) { Object.assign(it, { sku: p.sku || it.sku, name: p.name, description: p.description || '', unit: p.unit || 'un', price: p.price, taxPct: p.taxPct || 0 }); }
+  function fillFromProduct(it, p) { Object.assign(it, { sku: p.sku || it.sku, name: p.name, description: p.description || '', unit: p.unit || 'un', price: p.price, cost: p.cost || 0, taxPct: p.taxPct || 0 }); }
   function pickFromCatalog() {
     const list = Q.catalog.filter((p) => p.active !== false); if (!list.length) return toast('O catálogo está vazio. Cadastre os produtos na aba Catálogo.');
     const m = document.createElement('div'); m.className = 'modal-overlay show'; m.style.zIndex = 400;
@@ -142,9 +150,26 @@
     const draw = () => { const q = $('pk-q').value.toLowerCase(); $('pk-list').innerHTML = list.filter((p) => `${p.sku} ${p.name} ${p.category}`.toLowerCase().includes(q)).slice(0, 80).map((p) => `<button class="oc-pick" data-id="${p.id}"><b>${esc(p.name)}</b><span>${esc(p.sku || 'sem SKU')} · ${brl(p.price)} / ${esc(p.unit)}</span></button>`).join('') || '<p class="mt-note">Nada encontrado.</p>'; $('pk-list').querySelectorAll('.oc-pick').forEach((b) => { b.onclick = () => { const p = Q.catalog.find((x) => x.id === b.dataset.id); const it = blankItem(); fillFromProduct(it, p); const last = Q.d.items[Q.d.items.length - 1]; if (last && !last.name && !last.sku) Q.d.items[Q.d.items.length - 1] = it; else Q.d.items.push(it); close(); drawRows(); drawTotals(); }; }); };
     $('pk-q').oninput = draw; draw(); $('pk-q').focus();
   }
+
+  function drawPay() {
+    const box = $('oc-paybox'); if (!box) return; const d = Q.d; d.pay = d.pay || { payments: [] }; const t = calc(d); const pi = payOf(d);
+    box.innerHTML = `<div class="oc-paysum"><div><span>Status</span><b><span class="lg-pill oc-pay-${pi.status}">${PAYST[pi.status]}</span></b></div><div><span>Total do orçamento</span><b>${brl(t.total)}</b></div><div><span>Recebido</span><b class="oc-g">${brl(pi.received)}</b></div><div><span>Falta receber</span><b class="oc-o">${brl(pi.remaining)}</b></div><div><span>Custo do material</span><b>${brl(t.materialCost)}</b></div><div><span>Sobra da receita</span><b class="${t.profit >= 0 ? 'oc-g' : 'oc-r'}">${brl(t.profit)}<small> (${n2(t.marginPct)}%)</small></b></div></div>
+      <p class="mt-note">Sobra = total − impostos − custo do material. (${brl(t.total)} − ${brl(t.tax)} − ${brl(t.materialCost)})</p>
+      <div id="oc-pays">${d.pay.payments.map((x, i) => `<div class="oc-payrow" data-i="${i}"><input type="date" data-pk="date" value="${esc(x.date)}"><input data-pk="amount" inputmode="decimal" value="${x.amount || ''}" placeholder="Valor recebido (R$)"><input data-pk="note" value="${esc(x.note || '')}" placeholder="Observação (Pix, boleto, entrada...)"><button class="btn-secondary btn-sm" data-pdel aria-label="Remover recebimento">✕</button></div>`).join('') || '<p class="mt-note">Nenhum recebimento registrado.</p>'}</div>
+      <div class="oc-row-acts"><button class="btn-secondary" id="oc-payadd">+ Registrar recebimento</button><button class="btn-primary" id="oc-payall"${pi.remaining <= 0 ? ' disabled' : ''}>Marcar como pago (${brl(pi.remaining)})</button></div>`;
+    const iso = new Date().toLocaleDateString('sv-SE');
+    $('oc-payadd').onclick = () => { d.pay.payments.push({ id: '', date: iso, amount: 0, note: '' }); drawPay(); };
+    $('oc-payall').onclick = () => { if (pi.remaining > 0) { d.pay.payments.push({ id: '', date: iso, amount: pi.remaining, note: 'Pagamento do saldo' }); drawPay(); } };
+    box.querySelectorAll('.oc-payrow').forEach((row) => {
+      const i = Number(row.dataset.i);
+      row.querySelectorAll('[data-pk]').forEach((inp) => inp.addEventListener('input', () => { const k = inp.dataset.pk; d.pay.payments[i][k] = k === 'amount' ? num(inp.value) : inp.value; }));
+      row.querySelectorAll('[data-pk=amount]').forEach((inp) => inp.addEventListener('change', drawPay));
+      row.querySelector('[data-pdel]').onclick = () => { d.pay.payments.splice(i, 1); drawPay(); };
+    });
+  }
   function drawTotals() {
     const t = calc(Q.d); const inc = t.taxMode === 'included';
-    $('oc-totals').innerHTML = `<div class="oc-tot-grid"><div><span>Subtotal dos itens</span><b>${brl(t.subtotal)}</b></div><div><span>Impostos ${inc ? '(inclusos)' : '(somados)'}</span><b>${brl(t.tax)}</b></div><div><span>Descontos</span><b>${brl(t.itemDiscount + t.globalDiscount)}</b></div><div><span>Frete</span><b>${brl(t.freight)}</b></div><div class="oc-grand"><span>TOTAL</span><b>${brl(t.total)}</b></div></div>`;
+    $('oc-totals').innerHTML = `<div class="oc-tot-grid"><div><span>Subtotal dos itens</span><b>${brl(t.subtotal)}</b></div><div><span>Impostos ${inc ? '(inclusos)' : '(somados)'}</span><b>${brl(t.tax)}</b></div><div><span>Descontos</span><b>${brl(t.itemDiscount + t.globalDiscount)}</b></div><div><span>Frete</span><b>${brl(t.freight)}</b></div><div><span>Sobra (interno)</span><b>${brl(t.profit)}</b></div><div class="oc-grand"><span>TOTAL</span><b>${brl(t.total)}</b></div></div>`;
   }
   async function save(thenPrint) {
     const d = Q.d; if (!d.customer.name.trim()) return toast('Informe o nome do cliente.');
@@ -185,21 +210,21 @@
   function renderCatalog() {
     const f = (Q.cf || '').toLowerCase(); const rows = Q.catalog.filter((p) => !f || `${p.sku} ${p.name} ${p.category}`.toLowerCase().includes(f));
     shell(`<div class="oc-bar"><input id="cg-q" class="filter-input" placeholder="Buscar por SKU, nome ou categoria..." value="${esc(Q.cf || '')}"><label class="btn-secondary" style="cursor:pointer">Importar planilha (CSV)<input type="file" id="cg-file" accept=".csv,text/csv" hidden></label></div>
-      <div class="mt-card"><h3>Novo produto ou equipamento</h3><div class="oc-cat-form"><input id="n-sku" placeholder="SKU"><input id="n-name" placeholder="Nome *"><input id="n-desc" placeholder="Descrição detalhada"><input id="n-unit" placeholder="Un (un, cx, kg...)" value="un"><input id="n-price" inputmode="decimal" placeholder="Valor (R$)"><input id="n-tax" inputmode="decimal" placeholder="Imposto %"><input id="n-cat" placeholder="Categoria"><button class="btn-primary" id="n-add">Adicionar</button></div>
-      <p class="mt-note">CSV com colunas: sku; nome; descricao; unidade; valor; imposto; categoria. SKUs repetidos são atualizados.</p></div>
-      <div class="mt-card"><p class="mt-note">${rows.length} item(ns)</p>${rows.length ? `<div class="oc-items-wrap"><table class="oc-items oc-cat"><thead><tr><th>SKU</th><th>Nome e descrição</th><th>Un</th><th>Valor (R$)</th><th>Imposto %</th><th>Categoria</th><th></th></tr></thead><tbody>${rows.map((p) => `<tr data-id="${p.id}"><td><input data-k="sku" value="${esc(p.sku)}" style="min-width:90px"></td><td><input data-k="name" value="${esc(p.name)}"><input data-k="description" class="oc-desc" value="${esc(p.description)}"></td><td><input data-k="unit" value="${esc(p.unit)}" style="width:54px"></td><td><input data-k="price" inputmode="decimal" value="${p.price}" style="width:100px"></td><td><input data-k="taxPct" inputmode="decimal" value="${p.taxPct}" style="width:62px"></td><td><input data-k="category" value="${esc(p.category)}"></td><td class="oc-acts"><button class="btn-primary btn-sm" data-save>Salvar</button><button class="btn-secondary btn-sm" data-del>Excluir</button></td></tr>`).join('')}</tbody></table></div>` : '<p class="mt-note">Nenhum item. Cadastre acima ou importe uma planilha.</p>'}</div>`);
+      <div class="mt-card"><h3>Novo produto ou equipamento</h3><div class="oc-cat-form"><input id="n-sku" placeholder="SKU"><input id="n-name" placeholder="Nome *"><input id="n-desc" placeholder="Descrição detalhada"><input id="n-unit" placeholder="Un (un, cx, kg...)" value="un"><input id="n-price" inputmode="decimal" placeholder="Valor de venda (R$)"><input id="n-cost" inputmode="decimal" placeholder="Custo de compra (R$)"><input id="n-tax" inputmode="decimal" placeholder="Imposto %"><input id="n-cat" placeholder="Categoria"><button class="btn-primary" id="n-add">Adicionar</button></div>
+      <p class="mt-note">CSV com colunas: sku; nome; descricao; unidade; valor; imposto; categoria; custo. SKUs repetidos são atualizados.</p></div>
+      <div class="mt-card"><p class="mt-note">${rows.length} item(ns)</p>${rows.length ? `<div class="oc-items-wrap"><table class="oc-items oc-cat"><thead><tr><th>SKU</th><th>Nome e descrição</th><th>Un</th><th>Venda (R$)</th><th>Custo (R$)</th><th>Imposto %</th><th>Categoria</th><th></th></tr></thead><tbody>${rows.map((p) => `<tr data-id="${p.id}"><td><input data-k="sku" value="${esc(p.sku)}" style="min-width:90px"></td><td><input data-k="name" value="${esc(p.name)}"><input data-k="description" class="oc-desc" value="${esc(p.description)}"></td><td><input data-k="unit" value="${esc(p.unit)}" style="width:54px"></td><td><input data-k="price" inputmode="decimal" value="${p.price}" style="width:100px"></td><td><input data-k="cost" inputmode="decimal" value="${p.cost || ''}" style="width:100px"></td><td><input data-k="taxPct" inputmode="decimal" value="${p.taxPct}" style="width:62px"></td><td><input data-k="category" value="${esc(p.category)}"></td><td class="oc-acts"><button class="btn-primary btn-sm" data-save>Salvar</button><button class="btn-secondary btn-sm" data-del>Excluir</button></td></tr>`).join('')}</tbody></table></div>` : '<p class="mt-note">Nenhum item. Cadastre acima ou importe uma planilha.</p>'}</div>`);
     $('cg-q').oninput = (e) => { Q.cf = e.target.value; const p = e.target.selectionStart; renderCatalog(); const el = $('cg-q'); el.focus(); el.setSelectionRange(p, p); };
     $('n-add').onclick = async () => {
-      try { const it = await api('/api/quotes/catalog', { method: 'POST', body: JSON.stringify({ sku: $('n-sku').value, name: $('n-name').value, description: $('n-desc').value, unit: $('n-unit').value, price: num($('n-price').value), taxPct: num($('n-tax').value), category: $('n-cat').value }) }); Q.catalog.push(it); toast('Item adicionado.'); renderCatalog(); } catch (e) { toast(e.message); }
+      try { const it = await api('/api/quotes/catalog', { method: 'POST', body: JSON.stringify({ sku: $('n-sku').value, name: $('n-name').value, description: $('n-desc').value, unit: $('n-unit').value, price: num($('n-price').value), cost: num($('n-cost').value), taxPct: num($('n-tax').value), category: $('n-cat').value }) }); Q.catalog.push(it); toast('Item adicionado.'); renderCatalog(); } catch (e) { toast(e.message); }
     };
     $('cg-file').onchange = async (e) => {
       const file = e.target.files[0]; if (!file) return; const text = await file.text(); const lines = text.split(/\r?\n/).filter(Boolean); const sep = (lines[0].match(/;/g) || []).length >= (lines[0].match(/,/g) || []).length ? ';' : ',';
-      const rowsCsv = lines.slice(/sku|nome/i.test(lines[0]) ? 1 : 0).map((l) => { const c = l.split(sep).map((x) => x.replace(/^"|"$/g, '').trim()); return { sku: c[0], name: c[1], description: c[2], unit: c[3], price: num(c[4]), taxPct: num(c[5]), category: c[6] }; });
+      const rowsCsv = lines.slice(/sku|nome/i.test(lines[0]) ? 1 : 0).map((l) => { const c = l.split(sep).map((x) => x.replace(/^"|"$/g, '').trim()); return { sku: c[0], name: c[1], description: c[2], unit: c[3], price: num(c[4]), taxPct: num(c[5]), category: c[6], cost: num(c[7]) }; });
       try { const r = await api('/api/quotes/catalog/import', { method: 'POST', body: JSON.stringify({ rows: rowsCsv }) }); Q.catalog = await api('/api/quotes/catalog'); toast(`${r.created} novo(s), ${r.updated} atualizado(s).`); renderCatalog(); } catch (er) { toast(er.message); }
     };
     $('oc-root').querySelectorAll('.oc-cat tbody tr').forEach((tr) => {
       const id = tr.dataset.id;
-      tr.querySelector('[data-save]').onclick = async () => { const body = {}; tr.querySelectorAll('input[data-k]').forEach((i) => { body[i.dataset.k] = ['price', 'taxPct'].includes(i.dataset.k) ? num(i.value) : i.value; }); try { const u = await api(`/api/quotes/catalog/${id}`, { method: 'PUT', body: JSON.stringify(body) }); Object.assign(Q.catalog.find((x) => x.id === id), u); toast('Salvo.'); } catch (e) { toast(e.message); } };
+      tr.querySelector('[data-save]').onclick = async () => { const body = {}; tr.querySelectorAll('input[data-k]').forEach((i) => { body[i.dataset.k] = ['price', 'cost', 'taxPct'].includes(i.dataset.k) ? num(i.value) : i.value; }); try { const u = await api(`/api/quotes/catalog/${id}`, { method: 'PUT', body: JSON.stringify(body) }); Object.assign(Q.catalog.find((x) => x.id === id), u); toast('Salvo.'); } catch (e) { toast(e.message); } };
       tr.querySelector('[data-del]').onclick = async () => { if (!confirm('Excluir este item do catálogo?')) return; try { await api(`/api/quotes/catalog/${id}`, { method: 'DELETE' }); Q.catalog = Q.catalog.filter((x) => x.id !== id); renderCatalog(); } catch (e) { toast(e.message); } };
     });
   }

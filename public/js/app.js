@@ -2288,9 +2288,9 @@ async function saveOrg() {
 
 // ============ Settings ============
 function bindSettingsPanel() {
-  document.querySelectorAll('.settings-tab').forEach((tab) => {
+  document.querySelectorAll('#view-settings .settings-tab').forEach((tab) => {
     tab.addEventListener('click', () => {
-      document.querySelectorAll('.settings-tab').forEach((t) => t.classList.remove('active'));
+      document.querySelectorAll('#view-settings .settings-tab').forEach((t) => t.classList.remove('active'));
       tab.classList.add('active');
       document.querySelectorAll('.settings-panel').forEach((p) => (p.style.display = 'none'));
       document.getElementById(`stab-${tab.dataset.stab}`).style.display = '';
@@ -4906,6 +4906,7 @@ function bindBiTabs() {
       document.getElementById('bi-tab-geral').style.display = state.biTab === 'geral' ? '' : 'none';
       document.getElementById('bi-tab-trafego').style.display = state.biTab === 'trafego' ? '' : 'none';
       document.getElementById('bi-tab-marketplaces').style.display = state.biTab === 'marketplaces' ? '' : 'none';
+      document.getElementById('bi-tab-financeiro').style.display = state.biTab === 'financeiro' ? '' : 'none';
       renderBiActiveTab();
     });
   });
@@ -4914,6 +4915,7 @@ function bindBiTabs() {
 function renderBiActiveTab() {
   if (state.biTab === 'trafego') renderBiTrafegoPago();
   else if (state.biTab === 'marketplaces') renderBiMarketplaces();
+  else if (state.biTab === 'financeiro') { if (window.renderBiFinanceiro) window.renderBiFinanceiro(); }
   else renderBI();
   document.getElementById('bi-updated-at').textContent = `Atualizado às ${new Date().toLocaleTimeString('pt-BR')}`;
 }

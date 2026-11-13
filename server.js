@@ -260,6 +260,7 @@ app.get('/app', requirePageAuth, (req, res) => {
     .replace('/js/leadgen-ui.js"', `/js/leadgen-ui.js?v=${ASSET_VERSION}"`)
     .replace('/js/nav-materiais.js"', `/js/nav-materiais.js?v=${ASSET_VERSION}"`)
     .replace('/js/quotes-ui.js"', `/js/quotes-ui.js?v=${ASSET_VERSION}"`)
+    .replace('/js/finance-ui.js"', `/js/finance-ui.js?v=${ASSET_VERSION}"`)
     .replace('/js/passkey-ui.js"', `/js/passkey-ui.js?v=${ASSET_VERSION}"`)
     .replace('/js/team-ui.js"', `/js/team-ui.js?v=${ASSET_VERSION}"`)
     .replace('/js/pipeline-v2.js"', `/js/pipeline-v2.js?v=${ASSET_VERSION}"`)
@@ -762,6 +763,7 @@ app.post('/api/deals', requireAuth, (req, res) => {
     id: newId('d'),
     title: req.body.title || 'Novo negócio',
     value: Number(req.body.value) || 0,
+    paidAmount: Math.max(0, Number(req.body.paidAmount) || 0),
     currency: req.body.currency || 'BRL',
     supplyCost: Number(req.body.supplyCost) || 0,
     marketingCost: Number(req.body.marketingCost) || 0,
@@ -795,6 +797,7 @@ app.put('/api/deals/:id', requireAuth, (req, res) => {
     deal.stageHistory.push({ stageId: req.body.stage, enteredAt: now, exitedAt: null });
   }
 
+  if ('paidAmount' in req.body) req.body.paidAmount = Math.max(0, Number(req.body.paidAmount) || 0);
   const statusChanged = req.body.status && req.body.status !== deal.status;
   Object.assign(deal, req.body);
   db.write(data);
