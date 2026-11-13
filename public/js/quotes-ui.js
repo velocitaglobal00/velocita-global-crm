@@ -30,6 +30,9 @@
     return { lines, gross: r2(gross), itemDiscount: r2(itemDiscount), subtotal: r2(subtotal), tax: r2(tax), itemsTotal: r2(itemsTotal), globalDiscount: r2(gd), freight: r2(fr), total, taxMode: mode, materialCost: r2(materialCost), revenueNet: r2(revenueNet), profit: r2(profit), marginPct: revenueNet > 0 ? r2((profit / revenueNet) * 100) : 0 };
   }
 
+  const baseSwitch = window.switchView;
+  if (typeof baseSwitch === 'function') window.switchView = function switchView(view) { if (Q.d && Q.dirty && view !== 'orcamentos') persist(true); return baseSwitch(view); };
+  window.addEventListener('beforeunload', (e) => { if (Q.d && Q.dirty) { persist(true); e.preventDefault(); e.returnValue = ''; } });
   window.initOrcamentos = async function () {
     if (!Q.loaded) {
       try { [Q.settings, Q.catalog, Q.list] = await Promise.all([api('/api/quotes/settings'), api('/api/quotes/catalog'), api('/api/quotes')]); } catch (e) { $('oc-root').innerHTML = `<p>Não foi possível abrir os orçamentos: ${esc(e.message)}</p>`; return; }
@@ -106,7 +109,8 @@
       <section class="dm-step"><div class="dm-h"><span class="dm-n">4</span><div><b>Pagamento e sobra <em style="font-weight:400;color:var(--vg-text-muted)">(uso interno: não aparece no orçamento impresso)</em></b><small>Registre cada valor que o cliente pagar. O status (pendente, parcial, pago) sai da conta. O custo do material é o que você preenche em cada item.</small></div></div>
         <div id="oc-paybox"></div></section>
       <div class="oc-total" id="oc-totals"></div></div>`);
-    drawRows(); drawTotals(); drawPay();
+    drawRows(); drawTotals(); drawPay(); Q.dirty = false;
+    $('oc-root').querySelector('.oc-edit').addEventListener('input', () => { Q.dirty = true; });
     $('oc-back').onclick = async () => { Q.d = null; try { Q.list = await api('/api/quotes'); } catch (e) { /* ok */ } render(); };
     $('oc-save').onclick = () => save(false); $('oc-print').onclick = () => save(true);
     $('oc-add').onclick = () => { Q.d.items.push(blankItem()); drawRows(); };
@@ -159,17 +163,28 @@
       <div class="oc-row-acts"><button class="btn-secondary" id="oc-payadd">+ Registrar recebimento</button><button class="btn-primary" id="oc-payall"${pi.remaining <= 0 ? ' disabled' : ''}>Marcar como pago (${brl(pi.remaining)})</button></div>`;
     const iso = new Date().toLocaleDateString('sv-SE');
     $('oc-payadd').onclick = () => { d.pay.payments.push({ id: '', date: iso, amount: 0, note: '' }); drawPay(); };
-    $('oc-payall').onclick = () => { if (pi.remaining > 0) { d.pay.payments.push({ id: '', date: iso, amount: pi.remaining, note: 'Pagamento do saldo' }); drawPay(); } };
+    $('oc-payall').onclick = async () => { if (pi.remaining > 0) { d.pay.payments.push({ id: '', date: iso, amount: pi.remaining, note: 'Pagamento do saldo' }); if (await persist(false)) toast('Pagamento gravado. O BI já está atualizado.'); drawPay(); } };
     box.querySelectorAll('.oc-payrow').forEach((row) => {
       const i = Number(row.dataset.i);
       row.querySelectorAll('[data-pk]').forEach((inp) => inp.addEventListener('input', () => { const k = inp.dataset.pk; d.pay.payments[i][k] = k === 'amount' ? num(inp.value) : inp.value; }));
-      row.querySelectorAll('[data-pk=amount]').forEach((inp) => inp.addEventListener('change', drawPay));
-      row.querySelector('[data-pdel]').onclick = () => { d.pay.payments.splice(i, 1); drawPay(); };
+      row.querySelectorAll('[data-pk]').forEach((inp) => inp.addEventListener('change', async () => { await persist(true); drawPay(); }));
+      row.querySelector('[data-pdel]').onclick = async () => { d.pay.payments.splice(i, 1); await persist(true); drawPay(); };
     });
   }
   function drawTotals() {
     const t = calc(Q.d); const inc = t.taxMode === 'included';
     $('oc-totals').innerHTML = `<div class="oc-tot-grid"><div><span>Subtotal dos itens</span><b>${brl(t.subtotal)}</b></div><div><span>Impostos ${inc ? '(inclusos)' : '(somados)'}</span><b>${brl(t.tax)}</b></div><div><span>Descontos</span><b>${brl(t.itemDiscount + t.globalDiscount)}</b></div><div><span>Frete</span><b>${brl(t.freight)}</b></div><div><span>Sobra (interno)</span><b>${brl(t.profit)}</b></div><div class="oc-grand"><span>TOTAL</span><b>${brl(t.total)}</b></div></div>`;
+  }
+  // Grava o orçamento aberto. Usado ao registrar pagamento e ao sair da tela, para nada ficar só "na tela".
+  async function persist(quiet) {
+    const d = Q.d; if (!d) return false;
+    if (!d.customer.name.trim() || !d.items.some((i) => (i.name || i.sku) && num(i.qty) > 0)) { if (!quiet) toast('Para gravar, informe o cliente e pelo menos um item com quantidade.'); return false; }
+    try {
+      const wasNew = !d.id;
+      const saved = d.id ? await api(`/api/quotes/${d.id}`, { method: 'PUT', body: JSON.stringify(d) }) : await api('/api/quotes', { method: 'POST', body: JSON.stringify(d) });
+      Q.d = saved; Q.dirty = false; if (!quiet) toast(`Salvo em ${saved.number}.`); if (wasNew && !quiet) renderEditor();
+      return true;
+    } catch (e) { toast(e.message); return false; }
   }
   async function save(thenPrint) {
     const d = Q.d; if (!d.customer.name.trim()) return toast('Informe o nome do cliente.');
