@@ -2386,7 +2386,7 @@ function bindSettingsPanel() {
 function updateAiProviderFieldVisibility() {
   const provider = document.getElementById('ai-provider').value;
   document.getElementById('ai-baseurl-group').style.display = provider === 'ollama' ? '' : 'none';
-  document.getElementById('ai-apikey-group').style.display = provider === 'groq' || provider === 'gemini' || provider === 'anthropic' ? '' : 'none';
+  document.getElementById('ai-apikey-group').style.display = provider === 'nvidia' || provider === 'groq' || provider === 'gemini' || provider === 'anthropic' ? '' : 'none';
 }
 
 function renderSettings() {
