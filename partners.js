@@ -40,6 +40,59 @@ function ensureForDeal(data, deal, newId) {
 function partnerForDeal(data, deal) { return list(data).find((x) => x.dealId === deal.id) || (deal.orgId && list(data).find((x) => x.orgId === deal.orgId)) || null; }
 function backfill(data, newId) { let n = 0; for (const d of data.deals || []) { if (d.status === 'lost') continue; const before = list(data).length; ensureForDeal(data, d, newId); if (list(data).length > before) n += 1; } return n; }
 
+// ---------- Conexões de API (lojas e anúncios): configuradas só pela equipe Velocita, uma por contrato/cliente ----------
+// Credenciais ficam criptografadas no banco e nunca voltam para a tela: só aparece quais campos estão preenchidos.
+const PLATFORMS = {
+  mercadolivre: { kind: 'store', name: 'Mercado Livre', test: true, help: 'App criado em developers.mercadolivre.com.br e token do vendedor. Com App ID, Secret e Refresh token o sistema renova o acesso sozinho.', fields: [{ k: 'accessToken', l: 'Access token', secret: true }, { k: 'refreshToken', l: 'Refresh token', secret: true }, { k: 'clientId', l: 'App ID' }, { k: 'clientSecret', l: 'Secret key', secret: true }] },
+  shopify: { kind: 'store', name: 'Shopify', test: true, help: 'App personalizado na loja (Admin API) com leitura de pedidos e produtos.', fields: [{ k: 'shop', l: 'Domínio da loja (ex.: minhaloja.myshopify.com)' }, { k: 'accessToken', l: 'Admin API access token', secret: true }] },
+  nuvemshop: { kind: 'store', name: 'Nuvemshop', test: true, help: 'ID da loja e token do app da Nuvemshop.', fields: [{ k: 'storeId', l: 'ID da loja' }, { k: 'accessToken', l: 'Access token', secret: true }] },
+  shopee: { kind: 'store', name: 'Shopee', test: false, help: 'Open Platform da Shopee (assinatura por parceiro).', fields: [{ k: 'partnerId', l: 'Partner ID' }, { k: 'partnerKey', l: 'Partner key', secret: true }, { k: 'shopId', l: 'Shop ID' }, { k: 'accessToken', l: 'Access token', secret: true }] },
+  amazon: { kind: 'store', name: 'Amazon', test: false, help: 'Selling Partner API.', fields: [{ k: 'sellerId', l: 'Seller ID' }, { k: 'clientId', l: 'Client ID' }, { k: 'clientSecret', l: 'Client secret', secret: true }, { k: 'refreshToken', l: 'Refresh token', secret: true }] },
+  tiktokshop: { kind: 'store', name: 'TikTok Shop', test: false, help: 'TikTok Shop Partner Center.', fields: [{ k: 'appKey', l: 'App key' }, { k: 'appSecret', l: 'App secret', secret: true }, { k: 'shopId', l: 'Shop ID' }, { k: 'accessToken', l: 'Access token', secret: true }] },
+  meta: { kind: 'ads', name: 'Meta Ads (Facebook e Instagram)', test: true, help: 'ID da conta de anúncios e token com permissão ads_read.', fields: [{ k: 'adAccountId', l: 'ID da conta de anúncios (só números)' }, { k: 'accessToken', l: 'Access token', secret: true }] },
+  tiktokads: { kind: 'ads', name: 'TikTok Ads', test: true, help: 'ID do anunciante e token da API de marketing.', fields: [{ k: 'advertiserId', l: 'ID do anunciante' }, { k: 'accessToken', l: 'Access token', secret: true }] },
+  googleads: { kind: 'ads', name: 'Google Ads', test: false, help: 'Developer token + OAuth do cliente.', fields: [{ k: 'customerId', l: 'ID do cliente (Customer ID)' }, { k: 'developerToken', l: 'Developer token', secret: true }, { k: 'clientId', l: 'Client ID' }, { k: 'clientSecret', l: 'Client secret', secret: true }, { k: 'refreshToken', l: 'Refresh token', secret: true }] }
+};
+const fetchT = async (url, opt = {}, ms = 15000) => { const c = new AbortController(); const tm = setTimeout(() => c.abort(), ms); try { return await fetch(url, { ...opt, signal: c.signal }); } finally { clearTimeout(tm); } };
+const jsonOf = async (r) => { try { return await r.json(); } catch (e) { return {}; } };
+const human = (status, j) => status === 401 || status === 403 || /oauth|access token|invalid token|expired/i.test(String((j && (j.message || (j.error && j.error.message))) || '')) ? 'Credencial recusada: token inválido, expirado ou sem permissão.' : status === 404 ? 'Recurso não encontrado: confira o ID informado.' : (j && (j.message || (j.error && (j.error.message || j.error)) || j.errors)) ? String((j.message || (j.error && (j.error.message || j.error)) || JSON.stringify(j.errors))).slice(0, 160) : `A plataforma respondeu ${status}.`;
+const TESTS = {
+  async mercadolivre(f, save) {
+    const call = (tk) => fetchT('https://api.mercadolibre.com/users/me', { headers: { Authorization: `Bearer ${tk}` } });
+    let r = await call(f.accessToken || '');
+    if (r.status === 401 && f.refreshToken && f.clientId && f.clientSecret) { // renova o acesso (o token do Mercado Livre dura poucas horas)
+      const rr = await fetchT('https://api.mercadolibre.com/oauth/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' }, body: new URLSearchParams({ grant_type: 'refresh_token', client_id: f.clientId, client_secret: f.clientSecret, refresh_token: f.refreshToken }) });
+      const jj = await jsonOf(rr); if (rr.ok && jj.access_token) { f.accessToken = jj.access_token; if (jj.refresh_token) f.refreshToken = jj.refresh_token; save(f); r = await call(f.accessToken); }
+    }
+    const j = await jsonOf(r); if (!r.ok) throw new Error(human(r.status, j));
+    const ord = await fetchT(`https://api.mercadolibre.com/orders/search?seller=${j.id}&order.status=paid&limit=1`, { headers: { Authorization: `Bearer ${f.accessToken}` } }); const oj = await jsonOf(ord);
+    return { name: j.nickname, metrics: { Vendedor: j.nickname, 'Pedidos pagos': (oj.paging && oj.paging.total) != null ? oj.paging.total : 'indisponível', Reputação: (j.seller_reputation && j.seller_reputation.level_id) || 'sem nível', País: j.site_id } };
+  },
+  async shopify(f) {
+    const shop = String(f.shop || '').replace(/^https?:\/\//, '').replace(/\/.*$/, ''); if (!/\.myshopify\.com$/i.test(shop)) throw new Error('Informe o domínio no formato minhaloja.myshopify.com.');
+    const h = { 'X-Shopify-Access-Token': f.accessToken || '' }; const r = await fetchT(`https://${shop}/admin/api/2024-10/shop.json`, { headers: h }); const j = await jsonOf(r); if (!r.ok) throw new Error(human(r.status, j));
+    const c = await jsonOf(await fetchT(`https://${shop}/admin/api/2024-10/orders/count.json?status=any`, { headers: h }));
+    return { name: j.shop && j.shop.name, metrics: { Loja: j.shop && j.shop.name, Moeda: j.shop && j.shop.currency, 'Pedidos': c.count != null ? c.count : 'indisponível' } };
+  },
+  async nuvemshop(f) {
+    const h = { Authentication: `bearer ${f.accessToken || ''}`, 'User-Agent': 'Velocita Global (velocitaglobal@gmail.com)' }; const r = await fetchT(`https://api.nuvemshop.com.br/v1/${encodeURIComponent(f.storeId || '')}/store`, { headers: h }); const j = await jsonOf(r); if (!r.ok) throw new Error(human(r.status, j));
+    const o = await fetchT(`https://api.nuvemshop.com.br/v1/${encodeURIComponent(f.storeId)}/orders?per_page=1`, { headers: h }); const nm = (j.name && (j.name.pt || j.name.es || Object.values(j.name)[0])) || 'Loja Nuvemshop';
+    return { name: nm, metrics: { Loja: nm, Pedidos: o.headers.get('x-total-count') || 'indisponível', Moeda: j.main_currency } };
+  },
+  async meta(f) {
+    const id = String(f.adAccountId || '').replace(/\D/g, ''); const r = await fetchT(`https://graph.facebook.com/v21.0/act_${id}?fields=name,account_status,currency,amount_spent&access_token=${encodeURIComponent(f.accessToken || '')}`); const j = await jsonOf(r); if (!r.ok) throw new Error(human(r.status, j));
+    const st = { 1: 'Ativa', 2: 'Desativada', 3: 'Com pendência de pagamento', 7: 'Em análise', 9: 'Em período de carência', 101: 'Encerrada' }[j.account_status] || 'Status ' + j.account_status;
+    return { name: j.name, metrics: { Conta: j.name, Situação: st, Moeda: j.currency, 'Gasto total': (Number(j.amount_spent || 0) / 100).toLocaleString('pt-BR', { style: 'currency', currency: j.currency || 'BRL' }) } };
+  },
+  async tiktokads(f) {
+    const r = await fetchT(`https://business-api.tiktok.com/open_api/v1.3/advertiser/info/?advertiser_ids=${encodeURIComponent(JSON.stringify([String(f.advertiserId || '')]))}`, { headers: { 'Access-Token': f.accessToken || '' } }); const j = await jsonOf(r);
+    if (!r.ok || j.code !== 0 || !(j.data && j.data.list && j.data.list[0])) throw new Error(human(r.status, { message: j.message }));
+    const a = j.data.list[0]; return { name: a.name, metrics: { Anunciante: a.name, Situação: a.status, Moeda: a.currency, Saldo: a.balance } };
+  }
+};
+const encJson = (authSecret, o) => encPass(authSecret, JSON.stringify(o || {}));
+const decJson = (authSecret, s) => { try { return JSON.parse(decPass(authSecret, s) || '{}'); } catch (e) { return {}; } };
+
 function passKey(authSecret) { return crypto.createHash('sha256').update('vgp-pass:' + authSecret()).digest(); }
 function encPass(authSecret, pw) { const iv = crypto.randomBytes(12); const c = crypto.createCipheriv('aes-256-gcm', passKey(authSecret), iv); const e = Buffer.concat([c.update(String(pw), 'utf8'), c.final()]); return [iv, c.getAuthTag(), e].map((b) => b.toString('base64')).join('.'); }
 function decPass(authSecret, s) { try { const [iv, tag, e] = String(s).split('.').map((x) => Buffer.from(x, 'base64')); const d = crypto.createDecipheriv('aes-256-gcm', passKey(authSecret), iv); d.setAuthTag(tag); return Buffer.concat([d.update(e), d.final()]).toString('utf8'); } catch (e) { return ''; } }
@@ -137,6 +190,35 @@ function register(app, { db, requireAuth, newId, team, jwt, authSecret, vapidKey
     p.magic.push({ h: crypto.createHash('sha256').update(token.toUpperCase()).digest('hex'), exp: Date.now() + 7 * 86400000, used: false, by: (req.user && req.user.name) || '' });
     p.audit.push({ at: new Date().toISOString(), by: (req.user && req.user.name) || '', what: 'Gerou link de login automático (7 dias, uso único)' }); db.write(data);
     res.json({ token, expiresAt: new Date(Date.now() + 7 * 86400000).toISOString() });
+  });
+  // ---- conexões de API (só a equipe Velocita) ----
+  const connView = (c, withFields) => { const f = decJson(authSecret, c.enc); const P = PLATFORMS[c.platform] || {}; return { id: c.id, platform: c.platform, platformName: P.name || c.platform, kind: (P.kind || c.kind), label: c.label, status: c.status, statusMsg: c.statusMsg, lastTestAt: c.lastTestAt, info: c.info || {}, metrics: c.metrics || {}, canTest: !!P.test,
+    filled: (P.fields || []).filter((x) => f[x.k]).map((x) => x.k), values: withFields ? Object.fromEntries((P.fields || []).filter((x) => !x.secret && f[x.k]).map((x) => [x.k, f[x.k]])) : undefined }; };
+  app.get('/api/parcerias/:id/connections', requireAuth, (req, res) => {
+    const p = byId(db.view(), req.params.id); if (!p) return res.status(404).json({ error: 'Parceiro não encontrado' });
+    res.json({ connections: (p.connections || []).map((c) => connView(c, true)), catalog: Object.fromEntries(Object.entries(PLATFORMS).map(([k, v]) => [k, { kind: v.kind, name: v.name, test: v.test, help: v.help, fields: v.fields }])) });
+  });
+  const readFields = (P, body, old) => { const f = { ...(old || {}) }; for (const x of P.fields) { const v = str((body.fields || {})[x.k], 600); if (v) f[x.k] = v; } return f; };
+  app.post('/api/parcerias/:id/connections', requireAuth, adm, (req, res) => {
+    const data = db.read(); const p = byId(data, req.params.id); if (!p) return res.status(404).json({ error: 'Parceiro não encontrado' }); const P = PLATFORMS[(req.body || {}).platform]; if (!P) return res.status(400).json({ error: 'Escolha a plataforma.' });
+    if (!Array.isArray(p.connections)) p.connections = []; const c = { id: newId('cx'), platform: req.body.platform, kind: P.kind, label: str(req.body.label, 80) || P.name, enc: encJson(authSecret, readFields(P, req.body)), status: 'pendente', statusMsg: 'Aguardando teste.', lastTestAt: '', info: {}, metrics: {} };
+    p.connections.push(c); p.audit.push({ at: new Date().toISOString(), by: (req.user && req.user.name) || '', what: `Conexão adicionada: ${P.name}` }); db.write(data); res.status(201).json(connView(c, true));
+  });
+  app.put('/api/parcerias/:id/connections/:cid', requireAuth, adm, (req, res) => {
+    const data = db.read(); const p = byId(data, req.params.id); const c = p && (p.connections || []).find((x) => x.id === req.params.cid); if (!c) return res.status(404).json({ error: 'Conexão não encontrada' }); const P = PLATFORMS[c.platform];
+    if (typeof req.body.label === 'string' && req.body.label.trim()) c.label = str(req.body.label, 80); c.enc = encJson(authSecret, readFields(P, req.body, decJson(authSecret, c.enc))); c.status = 'pendente'; c.statusMsg = 'Credenciais alteradas: teste de novo.'; db.write(data); res.json(connView(c, true));
+  });
+  app.delete('/api/parcerias/:id/connections/:cid', requireAuth, adm, (req, res) => { const data = db.read(); const p = byId(data, req.params.id); if (!p) return res.status(404).json({ error: 'Parceiro não encontrado' }); p.connections = (p.connections || []).filter((x) => x.id !== req.params.cid); db.write(data); res.json({ ok: true }); });
+  app.post('/api/parcerias/:id/connections/:cid/test', requireAuth, adm, async (req, res) => {
+    const d0 = db.view(); const p0 = byId(d0, req.params.id); const c0 = p0 && (p0.connections || []).find((x) => x.id === req.params.cid); if (!c0) return res.status(404).json({ error: 'Conexão não encontrada' });
+    const P = PLATFORMS[c0.platform]; const f = decJson(authSecret, c0.enc); const missing = P.fields.filter((x) => !f[x.k] && (c0.platform !== 'mercadolivre' || x.k === 'accessToken') && (c0.platform !== 'shopee' && c0.platform !== 'amazon' && c0.platform !== 'tiktokshop' && c0.platform !== 'googleads')).map((x) => x.l);
+    let out; const now = new Date().toISOString(); let newFields = null;
+    if (!P.test) out = { ok: false, pending: true, message: 'Credenciais salvas. O teste automático desta plataforma será ativado quando a API for conectada.' };
+    else if (missing.length) out = { ok: false, message: `Falta preencher: ${missing.join(', ')}.` };
+    else { try { const r = await TESTS[c0.platform](f, (nf) => { newFields = nf; }); out = { ok: true, message: `Conexão funcionando${r.name ? ': ' + r.name : ''}.`, info: { name: r.name || '' }, metrics: r.metrics || {} }; } catch (e) { out = { ok: false, message: e.name === 'AbortError' ? 'A plataforma demorou demais para responder.' : e.message }; } }
+    const data = db.read(); const p = byId(data, req.params.id); const c = p && p.connections.find((x) => x.id === req.params.cid); if (!c) return res.json(out);
+    if (newFields) c.enc = encJson(authSecret, newFields); c.lastTestAt = now; c.status = out.ok ? 'conectada' : out.pending ? 'pendente' : 'erro'; c.statusMsg = out.message; if (out.ok) { c.info = out.info; c.metrics = out.metrics; }
+    p.audit.push({ at: now, by: (req.user && req.user.name) || '', what: `Teste de conexão (${P.name}): ${out.ok ? 'ok' : out.pending ? 'pendente' : 'falhou'}` }); db.write(data); res.json({ ...out, connection: connView(c, true) });
   });
   // trocar a matrícula: só a pedido do parceiro, confirmando com a senha ou o Face ID de quem está trocando
   const swaps = new Map();
@@ -252,6 +334,7 @@ function register(app, { db, requireAuth, newId, team, jwt, authSecret, vapidKey
   app.post('/api/p/logout', (req, res) => { res.clearCookie(COOKIE, { path: '/' }); res.json({ ok: true }); });
   app.get('/api/p/me', pAuth, (req, res) => { touch(req.partnerId); const p = req.partner; res.json({ id: p.id, name: p.name, company: p.company, matricula: p.matricula, status: p.status, paused: p.paused, contractDate: p.contractDate, commissionPct: num(p.commissionPct), hasPassword: !!p.passHash }); });
   app.get('/api/p/dashboard', pAuth, (req, res) => { touch(req.partnerId); const p = req.partner; res.json({ summary: summary(p), tips: tips(p), links: p.links, paused: p.paused, recent: p.sales.slice(-12).reverse(), payouts: p.payouts.slice(-30).reverse() }); });
+  app.get('/api/p/connections', pAuth, (req, res) => res.json((req.partner.connections || []).map((c) => { const P = PLATFORMS[c.platform] || {}; return { id: c.id, kind: P.kind || c.kind, platformName: P.name || c.platform, label: c.label, status: c.status, lastTestAt: c.lastTestAt, name: (c.info || {}).name || '', metrics: c.status === 'conectada' ? c.metrics || {} : {} }; })));
   app.get('/api/p/sales', pAuth, (req, res) => res.json(req.partner.sales.slice(-400).reverse()));
   app.get('/api/p/orders', pAuth, (req, res) => res.json(req.partner.orders.slice().reverse()));
   app.post('/api/p/orders', pAuth, (req, res) => {

@@ -73,8 +73,9 @@
     const t = S.tab; const m = $('p-main');
     try {
       if (t === 'geral' || t === 'financeiro' || t === 'operacao') { S.dash = await api('/api/p/dashboard'); S.me.paused = S.dash.paused; renderNav(); }
+      if (t === 'operacao') S.conns = await api('/api/p/connections');
       if (S.tab !== t) return;
-      if (t === 'geral') m.innerHTML = vGeral(); else if (t === 'financeiro') m.innerHTML = vFin(); else if (t === 'operacao') { m.innerHTML = vOp(); bindOp(); }
+      if (t === 'geral') m.innerHTML = vGeral(); else if (t === 'financeiro') m.innerHTML = vFin(); else if (t === 'operacao') { m.innerHTML = vOp() + vConns(); bindOp(); }
       else if (t === 'vendas') { const v = await api('/api/p/sales'); if (S.tab === t) m.innerHTML = vVendas(v); }
       else if (t === 'ordens') { if (silent) return; const v = await api('/api/p/orders'); m.innerHTML = vOrdens(v); bindOrdens(); }
       else if (t === 'notas') { if (silent) return; const v = await api('/api/p/invoices'); m.innerHTML = vNotas(v); bindNotas(); }
@@ -151,6 +152,18 @@
   }
   $('ai-chat-send').addEventListener('click', aiSend);
   $('ai-chat-input').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); aiSend(); } });
+  // ---------- lojas e anúncios conectados (a conexão é feita só pela equipe Velocita) ----------
+  const CST = { conectada: ['Conectada', 'recebido'], pendente: ['Aguardando conexão', 'previsto'], erro: ['Precisa de ajuste', 'cancelada'] };
+  function connCard(c) {
+    const [lb, cls] = CST[c.status] || CST.pendente; const mt = Object.entries(c.metrics || {});
+    return `<div class="p-card" style="margin:0"><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><div><b>${esc(c.label)}</b><br><small style="color:#93a0ba">${esc(c.platformName)}${c.name ? ' · ' + esc(c.name) : ''}</small></div><span class="st ${cls}">${lb}</span></div>${mt.length ? `<div style="margin-top:10px;display:grid;gap:4px">${mt.map(([k, v]) => `<div style="display:flex;justify-content:space-between;gap:8px;font-size:13.5px"><span style="color:#93a0ba">${esc(k)}</span><b>${esc(v)}</b></div>`).join('')}</div>` : `<p style="color:#93a0ba;font-size:13px;margin:10px 0 0">${c.status === 'conectada' ? '' : 'A Velocita está configurando esta conexão.'}</p>`}${c.lastTestAt ? `<small style="color:#93a0ba;display:block;margin-top:8px">Verificada em ${dt(c.lastTestAt)} ${hm(c.lastTestAt)}</small>` : ''}</div>`;
+  }
+  function vConns() {
+    const L = S.conns || []; const st = L.filter((c) => c.kind === 'store'); const ad = L.filter((c) => c.kind === 'ads');
+    const blk = (t, arr, vazio) => `<div style="margin-top:14px"><h3 style="margin:0 0 10px;font:700 15px 'Poppins',sans-serif">${t}</h3>${arr.length ? `<div class="p-grid" style="margin:0">${arr.map(connCard).join('')}</div>` : `<div class="p-card" style="color:#93a0ba;font-size:13.5px">${vazio}</div>`}</div>`;
+    return `<div style="margin-top:18px"><h2 style="margin:0 0 2px;font:800 18px 'Poppins',sans-serif">Lojas e anúncios conectados</h2><p style="color:#93a0ba;font-size:13px;margin:0">As conexões com marketplaces e plataformas de anúncios são feitas pela equipe da Velocita para cada contrato. Aqui você só acompanha.</p>${blk('Lojas', st, 'Nenhuma loja conectada ainda. A Velocita fará a conexão da sua loja.')}${blk('Anúncios', ad, 'Nenhuma conta de anúncios conectada ainda.')}</div>`;
+  }
+
   // ---------- operação (pausar) ----------
   function vOp() { const p = S.dash.paused; return `<div class="p-card ${p.on ? 'p-pause' : ''}"><h3>${p.on ? 'Operação pausada' : 'Operação ativa'}</h3><p style="color:#b7c2d9;line-height:1.5;margin-top:0">${p.on ? `Pausada em ${dt(p.at)}${p.reason ? ` · Motivo: ${esc(p.reason)}` : ''}. Enquanto estiver pausada, você não gera novas ordens e a Velocita é avisada.` : 'Se precisar interromper as vendas (falta de estoque, férias, problema na loja), pause aqui. A Velocita é avisada na hora.'}</p>
     ${p.on ? '<button class="btn-primary" id="op-resume">Retomar operação</button>' : '<form class="p-form" id="op-form"><label>Motivo (opcional)<input id="op-reason" placeholder="Ex.: sem estoque do produto principal"></label><button class="btn-primary" type="submit">Pausar operação</button></form>'}</div>`; }

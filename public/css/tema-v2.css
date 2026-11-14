@@ -513,3 +513,8 @@ a.btn-primary.btn-sm, a.btn-secondary.btn-sm { text-decoration: none; display: i
 .pc-mode { display: flex; gap: 8px; flex-wrap: wrap; }
 
 .pc-mailbox { margin-top: 14px; padding: 12px 14px; border: 1px solid var(--vg-border); border-radius: 12px; background: var(--vg-surface-2); }
+
+/* Parcerias: conexoes de API */
+.pc-conn { border: 1px solid var(--vg-border); border-radius: 12px; padding: 12px 14px; margin: 10px 0; background: var(--vg-surface-2); } .pc-conn-h { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; flex-wrap: wrap; }
+.pc-conn-m { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 6px 0; } .pc-conn-m span small { color: var(--vg-text-muted); display: block; }
+.pc-add { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--vg-border); } .pc-cform { margin-top: 6px; }
