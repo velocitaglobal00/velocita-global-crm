@@ -22,8 +22,11 @@
   const hideSplash = () => { const s = $('vg-splash'); if (s) { s.classList.add('out'); setTimeout(() => s.remove(), 600); } };
   async function boot() {
     const t0 = Date.now(); let me = null; let magicErr = '';
+    // servidor dormindo (plano gratuito): avisa na própria tela de abertura da Velocita, em vez de parecer travado
+    const slow = setTimeout(() => { const n = $('sp-note'); if (n) n.textContent = 'Conectando ao servidor da Velocita... na primeira abertura do dia pode levar até 1 minuto.'; }, 3500);
     try { const tk = new URLSearchParams(location.search).get('t'); if (tk) { history.replaceState(null, '', location.pathname + location.hash); try { await api('/api/p/magic', { method: 'POST', body: JSON.stringify({ token: tk }) }); } catch (e) { magicErr = e.message; } } } catch (e) { /* sem parâmetro */ }
     try { me = await api('/api/p/me'); } catch (e) { /* não logado */ }
+    clearTimeout(slow);
     setTimeout(() => { me ? showApp(me) : showLogin(); if (!me && magicErr) { $('p-err').textContent = magicErr; $('p-err').classList.add('show'); } hideSplash(); }, Math.max(0, 1700 - (Date.now() - t0)));
     if ('serviceWorker' in navigator) { const sub = /^parcerias\./i.test(location.hostname); navigator.serviceWorker.register('/parcerias/sw.js', { scope: sub ? '/' : '/parcerias/' }).catch(() => {}); }
   }

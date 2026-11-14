@@ -110,3 +110,5 @@
 .p-faq { border-top: 1px solid var(--p-border); padding: 4px 0; } .p-faq summary { cursor: pointer; font-weight: 700; padding: 10px 2px; list-style: none; display: flex; justify-content: space-between; gap: 12px; } .p-faq summary::-webkit-details-marker { display: none; } .p-faq summary::after { content: '+'; color: #f4821f; font-size: 20px; line-height: 1; transition: transform .2s; } .p-faq[open] summary::after { transform: rotate(45deg); }
 .p-faq p { margin: 0 0 12px; color: var(--p-sub); line-height: 1.6; font-size: 14px; animation: vgFade .3s ease both; }
 .p-q { background: rgba(255,255,255,.14); color: #fff; border: 0; width: 26px; height: 26px; border-radius: 50%; font-weight: 800; cursor: pointer; margin-right: 6px; transition: background .15s, transform .12s; } .p-q:hover { background: #f4821f; color: #0c1528; transform: scale(1.08); }
+
+.sp-note { max-width: 300px; text-align: center; color: rgba(255,255,255,.7); font: 500 13px/1.4 Inter, sans-serif; min-height: 18px; animation: vgFade .4s ease both; }
