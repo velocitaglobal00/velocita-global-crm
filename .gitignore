@@ -4,3 +4,16 @@ node_modules/
 *.db
 uploads/
 backups/
+
+# arquivos soltos que não fazem parte do CRM
+/pptx/
+/velocita-crm/
+/scratchpad/
+/css_add.css
+/gen_*.py
+/midia*.css
+/midia*.html
+/ops*.css
+/ops*_section.html
+/patch_*.py
+/serve-site.js
