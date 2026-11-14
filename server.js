@@ -276,6 +276,7 @@ app.get('/app', requirePageAuth, (req, res) => {
     .replace('/js/team-ui.js"', `/js/team-ui.js?v=${ASSET_VERSION}"`)
     .replace('/js/pipeline-v2.js"', `/js/pipeline-v2.js?v=${ASSET_VERSION}"`)
     .replace('/js/calls-ui.js"', `/js/calls-ui.js?v=${ASSET_VERSION}"`)
+    .replace('/js/vg-sound.js"', `/js/vg-sound.js?v=${ASSET_VERSION}"`)
     .replace('/js/parcerias-ui.js"', `/js/parcerias-ui.js?v=${ASSET_VERSION}"`);
   res.set('Cache-Control', 'no-cache');
   res.type('html').send(html);
@@ -404,14 +405,14 @@ function vapidKeys(data) {
 
 // Envia em segundo plano; quem fez a ação (except) não recebe a própria notificação.
 // only: lista de atendentes que devem receber (null = time todo).
-function pushToTeam(data, { except, only, title, body, url, tag }) {
+function pushToTeam(data, { except, only, title, body, url, tag, tone }) {
   const subs = (data.pushSubscriptions || []).filter(
     (s) => (!except || s.attendantId !== except) && (!only || only.length === 0 || only.includes(s.attendantId))
   );
   if (!subs.length) return;
   const keys = vapidKeys(data);
   webpush.setVapidDetails('mailto:velocitaglobal@gmail.com', keys.publicKey, keys.privateKey);
-  const payload = JSON.stringify({ title, body: String(body || '').slice(0, 240), url: url || '/app', tag: tag || undefined });
+  const payload = JSON.stringify({ title, body: String(body || '').slice(0, 240), url: url || '/app', tag: tag || undefined, tone: tone || 'ok' });
   setImmediate(async () => {
     const dead = [];
     await Promise.all(

@@ -56,3 +56,6 @@
 .p-toast { position: fixed; left: 50%; bottom: 90px; transform: translate(-50%, 20px); background: #f4821f; color: #0c1528; font-weight: 700; padding: 10px 18px; border-radius: 12px; opacity: 0; pointer-events: none; transition: .25s; z-index: 80; max-width: 90vw; } .p-toast.show { opacity: 1; transform: translate(-50%, 0); }
 .p-pause { border: 1px solid rgba(244,130,31,.4); background: rgba(244,130,31,.08); }
 .p-links a { display: inline-block; margin: 0 8px 8px 0; }
+
+.p-pop-wrap { position: relative; } .p-pop { position: absolute; right: 0; top: calc(100% + 8px); z-index: 70; width: 290px; display: grid; gap: 8px; background: #141c2d; border: 1px solid rgba(255,255,255,.14); border-radius: 14px; padding: 14px; box-shadow: 0 18px 50px rgba(0,0,0,.5); }
+.p-pop[hidden] { display: none; } .p-pop small { color: #93a0ba; line-height: 1.4; } .p-pop-row { display: grid; gap: 8px; }

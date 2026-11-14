@@ -518,3 +518,15 @@ a.btn-primary.btn-sm, a.btn-secondary.btn-sm { text-decoration: none; display: i
 .pc-conn { border: 1px solid var(--vg-border); border-radius: 12px; padding: 12px 14px; margin: 10px 0; background: var(--vg-surface-2); } .pc-conn-h { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; flex-wrap: wrap; }
 .pc-conn-m { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 6px 0; } .pc-conn-m span small { color: var(--vg-text-muted); display: block; }
 .pc-add { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--vg-border); } .pc-cform { margin-top: 6px; }
+
+/* Parcerias no celular: a lista vira cartoes (sem rolagem lateral escondida) */
+@media (max-width: 760px) {
+  .pc-list thead { display: none; } .pc-list, .pc-list tbody, .pc-list tr, .pc-list td { display: block; width: 100%; box-sizing: border-box; }
+  .pc-list tr { border: 1px solid var(--vg-border); border-radius: 14px; margin: 0 0 12px; padding: 10px 12px; background: var(--vg-surface-2); }
+  .pc-list td { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 6px 0; border: 0 !important; text-align: right; }
+  .pc-list td::before { content: attr(data-l); color: var(--vg-text-muted); font-size: 12px; text-align: left; flex: none; }
+  .pc-list td:first-child { text-align: left; display: block; font-size: 16px; padding-bottom: 8px; border-bottom: 1px solid var(--vg-border) !important; margin-bottom: 4px; } .pc-list td:first-child::before { content: none; }
+  .pc-list td.pc-act { display: block; padding-top: 10px; } .pc-list td.pc-act::before { content: none; } .pc-list td.pc-act .btn-secondary { width: 100%; }
+  .pc-scroll { overflow-x: visible; }
+  .pc-kpis { grid-template-columns: 1fr 1fr; }
+}

@@ -57,7 +57,7 @@
     <header class="p-top">
       <div class="p-brand"><img src="/img/logo.webp" alt="" width="34" height="34" /><div><b>VELOCITA</b><i>PARCERIAS</i></div></div>
       <div class="p-who"><span id="p-company"></span><span id="p-pill" class="p-pill"></span></div>
-      <div class="p-top-actions"><button class="btn-secondary btn-sm" id="p-notif" type="button" title="Receber avisos no celular">Avisos</button><button class="btn-secondary btn-sm" id="p-out" type="button">Sair</button></div>
+      <div class="p-top-actions"><div class="p-pop-wrap"><button class="btn-secondary btn-sm" id="p-notif" type="button" aria-haspopup="true" aria-expanded="false" title="Avisos e som">Avisos</button><div class="p-pop" id="p-notif-pop" hidden><b>Avisos e som</b><button class="btn-primary btn-sm" id="n-enable" type="button">Ativar avisos neste aparelho</button><button class="btn-secondary btn-sm" id="n-sound" type="button">Som: ligado</button><div class="p-pop-row"><button class="btn-secondary btn-sm" id="n-test-ok" type="button">Testar som da Velocita</button><button class="btn-secondary btn-sm" id="n-test-alert" type="button">Testar som de alerta</button></div><small>O som toca com o portal aberto. No celular, com o app fechado, o aviso usa o som e a vibração do aparelho.</small></div></div><button class="btn-secondary btn-sm" id="p-out" type="button">Sair</button></div>
     </header>
     <nav class="p-nav" id="p-nav" aria-label="Seções"></nav>
     <main id="p-main" class="p-main"></main>
@@ -72,6 +72,7 @@
     <div id="ai-tab-tips" class="ai-panel-body"><div id="ai-tips-list"></div></div>
     <div id="ai-tab-chat" class="ai-panel-body" style="display:none;"><div class="chat-thread" id="ai-chat-thread"></div><div class="chat-input-row"><textarea id="ai-chat-input" placeholder="Pergunte sobre as suas vendas, margem ou ordens..."></textarea><button class="btn-primary" id="ai-chat-send" type="button">Enviar</button></div></div>
   </div>
+  <script src="/js/vg-sound.js"></script>
   <script src="/parcerias/p.js"></script>
 </body>
 </html>

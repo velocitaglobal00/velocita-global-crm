@@ -16,7 +16,7 @@
     if (!r.ok) throw new Error(j.error || 'Erro na requisição');
     return j;
   }
-  let tt; function toast(t) { const el = $('p-toast'); el.textContent = t; el.classList.add('show'); clearTimeout(tt); tt = setTimeout(() => el.classList.remove('show'), 3200); }
+  let tt; function toast(t) { if (window.VGSound && /erro|não foi possível|inválid|recusad|expir|negad|pausad|demorou|falh|incorret/i.test(String(t))) window.VGSound.play('alert'); const el = $('p-toast'); el.textContent = t; el.classList.add('show'); clearTimeout(tt); tt = setTimeout(() => el.classList.remove('show'), 3200); }
 
   // ---------- carregamento + sessão ----------
   const hideSplash = () => { const s = $('vg-splash'); if (s) { s.classList.add('out'); setTimeout(() => s.remove(), 600); } };
@@ -53,7 +53,7 @@
     S.me = me; $('p-login').hidden = true; $('p-app').hidden = false; $('ai-fab').hidden = false; loadTips(); if (!me.hasPassword) askPassword(); $('p-company').textContent = me.company || me.name;
     renderNav(); go(location.hash.replace('#', '') || 'geral'); stopTimers();
     S.timers.push(setInterval(() => { if (!document.hidden) { refreshMsgs(); if (S.tab === 'geral' || S.tab === 'financeiro' || S.tab === 'vendas') loadTab(true); } }, 6000));
-    refreshMsgs();
+    refreshMsgs(); watchEvents(); S.timers.push(setInterval(() => { if (!document.hidden) watchEvents(); }, 9000));
   }
   // quem entrou pelo link ainda não tem senha: cria agora (para poder entrar de novo com matrícula e senha)
   function askPassword() {
@@ -92,7 +92,7 @@
       <div class="p-two"><div class="p-card"><h3>Vendas dos últimos 14 dias</h3><div class="bars">${s.days.map((x) => `<div title="${dt(x.day)}: ${brl(x.value)}"><i style="height:${Math.max(3, Math.round((x.value / max) * 112))}px"></i><small>${x.day.slice(8)}</small></div>`).join('')}</div></div>
       <div class="p-card"><h3>Sugestões do Velocito</h3>${d.tips.map((t) => `<div class="p-tip"><span><b>${esc(t.tag)}.</b> ${esc(t.text)}</span></div>`).join('')}</div></div>
       <div class="p-two"><div class="p-card"><h3>Produtos mais vendidos</h3>${s.top.length ? `<div class="p-scroll"><table class="p-table"><thead><tr><th>Produto</th><th>Un.</th><th>Vendido</th><th>Margem</th></tr></thead><tbody>${s.top.map((t) => `<tr><td>${esc(t.product)}</td><td>${t.qty}</td><td>${brl(t.revenue)}</td><td class="${t.margin < 20 ? 'r' : 'g'}">${t.margin}%</td></tr>`).join('')}</tbody></table></div>` : '<p style="color:#93a0ba">Ainda sem vendas registradas.</p>'}</div>
-      <div class="p-card"><h3>Últimas vendas</h3>${d.recent.length ? d.recent.map((x) => `<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-top:1px solid rgba(255,255,255,.06)"><span>${esc(x.product || 'Produto')} <small style="color:#93a0ba">${x.qty} un. · ${dt(x.date)}</small></span><b>${brl(x.value)}</b></div>`).join('') : '<p style="color:#93a0ba">Sem vendas ainda.</p>'}</div></div>
+      <div class="p-card"><h3>Últimas vendas</h3>${d.recent.length ? d.recent.map((x) => `<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-top:1px solid rgba(255,255,255,.06)"><span>${esc(x.product || 'Produto')} <small style="color:#93a0ba">${x.qty} un. · ${dt(x.date)}${x.orderNumber ? ' · pedido ' + esc(x.orderNumber) : ''}</small></span><b>${brl(x.value)}</b></div>`).join('') : '<p style="color:#93a0ba">Sem vendas ainda.</p>'}</div></div>
       ${d.links.length ? `<div class="p-card p-links"><h3>Minhas lojas e painéis</h3>${d.links.map((l) => `<a class="btn-secondary btn-sm" href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label || l.url)}</a>`).join('')}</div>` : ''}`;
   }
   function vFin() {
@@ -101,7 +101,7 @@
       <div class="p-card"><h3>Pagamentos da Velocita</h3>${pays.length ? `<div class="p-scroll"><table class="p-table"><thead><tr><th>Data</th><th>Valor</th><th>Situação</th><th>Obs.</th></tr></thead><tbody>${pays.map((x) => `<tr><td>${dt(x.date)}</td><td>${brl(x.value)}</td><td><span class="st ${x.status}">${x.status === 'recebido' ? 'Recebido' : 'Previsto'}</span></td><td>${esc(x.note)}</td></tr>`).join('')}</tbody></table></div>` : '<p style="color:#93a0ba">Nenhum pagamento lançado ainda.</p>'}</div>`;
   }
   function vVendas(v) {
-    return `<div class="p-card"><h3>Vendas</h3>${v.length ? `<div class="p-scroll"><table class="p-table"><thead><tr><th>Data</th><th>Produto</th><th>Un.</th><th>Vendido</th><th>Custo</th><th>Resultado</th></tr></thead><tbody>${v.map((x) => `<tr><td>${dt(x.date)}</td><td>${esc(x.product)}${x.channel ? ` <small style="color:#93a0ba">· ${esc(x.channel)}</small>` : ''}</td><td>${x.qty}</td><td>${brl(x.value)}</td><td>${brl(x.cost)}</td><td class="${x.value - x.cost >= 0 ? 'g' : 'r'}">${brl(x.value - x.cost)}</td></tr>`).join('')}</tbody></table></div>` : '<p style="color:#93a0ba">Nenhuma venda registrada ainda.</p>'}</div>`;
+    return `<div class="p-card"><h3>Vendas</h3>${v.length ? `<div class="p-scroll"><table class="p-table"><thead><tr><th>Data</th><th>Pedido</th><th>Produto</th><th>Un.</th><th>Vendido</th><th>Custo</th><th>Resultado</th></tr></thead><tbody>${v.map((x) => `<tr><td>${dt(x.date)}</td><td>${esc(x.orderNumber || '—')}</td><td>${esc(x.product)}${x.channel ? ` <small style="color:#93a0ba">· ${esc(x.channel)}</small>` : ''}</td><td>${x.qty}</td><td>${brl(x.value)}</td><td>${brl(x.cost)}</td><td class="${x.value - x.cost >= 0 ? 'g' : 'r'}">${brl(x.value - x.cost)}</td></tr>`).join('')}</tbody></table></div>` : '<p style="color:#93a0ba">Nenhuma venda registrada ainda.</p>'}</div>`;
   }
   const OST = { nova: 'Nova', andamento: 'Em andamento', concluida: 'Concluída', cancelada: 'Cancelada' };
   function vOrdens(v) {
@@ -110,12 +110,12 @@
   }
   function bindOrdens() { $('o-form').onsubmit = async (e) => { e.preventDefault(); try { await api('/api/p/orders', { method: 'POST', body: JSON.stringify({ items: $('o-items').value, note: $('o-note').value }) }); toast('Ordem enviada para a Velocita.'); loadTab(false); } catch (er) { toast(er.message); } }; }
   function vNotas(v) {
-    return `<div class="p-two"><div class="p-card"><h3>Enviar nota fiscal para a Velocita</h3><form class="p-form" id="n-form"><div class="p-row2"><label>Número<input id="n-num"></label><label>Tipo<select id="n-kind"><option value="produto">Produto</option><option value="servico">Serviço</option></select></label></div><div class="p-row2"><label>Valor (R$)<input id="n-val" inputmode="decimal" placeholder="0,00"></label><label>Data<input id="n-date" type="date"></label></div><label>Observação<input id="n-note"></label><label>Arquivo (PDF, XML ou imagem, até 6 MB)<input id="n-file" type="file" accept="application/pdf,text/xml,application/xml,image/png,image/jpeg,image/webp"></label><button class="btn-primary" type="submit">Enviar nota</button></form></div>
-      <div class="p-card"><h3>Notas trocadas</h3>${v.length ? v.map((n) => `<div style="padding:9px 0;border-top:1px solid rgba(255,255,255,.07)"><div style="display:flex;justify-content:space-between;gap:8px"><b>NF ${esc(n.number || '—')} · ${n.kind === 'servico' ? 'Serviço' : 'Produto'}</b><b>${brl(n.value)}</b></div><small style="color:#93a0ba">${n.from === 'partner' ? 'Enviada por você' : 'Enviada pela Velocita'} · ${dt(n.date)}${n.note ? ' · ' + esc(n.note) : ''}</small>${n.fileId ? ` · <a href="/api/p/files/${n.fileId}" target="_blank" rel="noopener">abrir arquivo</a>` : ''}</div>`).join('') : '<p style="color:#93a0ba">Nenhuma nota ainda.</p>'}</div></div>`;
+    return `<div class="p-two"><div class="p-card"><h3>Enviar nota fiscal para a Velocita</h3><form class="p-form" id="n-form"><div class="p-row2"><label>Número da nota<input id="n-num"></label><label>Tipo<select id="n-kind"><option value="produto">Produto</option><option value="servico">Serviço</option></select></label></div><div class="p-row2"><label>Valor (R$)<input id="n-val" inputmode="decimal" placeholder="0,00"></label><label>Data<input id="n-date" type="date"></label></div><label>Nº do pedido na plataforma<input id="n-order" placeholder="Ex.: 2000012345678901"><small style="color:#93a0ba">Você encontra no e-mail de venda do marketplace ou no painel do vendedor da sua loja.</small></label><label>Observação<input id="n-note"></label><label>Arquivo (PDF, XML ou imagem, até 6 MB)<input id="n-file" type="file" accept="application/pdf,text/xml,application/xml,image/png,image/jpeg,image/webp"></label><button class="btn-primary" type="submit">Enviar nota</button></form></div>
+      <div class="p-card"><h3>Notas trocadas</h3>${v.length ? v.map((n) => `<div style="padding:9px 0;border-top:1px solid rgba(255,255,255,.07)"><div style="display:flex;justify-content:space-between;gap:8px"><b>NF ${esc(n.number || '—')} · ${n.kind === 'servico' ? 'Serviço' : 'Produto'}</b><b>${brl(n.value)}</b></div><small style="color:#93a0ba">${n.from === 'partner' ? 'Enviada por você' : 'Enviada pela Velocita'} · ${dt(n.date)}${n.orderNumber ? ' · pedido ' + esc(n.orderNumber) : ''}${n.note ? ' · ' + esc(n.note) : ''}</small>${n.fileId ? ` · <a href="/api/p/files/${n.fileId}" target="_blank" rel="noopener">abrir arquivo</a>` : ''}</div>`).join('') : '<p style="color:#93a0ba">Nenhuma nota ainda.</p>'}</div></div>`;
   }
   function bindNotas() {
     $('n-form').onsubmit = async (e) => {
-      e.preventDefault(); const f = $('n-file').files[0]; const body = { number: $('n-num').value, kind: $('n-kind').value, value: $('n-val').value, date: $('n-date').value, note: $('n-note').value };
+      e.preventDefault(); const f = $('n-file').files[0]; const body = { number: $('n-num').value, orderNumber: $('n-order').value, kind: $('n-kind').value, value: $('n-val').value, date: $('n-date').value, note: $('n-note').value };
       try {
         if (f) { if (f.size > 6 * 1024 * 1024) return toast('O arquivo precisa ter até 6 MB.'); body.mime = f.type || (/\.xml$/i.test(f.name) ? 'text/xml' : ''); body.name = f.name; body.dataBase64 = await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = no; r.readAsDataURL(f); }); }
         await api('/api/p/invoices', { method: 'POST', body: JSON.stringify(body) }); toast('Nota enviada.'); loadTab(false);
@@ -128,7 +128,7 @@
   async function refreshMsgs(markRead) {
     try {
       const r = await api('/api/p/messages'); const fresh = r.messages.filter((m) => m.from === 'velocita' && m.at > (S.lastMsg || '9')).length;
-      if (S.lastMsg && fresh && S.tab !== 'chat') toast('Nova mensagem da Velocita.');
+      if (S.lastMsg && fresh) { window.VGSound.play('ok'); if (S.tab !== 'chat') toast('Nova mensagem da Velocita.'); }
       S.msgs = r.messages; S.lastMsg = (r.messages.filter((m) => m.from === 'velocita').pop() || {}).at || S.lastMsg; S.unread = r.unread;
       if (S.tab === 'chat') { drawMsgs(); if (r.unread || markRead) { await api('/api/p/messages/read', { method: 'POST' }); S.unread = 0; } }
       renderNav();
@@ -171,16 +171,27 @@
     const set = async (on, reason) => { try { await api('/api/p/pause', { method: 'POST', body: JSON.stringify({ on, reason }) }); toast(on ? 'Operação pausada. A Velocita foi avisada.' : 'Operação retomada.'); loadTab(false); } catch (er) { toast(er.message); } };
     if ($('op-resume')) $('op-resume').onclick = () => set(false); if ($('op-form')) $('op-form').onsubmit = (e) => { e.preventDefault(); if (confirm('Pausar a operação? A Velocita será avisada.')) set(true, $('op-reason').value); };
   }
-  // ---------- avisos no celular ----------
-  $('p-notif').addEventListener('click', async () => {
+  // ---------- avisos e som ----------
+  async function enablePush() {
     try {
-      if (!('serviceWorker' in navigator) || !('PushManager' in window)) return toast('Para receber avisos no iPhone, instale o app: Compartilhar › Adicionar à Tela de Início.');
+      if (!('serviceWorker' in navigator) || !('PushManager' in window)) return toast('Para receber avisos no iPhone, instale o app: Compartilhar, depois Adicionar à Tela de Início.');
       const perm = await Notification.requestPermission(); if (perm !== 'granted') return toast('Permissão negada. Libere as notificações nas configurações do navegador.');
       const reg = await navigator.serviceWorker.ready; const { publicKey } = await api('/api/p/push/key');
       const b64 = publicKey.replace(/-/g, '+').replace(/_/g, '/'); const raw = atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4)); const key = Uint8Array.from(raw, (c) => c.charCodeAt(0));
       const sub = (await reg.pushManager.getSubscription()) || (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key }));
-      await api('/api/p/push/subscribe', { method: 'POST', body: JSON.stringify({ subscription: sub.toJSON() }) }); toast('Avisos ativados neste aparelho.');
+      await api('/api/p/push/subscribe', { method: 'POST', body: JSON.stringify({ subscription: sub.toJSON() }) }); window.VGSound.play('ok'); toast('Avisos ativados neste aparelho.');
     } catch (e) { toast('Não foi possível ativar os avisos: ' + e.message); }
-  });
+  }
+  const soundLabel = () => { $('n-sound').textContent = window.VGSound.enabled() ? 'Som: ligado' : 'Som: desligado'; };
+  $('p-notif').addEventListener('click', (e) => { e.stopPropagation(); const pop = $('p-notif-pop'); pop.hidden = !pop.hidden; $('p-notif').setAttribute('aria-expanded', String(!pop.hidden)); soundLabel(); });
+  document.addEventListener('click', (e) => { if (!e.target.closest('.p-pop-wrap')) { $('p-notif-pop').hidden = true; } });
+  $('n-enable').addEventListener('click', enablePush);
+  $('n-sound').addEventListener('click', () => { window.VGSound.setEnabled(!window.VGSound.enabled()); soundLabel(); if (window.VGSound.enabled()) window.VGSound.play('ok'); });
+  $('n-test-ok').addEventListener('click', () => window.VGSound.play('ok', { force: true }));
+  $('n-test-alert').addEventListener('click', () => window.VGSound.play('alert', { force: true }));
+  // eventos em tempo real com o portal aberto: venda ou pagamento novos tocam o som da Velocita
+  async function watchEvents() {
+    try { const d = await api('/api/p/dashboard'); const k = `${(d.recent[0] || {}).id || ''}|${(d.payouts[0] || {}).id || ''}|${d.paused.on}`; if (S.evKey && S.evKey !== k) { const was = S.evKey.endsWith('true'); window.VGSound.play(d.paused.on && !was ? 'alert' : 'ok'); } S.evKey = k; } catch (e) { /* offline */ }
+  }
   boot();
 })();

@@ -30,16 +30,19 @@ self.addEventListener('push', (event) => {
   } catch (e) {
     data = { title: 'Velocita Global', body: event.data ? event.data.text() : '' };
   }
-  event.waitUntil(
+  event.waitUntil(Promise.all([
     self.registration.showNotification(data.title || 'Velocita Global', {
       body: data.body || '',
       icon: '/img/icon-192.png',
       badge: '/img/badge-72.png',
       tag: data.tag,
       renotify: !!data.tag,
+      vibrate: data.tone === 'alert' ? [420, 140, 420] : [90, 50, 90, 50, 200],
+      silent: false,
       data: { url: data.url || '/app' }
-    })
-  );
+    }),
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((ws) => ws.forEach((w) => w.postMessage({ type: 'vg-sound', tone: data.tone || 'ok' })))
+  ]));
 });
 
 self.addEventListener('notificationclick', (event) => {

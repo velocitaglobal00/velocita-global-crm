@@ -101,20 +101,20 @@ function register(app, { db, requireAuth, newId, team, jwt, authSecret, vapidKey
   const adm = (req, res, next) => (team.isAdminLike(req.user) ? next() : res.status(403).json({ error: 'Somente administradores.' }));
   // ---------- notificações ----------
   const pushKeys = () => { const k = vapidKeys(db.view()); webpush.setVapidDetails('mailto:velocitaglobal@gmail.com', k.publicKey, k.privateKey); };
-  function pushPartner(partnerId, { title, body, url, tag }) { // celular do parceiro
+  function pushPartner(partnerId, { title, body, url, tag, tone }) { // celular do parceiro
     const data = db.view(); const subs = (data.partnerPush || []).filter((s) => s.partnerId === partnerId); if (!subs.length) return;
-    pushKeys(); const payload = JSON.stringify({ title, body: str(body, 240), url: url || '/parcerias/', tag });
+    pushKeys(); const payload = JSON.stringify({ title, body: str(body, 240), url: url || '/parcerias/', tag, tone: tone || 'ok' });
     setImmediate(async () => {
       const dead = []; await Promise.all(subs.map((s) => webpush.sendNotification(s.subscription, payload, { TTL: 86400 }).catch((e) => { if (e.statusCode === 404 || e.statusCode === 410) dead.push(s.subscription.endpoint); })));
       if (dead.length) { const d = db.read(); d.partnerPush = (d.partnerPush || []).filter((s) => !dead.includes(s.subscription.endpoint)); db.write(d); }
     });
   }
-  function pushVelocita(p, { title, body, tag }) { // celular da equipe Velocita (reaproveita as inscrições do CRM)
+  function pushVelocita(p, { title, body, tag, tone }) { // celular da equipe Velocita (reaproveita as inscrições do CRM)
     const data = db.view(); const subs = (data.pushSubscriptions || []); if (!subs.length) return;
-    pushKeys(); const payload = JSON.stringify({ title, body: str(body, 240), url: '/app#parcerias', tag });
+    pushKeys(); const payload = JSON.stringify({ title, body: str(body, 240), url: '/app#parcerias', tag, tone: tone || 'ok' });
     setImmediate(() => subs.forEach((s) => webpush.sendNotification(s.subscription, payload, { TTL: 86400 }).catch(() => {})));
   }
-  const notifyTeam = (p, what, tag) => pushVelocita(p, { title: `Parceria · ${p.company || p.name}`, body: what, tag: tag || `parc-${p.id}` });
+  const notifyTeam = (p, what, tag, tone) => pushVelocita(p, { title: `Parceria · ${p.company || p.name}`, body: what, tag: tag || `parc-${p.id}`, tone });
 
   // ---------- visão calculada (usada pelo portal e pelo CRM) ----------
   function summary(p) {
@@ -219,6 +219,7 @@ function register(app, { db, requireAuth, newId, team, jwt, authSecret, vapidKey
     const data = db.read(); const p = byId(data, req.params.id); const c = p && p.connections.find((x) => x.id === req.params.cid); if (!c) return res.json(out);
     if (newFields) c.enc = encJson(authSecret, newFields); c.lastTestAt = now; c.status = out.ok ? 'conectada' : out.pending ? 'pendente' : 'erro'; c.statusMsg = out.message; if (out.ok) { c.info = out.info; c.metrics = out.metrics; }
     p.audit.push({ at: now, by: (req.user && req.user.name) || '', what: `Teste de conexão (${P.name}): ${out.ok ? 'ok' : out.pending ? 'pendente' : 'falhou'}` }); db.write(data); res.json({ ...out, connection: connView(c, true) });
+    if (!out.ok && !out.pending) notifyTeam(p, `Conexão ${P.name} com erro: ${out.message}`, `cx-${c.id}`, 'alert');
   });
   // trocar a matrícula: só a pedido do parceiro, confirmando com a senha ou o Face ID de quem está trocando
   const swaps = new Map();
@@ -239,19 +240,19 @@ function register(app, { db, requireAuth, newId, team, jwt, authSecret, vapidKey
       const data = db.read(); const p = byId(data, req.params.id); if (!p) return res.status(404).json({ error: 'Parceiro não encontrado' });
       const it = makeItem(req.body || {}); it.id = newId('pi'); p[key].push(it); if (p[key].length > 3000) p[key] = p[key].slice(-3000);
       db.write(data); res.status(201).json(it);
-      if (key === 'sales') pushPartner(p.id, { title: 'Nova venda', body: `${it.product || 'Produto'} · ${it.qty} un. · R$ ${num(it.value).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, tag: 'venda' });
+      if (key === 'sales') pushPartner(p.id, { title: 'Nova venda', body: `${it.product || 'Produto'} · ${it.qty} un.${it.orderNumber ? ' · pedido ' + it.orderNumber : ''} · R$ ${num(it.value).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, tag: 'venda' });
       if (key === 'payouts') pushPartner(p.id, { title: it.status === 'recebido' ? 'Pagamento realizado' : 'Pagamento previsto', body: `R$ ${num(it.value).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}${it.note ? ' · ' + it.note : ''}`, tag: 'pagamento' });
     });
     app.delete(`/api/parcerias/:id/${key}/:iid`, requireAuth, adm, (req, res) => { const data = db.read(); const p = byId(data, req.params.id); if (!p) return res.status(404).json({ error: 'Parceiro não encontrado' }); p[key] = p[key].filter((x) => x.id !== req.params.iid); db.write(data); res.json({ ok: true }); });
   };
-  sub('sales', (b) => ({ date: okDate(b.date), product: str(b.product, 120), sku: str(b.sku, 40), qty: Math.max(1, Math.round(num(b.qty) || 1)), value: r2(num(b.value)), cost: r2(num(b.cost)), channel: str(b.channel, 40) }));
+  sub('sales', (b) => ({ date: okDate(b.date), orderNumber: str(b.orderNumber, 60), product: str(b.product, 120), sku: str(b.sku, 40), qty: Math.max(1, Math.round(num(b.qty) || 1)), value: r2(num(b.value)), cost: r2(num(b.cost)), channel: str(b.channel, 40) }));
   sub('payouts', (b) => ({ date: okDate(b.date), value: r2(num(b.value)), status: b.status === 'recebido' ? 'recebido' : 'previsto', note: str(b.note, 160) }));
   sub('links', (b) => ({ label: str(b.label, 60), url: /^https?:\/\//i.test(b.url || '') ? str(b.url, 500) : '' }));
   app.put('/api/parcerias/:id/payouts/:iid', requireAuth, adm, (req, res) => { const data = db.read(); const p = byId(data, req.params.id); const x = p && p.payouts.find((y) => y.id === req.params.iid); if (!x) return res.status(404).json({ error: 'Não encontrado' }); if (req.body.status) x.status = req.body.status === 'recebido' ? 'recebido' : 'previsto'; db.write(data); if (x.status === 'recebido') pushPartner(p.id, { title: 'Pagamento realizado', body: `R$ ${num(x.value).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, tag: 'pagamento' }); res.json(x); });
   app.put('/api/parcerias/:id/orders/:oid', requireAuth, adm, (req, res) => {
     const data = db.read(); const p = byId(data, req.params.id); const o = p && p.orders.find((y) => y.id === req.params.oid); if (!o) return res.status(404).json({ error: 'Ordem não encontrada' });
     if (['nova', 'andamento', 'concluida', 'cancelada'].includes(req.body.status)) o.status = req.body.status; db.write(data); res.json(o);
-    pushPartner(p.id, { title: 'Ordem atualizada', body: `Ordem #${o.number}: ${({ nova: 'nova', andamento: 'em andamento', concluida: 'concluída', cancelada: 'cancelada' })[o.status]}`, tag: `ordem-${o.id}` });
+    pushPartner(p.id, { title: 'Ordem atualizada', body: `Ordem #${o.number}: ${({ nova: 'nova', andamento: 'em andamento', concluida: 'concluída', cancelada: 'cancelada' })[o.status]}`, tag: `ordem-${o.id}`, tone: o.status === 'cancelada' ? 'alert' : 'ok' });
   });
   app.post('/api/parcerias/:id/messages', requireAuth, (req, res) => { // resposta da Velocita no chat
     const data = db.read(); const p = byId(data, req.params.id); if (!p) return res.status(404).json({ error: 'Parceiro não encontrado' }); const text = str(req.body.text, 2000); if (!text) return res.status(400).json({ error: 'Mensagem vazia' });
@@ -272,7 +273,7 @@ function register(app, { db, requireAuth, newId, team, jwt, authSecret, vapidKey
       const buf = Buffer.from(String(b.dataBase64), 'base64'); if (!buf.length || buf.length > 6 * 1024 * 1024) return { error: 'O arquivo precisa ter até 6 MB.' };
       fileId = newId('f'); await db.putFile(fileId, mime, buf); fileName = str(b.name, 100) || ('nota.' + ALLOWED[mime]);
     }
-    return { id: newId('nf'), from, by: str(who, 80), number: str(b.number, 40), kind: b.kind === 'servico' ? 'servico' : 'produto', value: r2(num(b.value)), date: okDate(b.date), note: str(b.note, 200), fileId, fileName, at: new Date().toISOString() };
+    return { id: newId('nf'), from, by: str(who, 80), number: str(b.number, 40), orderNumber: str(b.orderNumber, 60), kind: b.kind === 'servico' ? 'servico' : 'produto', value: r2(num(b.value)), date: okDate(b.date), note: str(b.note, 200), fileId, fileName, at: new Date().toISOString() };
   }
   async function fileOut(req, res, partner) {
     const f = await db.getFile(req.params.id).catch(() => null); const owner = list(db.view()).find((p) => p.invoices.some((i) => i.fileId === req.params.id));
@@ -345,7 +346,7 @@ function register(app, { db, requireAuth, newId, team, jwt, authSecret, vapidKey
   });
   app.post('/api/p/pause', pAuth, (req, res) => {
     const data = db.read(); const p = byId(data, req.partnerId); const on = !!(req.body || {}).on; p.paused = { on, reason: on ? str(req.body.reason, 300) : '', at: new Date().toISOString() }; if (p.status !== 'encerrada') p.status = on ? 'pausada' : 'ativa';
-    db.write(data); res.json(p.paused); notifyTeam(p, on ? `Operação PAUSADA pelo parceiro${p.paused.reason ? ': ' + p.paused.reason : ''}.` : 'Operação RETOMADA pelo parceiro.', 'pausa');
+    db.write(data); res.json(p.paused); notifyTeam(p, on ? `Operação PAUSADA pelo parceiro${p.paused.reason ? ': ' + p.paused.reason : ''}.` : 'Operação RETOMADA pelo parceiro.', 'pausa', on ? 'alert' : 'ok');
   });
   app.get('/api/p/messages', pAuth, (req, res) => { const since = req.query.since || ''; const p = req.partner; res.json({ messages: p.messages.filter((m) => !since || m.at > since).slice(-200), unread: p.messages.filter((m) => m.from === 'velocita' && !m.read).length }); });
   app.post('/api/p/messages', pAuth, (req, res) => {
@@ -359,7 +360,7 @@ function register(app, { db, requireAuth, newId, team, jwt, authSecret, vapidKey
   });
   app.get('/api/p/invoices', pAuth, (req, res) => res.json(req.partner.invoices.slice().reverse()));
   app.post('/api/p/invoices', pAuth, async (req, res) => {
-    try { const inv = await saveInvoice(req.body || {}, 'partner', req.partner.company || req.partner.name); if (inv.error) return res.status(400).json(inv); const data = db.read(); const p = byId(data, req.partnerId); p.invoices.push(inv); db.write(data); res.status(201).json(inv); notifyTeam(p, `Nota fiscal ${inv.number || ''} (${inv.kind === 'servico' ? 'serviço' : 'produto'}) · R$ ${inv.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 'nf'); }
+    try { const inv = await saveInvoice(req.body || {}, 'partner', req.partner.company || req.partner.name); if (inv.error) return res.status(400).json(inv); const data = db.read(); const p = byId(data, req.partnerId); p.invoices.push(inv); db.write(data); res.status(201).json(inv); notifyTeam(p, `Nota fiscal ${inv.number || ''} (${inv.kind === 'servico' ? 'serviço' : 'produto'})${inv.orderNumber ? ' · pedido ' + inv.orderNumber : ''} · R$ ${inv.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 'nf'); }
     catch (e) { res.status(500).json({ error: 'Não foi possível salvar.' }); }
   });
   app.get('/api/p/files/:id', pAuth, (req, res) => fileOut(req, res, req.partner));
