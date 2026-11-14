@@ -10,13 +10,15 @@
   const toast = (t) => window.showToast && window.showToast(t);
   const P = { list: [], open: null, timer: null, canEdit: false };
   P.base = location.origin; // endereço público do CRM (vem do servidor): os links e e-mails usam sempre o domínio próprio, nunca o do Render
-  const PORTAL = () => `${P.base}/parcerias/`;
+  P.portal = ''; // endereço da tela do portal hospedada fora do CRM (ex.: parcerias.velocitaglobal.com.br); vazio = usa o do CRM
+  const PORTAL = () => (P.portal ? `${P.portal}/` : `${P.base}/parcerias/`);
+  const isAuto = (link) => /[?&]t=|\/p\//.test(String(link));
   const ST = { pendente: 'Aguardando contrato', ativa: 'Ativa', pausada: 'Pausada', encerrada: 'Encerrada' };
   P.filter = 'ativas';
 
   window.initParcerias = async function () {
     P.canEdit = !!(window.state && window.state.me && ['matriz', 'admin'].includes(window.state.me.role));
-    try { const c = await api('/api/parcerias/config'); if (c.publicUrl) P.base = c.publicUrl.replace(/\/$/, ''); } catch (e) { /* usa o endereço atual */ }
+    try { const c = await api('/api/parcerias/config'); if (c.publicUrl) P.base = c.publicUrl.replace(/\/$/, ''); if (c.portalUrl) P.portal = c.portalUrl.replace(/\/$/, ''); } catch (e) { /* usa o endereço atual */ }
     clearInterval(P.timer);
     P.timer = setInterval(() => { const v = $('view-parcerias'); if (v && v.classList.contains('active') && !document.hidden && !document.activeElement.matches('input,textarea,select')) refresh(true); }, 8000);
     await refresh(false);
@@ -104,6 +106,18 @@
 </table><div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#9ca3af;margin-top:12px;max-width:600px">Você recebeu este e-mail porque a Velocita Global liberou o seu acesso ao Portal de Parcerias.</div></td></tr></table></body></html>`;
   }
 
+  // "Ver como parceiro": janela dentro do CRM com o portal do parceiro funcionando normalmente (modo equipe), por 1 hora
+  async function viewAs(p) {
+    try { await api(`/api/parcerias/${p.id}/view-as`, { method: 'POST' }); } catch (er) { toast(er.message); return; }
+    document.getElementById('pc-view')?.remove();
+    const el = document.createElement('div'); el.id = 'pc-view'; el.className = 'pc-pop pc-view';
+    el.innerHTML = `<div class="pc-view-box" role="dialog" aria-modal="true" aria-label="Portal do parceiro"><div class="pc-head" style="margin:0;padding:10px 14px"><h3 style="margin:0">Portal de ${esc(p.company || p.name)} <small class="mt-note">modo equipe</small> <button type="button" class="p-q-crm" id="pv-help" title="Ajuda" aria-label="Ajuda">?</button></h3><button class="btn-secondary btn-sm" id="pv-close">Fechar</button></div><div class="pc-help" id="pv-helpbox" hidden><b>Ver como parceiro</b><p>É o portal do parceiro funcionando normalmente, no seu domínio, por 1 hora. Você pode usar tudo como ele (ordens, notas, chat, pausa). Cada ação fica registrada no histórico dele, o "último acesso" do parceiro não muda e não toca som nem manda aviso para o seu aparelho.</p></div><iframe id="pv-frame" title="Portal do parceiro" src="${P.portal ? P.portal + '/' : location.origin + '/parcerias/'}"></iframe></div>`;
+    document.body.appendChild(el);
+    const close = () => { el.remove(); fetch('/api/p/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => {}); document.removeEventListener('keydown', onKey); };
+    const onKey = (e) => { if (e.key === 'Escape') close(); };
+    $('pv-close').onclick = close; $('pv-help').onclick = () => { $('pv-helpbox').hidden = !$('pv-helpbox').hidden; }; el.addEventListener('click', (e) => { if (e.target === el) close(); }); document.addEventListener('keydown', onKey);
+  }
+
   // Botão "?" com ajuda dentro de cada popup/painel de Parcerias
   const helpBox = (id, html) => `<button type="button" class="p-q-crm" data-hq="${id}" title="Ajuda" aria-label="Ajuda">?</button><div class="pc-help" id="hq-${id}" hidden>${html}</div>`;
   const bindHelp = (root) => root.querySelectorAll('[data-hq]').forEach((b) => { b.onclick = () => { const bx = root.querySelector('#hq-' + b.dataset.hq); bx.hidden = !bx.hidden; }; });
@@ -130,14 +144,14 @@
         <div class="pc-actions"><button class="btn-secondary btn-sm" id="pp-prev">Pré-visualizar e-mail</button><button class="btn-primary btn-sm" id="pp-send">Enviar e-mail agora</button></div><iframe id="pp-frame" title="Pré-visualização do e-mail" style="display:none;width:100%;height:520px;border:1px solid var(--vg-border);border-radius:10px;margin-top:8px;background:#fff"></iframe></div></div>`;
     document.body.appendChild(el); bindHelp(el);
     const text = () => $('pp-msg').value; const num = String(p.phone || '').replace(/\D/g, ''); const wa = num ? `https://wa.me/${num.length <= 11 ? '55' + num : num}` : 'https://wa.me/';
-    const sync = () => { $('pp-wa').href = `${wa}?text=${encodeURIComponent(text())}`; if ($('pp-frame').style.display !== 'none') $('pp-frame').srcdoc = inviteEmailHtml(p, $('pp-link').value, $('pp-link').value.includes('/p/')); };
+    const sync = () => { $('pp-wa').href = `${wa}?text=${encodeURIComponent(text())}`; if ($('pp-frame').style.display !== 'none') $('pp-frame').srcdoc = inviteEmailHtml(p, $('pp-link').value, isAuto($('pp-link').value)); };
     sync(); $('pp-msg').addEventListener('input', sync);
     // "Link que já entra logado": uso único, 7 dias; deixa o parceiro logado no computador/celular dele
     const swap = (from, to) => { $('pp-msg').value = $('pp-msg').value.split(from).join(to); sync(); };
     $('pp-m1').onclick = () => { $('pp-m1').classList.add('pc-on'); $('pp-m2').classList.remove('pc-on'); const cur = $('pp-link').value; if (cur !== link) { swap(cur, link); $('pp-link').value = link; } $('pp-hint').textContent = 'Abre o portal com a matrícula preenchida. O parceiro entra com a senha dele.'; };
     $('pp-m2').onclick = async () => {
       try {
-        const r = await api(`/api/parcerias/${p.id}/magic-link`, { method: 'POST' }); const auto = `${P.base}/p/${r.token}`; const cur = $('pp-link').value;
+        const r = await api(`/api/parcerias/${p.id}/magic-link`, { method: 'POST' }); const auto = P.portal ? `${P.portal}/?t=${r.token}` : `${P.base}/p/${r.token}`; const cur = $('pp-link').value;
         $('pp-m2').classList.add('pc-on'); $('pp-m1').classList.remove('pc-on'); swap(cur, auto); $('pp-link').value = auto;
         $('pp-msg').value = $('pp-msg').value.replace(/(No primeiro acesso|Entre com a matrícula)[^\n]*/, 'Ao abrir o link, você já entra logado neste aparelho.' + (p.activated ? '' : ' Ele vai pedir para você criar uma senha.')); sync();
         $('pp-hint').innerHTML = `Uso único, válido até <b>${dt(r.expiresAt)}</b>. Quem abrir o link entra logado nesse aparelho (30 dias, renova com o uso). <b>Envie só para o parceiro.</b>`;
@@ -149,7 +163,7 @@
       const to = $('pp-to').value.trim(); if (!/^\S+@\S+\.\S+$/.test(to)) return toast('Informe um e-mail válido do fornecedor.');
       if (!window.confirm(`Enviar o e-mail de acesso para ${to}?`)) return; const b = $('pp-send'); b.disabled = true; b.textContent = 'Enviando...';
       try {
-        const link = $('pp-link').value; await api('/api/mail/gmail/send', { method: 'POST', body: JSON.stringify({ to, subject: $('pp-subj').value, html: inviteEmailHtml(p, link, link.includes('/p/')), noSignature: true, fromName: 'Equipe Velocita Global LTDA', attendantId: (window.state && window.state.attendantId) || null }) });
+        const link = $('pp-link').value; await api('/api/mail/gmail/send', { method: 'POST', body: JSON.stringify({ to, subject: $('pp-subj').value, html: inviteEmailHtml(p, link, isAuto(link)), noSignature: true, fromName: 'Equipe Velocita Global LTDA', attendantId: (window.state && window.state.attendantId) || null }) });
         toast('E-mail enviado para ' + to + '.'); b.textContent = 'E-mail enviado';
       } catch (er) { toast(er.code === 'GOOGLE_RECONNECT' || /conect/i.test(er.message) ? 'Conecte o Gmail da caixa compartilhada em E-mail (Reconectar Google) e tente de novo.' : er.message); b.disabled = false; b.textContent = 'Enviar e-mail agora'; }
     };
@@ -166,7 +180,7 @@
         <p class="mt-note">Entregue ao parceiro o endereço <b>${esc(PORTAL())}</b> e a matrícula. No primeiro acesso ele informa a matrícula${p.email ? ' e o e-mail do contrato' : ''} e cria a própria senha. Último acesso: ${p.lastSeen ? hm(p.lastSeen) : 'nunca'}.</p>
         ${p.activated ? `<p style="margin:6px 0">Senha do parceiro: <b id="d-pw" style="font-family:monospace;font-size:16px">••••••</b> <button class="btn-secondary btn-sm" id="d-showpw">Mostrar</button></p>` : ''}
         ${e ? `<div class="pc-actions"><label style="display:flex;gap:6px;align-items:center">Situação <select id="d-status"><option value="pendente">Aguardando contrato</option><option value="ativa">Ativa (contrato assinado)</option><option value="pausada">Pausada</option><option value="encerrada">Encerrada (derruba o acesso)</option></select></label><label style="display:flex;gap:6px;align-items:center">Comissão da Velocita (%) <input id="d-pct" type="number" min="0" max="100" step="0.5" value="${p.commissionPct}" style="width:90px"></label><button class="btn-secondary btn-sm" id="d-savepct">Salvar comissão</button></div>
-        <div class="pc-actions"><button class="btn-primary btn-sm" id="d-invite">Gerar link de acesso</button><button class="btn-secondary btn-sm" id="d-reset">Apagar senha (parceiro cria outra)</button><button class="btn-secondary btn-sm" id="d-swap">Trocar matrícula</button><button class="btn-secondary btn-sm" id="d-del">Excluir parceria</button></div><div id="d-swapbox"></div>` : ''}
+        <div class="pc-actions"><button class="btn-primary btn-sm" id="d-invite">Gerar link de acesso</button><button class="btn-secondary btn-sm" id="d-view">Ver como parceiro</button><button class="btn-secondary btn-sm" id="d-reset">Apagar senha (parceiro cria outra)</button><button class="btn-secondary btn-sm" id="d-swap">Trocar matrícula</button><button class="btn-secondary btn-sm" id="d-del">Excluir parceria</button></div><div id="d-swapbox"></div>` : ''}
         ${(p.audit || []).length ? `<details style="margin-top:8px"><summary class="mt-note">Histórico de acessos e trocas</summary>${p.audit.slice().reverse().map((x) => `<p class="mt-note" style="margin:2px 0">${hm(x.at)} · ${esc(x.by)} · ${esc(x.what)}</p>`).join('')}</details>` : ''}`)}
       <div class="pc-kpis"><div class="mt-card pc-k"><span>Vendido no mês</span><b>${brl(s.month.revenue)}</b></div><div class="mt-card pc-k"><span>Custos no mês</span><b>${brl(s.month.cost)}</b></div><div class="mt-card pc-k"><span>Resultado do mês</span><b class="${s.month.profit >= 0 ? 'oc-g' : 'oc-r'}">${brl(s.month.profit)}</b></div><div class="mt-card pc-k"><span>Comissão Velocita (${p.commissionPct}%)</span><b class="oc-g">${brl(s.month.commission)}</b></div><div class="mt-card pc-k"><span>A pagar ao parceiro</span><b>${brl(s.toReceive)}</b></div></div>
       <div id="d-conn"></div>
@@ -186,6 +200,7 @@
     if ($('d-showpw')) $('d-showpw').onclick = async () => { try { const r = await api(`/api/parcerias/${p.id}/password`); $('d-pw').textContent = r.password || r.note || '—'; $('d-showpw').style.display = 'none'; } catch (er) { toast(er.message); } };
     if ($('d-swap')) $('d-swap').onclick = () => swapBox(p);
     if ($('d-invite')) $('d-invite').onclick = () => invitePop(p);
+    if ($('d-view')) $('d-view').onclick = () => viewAs(p);
     act('d-del', async () => { if (!confirm('Excluir esta parceria e todos os dados dela? Não dá para desfazer.')) return; await api(`/api/parcerias/${p.id}`, { method: 'DELETE' }); P.open = null; P.cur = null; });
     act('d-send', async () => { const t = $('d-msg').value.trim(); if (!t) return; await post('messages', { text: t }); });
     act('s-add', async () => { await post('sales', { orderNumber: $('s-order').value, product: $('s-prod').value, qty: $('s-qty').value, value: $('s-val').value, cost: $('s-cost').value, date: $('s-date').value }); toast('Venda lançada. O parceiro foi avisado.'); });

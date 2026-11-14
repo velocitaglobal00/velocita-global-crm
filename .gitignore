@@ -17,3 +17,5 @@ backups/
 /ops*_section.html
 /patch_*.py
 /serve-site.js
+
+/dist-parcerias/

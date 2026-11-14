@@ -2,7 +2,7 @@
 // A "casca" do portal (tela, estilos, scripts, ícones) fica guardada no aparelho: o app abre na hora com a tela da Velocita,
 // mesmo que o servidor esteja dormindo (plano gratuito do Render leva até 1 minuto para acordar). Os dados (/api) sempre vêm da rede.
 const SHELL = 'vgp-shell-v1';
-const ASSETS = ['/parcerias/', '/parcerias/p.css', '/parcerias/p.js', '/css/style.css', '/css/tema-v2.css', '/js/vg-sound.js', '/parcerias/icons/icon-192.png', '/img/logo.webp', '/img/mascot/01_neutro.png'];
+const ASSETS = ['/parcerias/', '/config.js', '/parcerias/p.css', '/parcerias/p.js', '/css/style.css', '/css/tema-v2.css', '/js/vg-sound.js', '/parcerias/icons/icon-192.png', '/img/logo.webp', '/img/mascot/01_neutro.png'];
 self.addEventListener('install', (e) => e.waitUntil(caches.open(SHELL).then((c) => Promise.all(ASSETS.map((u) => c.add(new Request(u, { cache: 'reload' })).catch(() => {})))).then(() => self.skipWaiting())));
 self.addEventListener('activate', (e) => e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== SHELL).map((k) => caches.delete(k)))).then(() => self.clients.claim())));
 self.addEventListener('fetch', (event) => {

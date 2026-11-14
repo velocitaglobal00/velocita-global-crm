@@ -9,8 +9,10 @@
   const S = { me: null, tab: 'geral', dash: null, msgs: [], unread: 0, lastMsg: '', timers: [] };
   const TABS = [['geral', 'Visão geral'], ['vendas', 'Vendas'], ['financeiro', 'Financeiro'], ['ordens', 'Ordens'], ['notas', 'Notas fiscais'], ['chat', 'Chat'], ['sugestoes', 'Sugestões'], ['operacao', 'Operação'], ['ajuda', 'Ajuda']];
 
+  // Hospedagem estática (parcerias.velocitaglobal.com.br): a tela fica numa hospedagem que não dorme e fala com a API do CRM (config.js define VG_API_BASE)
+  const API = String(window.VG_API_BASE || '').replace(/\/$/, '');
   async function api(url, opt = {}) {
-    const r = await fetch(url, { headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', ...opt });
+    const r = await fetch(API + url, { headers: { 'Content-Type': 'application/json' }, credentials: API ? 'include' : 'same-origin', ...opt });
     const j = await r.json().catch(() => ({}));
     if (r.status === 401 && S.me) { S.me = null; showLogin(); throw new Error('Sessão encerrada'); }
     if (!r.ok) throw new Error(j.error || 'Erro na requisição');
@@ -28,7 +30,7 @@
     try { me = await api('/api/p/me'); } catch (e) { /* não logado */ }
     clearTimeout(slow);
     setTimeout(() => { me ? showApp(me) : showLogin(); if (!me && magicErr) { $('p-err').textContent = magicErr; $('p-err').classList.add('show'); } hideSplash(); }, Math.max(0, 1700 - (Date.now() - t0)));
-    if ('serviceWorker' in navigator) { const sub = /^parcerias\./i.test(location.hostname); navigator.serviceWorker.register('/parcerias/sw.js', { scope: sub ? '/' : '/parcerias/' }).catch(() => {}); }
+    if ('serviceWorker' in navigator) { const sub = /^parcerias\./i.test(location.hostname); navigator.serviceWorker.register(API ? '/sw.js' : '/parcerias/sw.js', { scope: API || sub ? '/' : '/parcerias/' }).catch(() => {}); }
   }
 
   // ---------- login ----------
@@ -53,10 +55,16 @@
 
   // ---------- app ----------
   function showApp(me) {
-    S.me = me; $('p-login').hidden = true; $('p-app').hidden = false; $('ai-fab').hidden = false; loadTips(); if (!me.hasPassword) askPassword(); $('p-company').textContent = me.company || me.name;
+    S.me = me; $('p-login').hidden = true; $('p-app').hidden = false; $('ai-fab').hidden = false; loadTips(); if (me.staff) staffMode(); else if (!me.hasPassword) askPassword(); $('p-company').textContent = me.company || me.name;
     renderNav(); go(location.hash.replace('#', '') || 'geral'); stopTimers();
     S.timers.push(setInterval(() => { if (!document.hidden) { refreshMsgs(); if (S.tab === 'geral' || S.tab === 'financeiro' || S.tab === 'vendas') loadTab(true); } }, 6000));
     refreshMsgs(); watchEvents(); S.timers.push(setInterval(() => { if (!document.hidden) watchEvents(); }, 9000));
+  }
+  // Equipe Velocita usando o portal como o parceiro (janela dentro do CRM): funciona igual, mas sem som, sem avisos no aparelho e com cada ação registrada
+  function staffMode() {
+    window.VGSound = { play() {}, enabled() { return false; }, setEnabled() {} };
+    $('p-out').hidden = true; $('p-notif').closest('.p-pop-wrap').hidden = true;
+    if ($('p-ro')) return; const b = document.createElement('div'); b.id = 'p-ro'; b.className = 'p-card p-pause'; b.style.margin = '12px 0'; b.innerHTML = '<b>Modo equipe.</b> Você está usando o portal como o parceiro. Tudo funciona normalmente e cada ação fica registrada no histórico dele.'; $('p-app').insertBefore(b, $('p-nav'));
   }
   // quem entrou pelo link ainda não tem senha: cria agora (para poder entrar de novo com matrícula e senha)
   function askPassword() {
@@ -125,7 +133,7 @@
   function bindOrdens() { $('o-form').onsubmit = async (e) => { e.preventDefault(); try { await api('/api/p/orders', { method: 'POST', body: JSON.stringify({ items: $('o-items').value, note: $('o-note').value }) }); toast('Ordem enviada para a Velocita.'); loadTab(false); } catch (er) { toast(er.message); } }; }
   function vNotas(v) {
     return `<div class="p-two"><div class="p-card"><h3>Enviar nota fiscal para a Velocita</h3><form class="p-form" id="n-form"><div class="p-row2"><label>Número da nota<input id="n-num"></label><label>Tipo<select id="n-kind"><option value="produto">Produto</option><option value="servico">Serviço</option></select></label></div><div class="p-row2"><label>Valor (R$)<input id="n-val" inputmode="decimal" placeholder="0,00"></label><label>Data<input id="n-date" type="date"></label></div><label>Nº do pedido na plataforma<input id="n-order" placeholder="Ex.: 2000012345678901"><small style="color:var(--p-muted)">Você encontra no e-mail de venda do marketplace ou no painel do vendedor da sua loja.</small></label><label>Observação<input id="n-note"></label><label>Arquivo (PDF, XML ou imagem, até 6 MB)<input id="n-file" type="file" accept="application/pdf,text/xml,application/xml,image/png,image/jpeg,image/webp"></label><button class="btn-primary" type="submit">Enviar nota</button></form></div>
-      <div class="p-card"><h3>Notas trocadas</h3>${v.length ? v.map((n) => `<div style="padding:9px 0;border-top:1px solid var(--p-border)"><div style="display:flex;justify-content:space-between;gap:8px"><b>NF ${esc(n.number || '—')} · ${n.kind === 'servico' ? 'Serviço' : 'Produto'}</b><b>${brl(n.value)}</b></div><small style="color:var(--p-muted)">${n.from === 'partner' ? 'Enviada por você' : 'Enviada pela Velocita'} · ${dt(n.date)}${n.orderNumber ? ' · pedido ' + esc(n.orderNumber) : ''}${n.note ? ' · ' + esc(n.note) : ''}</small>${n.fileId ? ` · <a href="/api/p/files/${n.fileId}" target="_blank" rel="noopener">abrir arquivo</a>` : ''}</div>`).join('') : '<p style="color:var(--p-muted)">Nenhuma nota ainda.</p>'}</div></div>`;
+      <div class="p-card"><h3>Notas trocadas</h3>${v.length ? v.map((n) => `<div style="padding:9px 0;border-top:1px solid var(--p-border)"><div style="display:flex;justify-content:space-between;gap:8px"><b>NF ${esc(n.number || '—')} · ${n.kind === 'servico' ? 'Serviço' : 'Produto'}</b><b>${brl(n.value)}</b></div><small style="color:var(--p-muted)">${n.from === 'partner' ? 'Enviada por você' : 'Enviada pela Velocita'} · ${dt(n.date)}${n.orderNumber ? ' · pedido ' + esc(n.orderNumber) : ''}${n.note ? ' · ' + esc(n.note) : ''}</small>${n.fileId ? ` · <a href="${API}/api/p/files/${n.fileId}" target="_blank" rel="noopener">abrir arquivo</a>` : ''}</div>`).join('') : '<p style="color:var(--p-muted)">Nenhuma nota ainda.</p>'}</div></div>`;
   }
   function bindNotas() {
     $('n-form').onsubmit = async (e) => {
@@ -144,7 +152,7 @@
       const r = await api('/api/p/messages'); const fresh = r.messages.filter((m) => m.from === 'velocita' && m.at > (S.lastMsg || '9')).length;
       if (S.lastMsg && fresh) { window.VGSound.play('ok'); if (S.tab !== 'chat') toast('Nova mensagem da Velocita.'); }
       S.msgs = r.messages; S.lastMsg = (r.messages.filter((m) => m.from === 'velocita').pop() || {}).at || S.lastMsg; S.unread = r.unread;
-      if (S.tab === 'chat') { drawMsgs(); if (r.unread || markRead) { await api('/api/p/messages/read', { method: 'POST' }); S.unread = 0; } }
+      if (S.tab === 'chat') { drawMsgs(); if (!S.me.staff && (r.unread || markRead)) { await api('/api/p/messages/read', { method: 'POST' }); S.unread = 0; } }
       renderNav();
     } catch (e) { /* offline */ }
   }

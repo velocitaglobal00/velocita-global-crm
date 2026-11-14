@@ -154,7 +154,16 @@ function register(app, { db, requireAuth, newId, team, jwt, authSecret, vapidKey
 
   app.get('/api/parcerias', requireAuth, (req, res) => res.json(list(db.view()).map(row)));
   // endereço público do CRM, usado nos links e e-mails de convite (sempre o domínio próprio)
-  app.get('/api/parcerias/config', requireAuth, (req, res) => res.json({ publicUrl: process.env.PUBLIC_URL || '' }));
+  app.get('/api/parcerias/config', requireAuth, (req, res) => res.json({ publicUrl: process.env.PUBLIC_URL || '', portalUrl: process.env.PARTNER_PORTAL_URL || '' }));
+  // Tela do portal hospedada fora do CRM (ex.: parcerias.velocitaglobal.com.br, hospedagem estática que não dorme): só esse endereço pode chamar a API do parceiro
+  app.use('/api/p', (req, res, next) => {
+    const allowed = String(process.env.PARTNER_PORTAL_URL || '').replace(/\/$/, ''); const origin = req.headers.origin;
+    if (origin && allowed && origin === allowed) {
+      res.set({ 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Credentials': 'true', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS', 'Access-Control-Max-Age': '600', Vary: 'Origin' });
+      if (req.method === 'OPTIONS') return res.status(204).end();
+    }
+    next();
+  });
   // matrícula do negócio aberto no Pipeline (cria se ainda não existir)
   app.get('/api/parcerias/by-deal/:dealId', requireAuth, (req, res) => {
     const data = db.read(); const d = (data.deals || []).find((x) => x.id === req.params.dealId); if (!d) return res.status(404).json({ error: 'Negócio não encontrado' });
@@ -183,6 +192,12 @@ function register(app, { db, requireAuth, newId, team, jwt, authSecret, vapidKey
     const data = db.read(); const p = byId(data, req.params.id); if (!p) return res.status(404).json({ error: 'Parceiro não encontrado' });
     if (!p.passEnc) return res.json({ password: '', note: p.passHash ? 'Senha antiga: peça ao parceiro para redefinir (use "Apagar senha").' : 'O parceiro ainda não definiu a senha.' });
     p.audit.push({ at: new Date().toISOString(), by: (req.user && req.user.name) || '', what: 'Visualizou a senha do parceiro' }); db.write(data); res.json({ password: decPass(authSecret, p.passEnc) });
+  });
+  // "Ver como parceiro": janela dentro do CRM com o portal do parceiro funcionando normalmente, por 1 hora. Cada ação fica no histórico e o "último acesso" do parceiro não muda.
+  app.post('/api/parcerias/:id/view-as', requireAuth, adm, (req, res) => {
+    const data = db.read(); const p = byId(data, req.params.id); if (!p) return res.status(404).json({ error: 'Parceiro não encontrado' }); const by = (req.user && req.user.name) || 'Equipe';
+    p.audit.push({ at: new Date().toISOString(), by, what: 'Abriu o portal como o parceiro' }); db.write(data);
+    res.cookie(COOKIE, jwt.sign({ pid: p.id, v: p.sessionV, st: true, by }, authSecret(), { expiresIn: '1h' }), { ...cookieOpts(req), maxAge: 3600000 }); res.json({ ok: true });
   });
   // Link de login automático: uso único, vale 7 dias. Quem abre o link já entra logado naquele computador/celular.
   app.post('/api/parcerias/:id/magic-link', requireAuth, adm, (req, res) => {
@@ -294,10 +309,13 @@ function register(app, { db, requireAuth, newId, team, jwt, authSecret, vapidKey
   const pAuth = (req, res, next) => {
     try {
       const m = /(?:^|;\s*)vgp=([^;]+)/.exec(req.headers.cookie || ''); if (!m) throw new Error('sem sessão');
-      const t = jwt.verify(decodeURIComponent(m[1]), authSecret()); const data = db.view(); const p = byId(data, t.pid);
-      if (!p || p.sessionV !== t.v || p.status === 'encerrada' || p.status === 'pendente') throw new Error('sessão inválida');
-      if (t.iat && Date.now() / 1000 - t.iat > 3 * 86400) startSession(req, res, p); // mantém logado: renova a cada poucos dias de uso
-      req.partnerId = p.id; req.partner = p; next();
+      const t = jwt.verify(decodeURIComponent(m[1]), authSecret()); const data = db.view(); const p = byId(data, t.pid); const staff = !!t.st; // st = equipe Velocita usando o portal como o parceiro (janela dentro do CRM)
+      if (!p || p.sessionV !== t.v || p.status === 'encerrada' || (p.status === 'pendente' && !staff)) throw new Error('sessão inválida');
+      if (staff && req.method !== 'GET' && !/^\/api\/p\/logout/.test(req.originalUrl)) { // toda alteração feita pela equipe fica no histórico do parceiro
+        const d = db.read(); const pp = byId(d, p.id); if (pp) { pp.audit.push({ at: new Date().toISOString(), by: `${t.by || 'Equipe'} (como parceiro)`, what: `${req.method} ${String(req.originalUrl).split('?')[0].replace('/api/p/', '')}` }); if (pp.audit.length > 200) pp.audit = pp.audit.slice(-200); db.write(d); }
+      }
+      if (!staff && t.iat && Date.now() / 1000 - t.iat > 3 * 86400) startSession(req, res, p); // mantém logado: renova a cada poucos dias de uso
+      req.staff = staff; req.partnerId = p.id; req.partner = p; next();
     } catch (e) { res.status(401).json({ error: 'Faça login para continuar.' }); }
   };
   const norm = (m) => String(m || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -335,8 +353,8 @@ function register(app, { db, requireAuth, newId, team, jwt, authSecret, vapidKey
     p.passHash = team.hashPassword(pw); p.passEnc = encPass(authSecret, pw); p.activatedAt = new Date().toISOString(); db.write(data); res.json({ ok: true }); notifyTeam(p, 'O parceiro criou a senha de acesso.');
   });
   app.post('/api/p/logout', (req, res) => { res.clearCookie(COOKIE, { path: '/' }); res.json({ ok: true }); });
-  app.get('/api/p/me', pAuth, (req, res) => { touch(req.partnerId); const p = req.partner; res.json({ id: p.id, name: p.name, company: p.company, matricula: p.matricula, status: p.status, paused: p.paused, contractDate: p.contractDate, commissionPct: num(p.commissionPct), hasPassword: !!p.passHash }); });
-  app.get('/api/p/dashboard', pAuth, (req, res) => { touch(req.partnerId); const p = req.partner; res.json({ summary: summary(p), tips: tips(p), links: p.links, paused: p.paused, recent: p.sales.slice(-12).reverse(), payouts: p.payouts.slice(-30).reverse() }); });
+  app.get('/api/p/me', pAuth, (req, res) => { if (!req.staff) touch(req.partnerId); const p = req.partner; res.json({ id: p.id, name: p.name, company: p.company, matricula: p.matricula, status: p.status, paused: p.paused, contractDate: p.contractDate, commissionPct: num(p.commissionPct), hasPassword: !!p.passHash, staff: !!req.staff }); });
+  app.get('/api/p/dashboard', pAuth, (req, res) => { if (!req.staff) touch(req.partnerId); const p = req.partner; res.json({ summary: summary(p), tips: tips(p), links: p.links, paused: p.paused, recent: p.sales.slice(-12).reverse(), payouts: p.payouts.slice(-30).reverse() }); });
   app.get('/api/p/connections', pAuth, (req, res) => res.json((req.partner.connections || []).map((c) => { const P = PLATFORMS[c.platform] || {}; return { id: c.id, kind: P.kind || c.kind, platformName: P.name || c.platform, label: c.label, status: c.status, lastTestAt: c.lastTestAt, name: (c.info || {}).name || '', metrics: c.status === 'conectada' ? c.metrics || {} : {} }; })));
   app.get('/api/p/sales', pAuth, (req, res) => res.json(req.partner.sales.slice(-400).reverse()));
   app.get('/api/p/orders', pAuth, (req, res) => res.json(req.partner.orders.slice().reverse()));
