@@ -7,8 +7,8 @@ self.addEventListener('push', (event) => {
   event.waitUntil(Promise.all([
     self.registration.showNotification(d.title || 'Velocita Parcerias', {
       body: d.body || '',
-      icon: '/img/icon-192.png',
-      badge: '/img/badge-72.png',
+      icon: '/parcerias/icons/icon-192.png',
+      badge: '/parcerias/icons/badge-72.png',
       tag: d.tag,
       renotify: !!d.tag,
       vibrate: d.tone === 'alert' ? [420, 140, 420] : [90, 50, 90, 50, 200],

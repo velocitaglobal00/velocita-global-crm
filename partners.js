@@ -387,7 +387,7 @@ function register(app, { db, requireAuth, newId, team, jwt, authSecret, vapidKey
   // manifesto do app instalável (muda o endereço de início conforme o domínio)
   app.get('/parcerias/manifest.webmanifest', (req, res) => {
     const sub = /^parcerias\./i.test(req.hostname || ''); const start = sub ? '/' : '/parcerias/';
-    res.type('application/manifest+json').send(JSON.stringify({ name: 'Velocita Parcerias', short_name: 'Parcerias', description: 'Portal do parceiro Velocita Global', id: start, start_url: start, scope: start, display: 'standalone', orientation: 'portrait', background_color: '#0c1528', theme_color: '#F4821F', lang: 'pt-BR', icons: [{ src: '/img/icon-192.png', sizes: '192x192', type: 'image/png' }, { src: '/img/icon-512.png', sizes: '512x512', type: 'image/png' }, { src: '/img/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }] }));
+    res.type('application/manifest+json').send(JSON.stringify({ name: 'Velocita Parcerias', short_name: 'Parcerias', description: 'Portal do parceiro Velocita Global', id: start, start_url: start, scope: start, display: 'standalone', orientation: 'portrait', background_color: '#141515', theme_color: '#141515', lang: 'pt-BR', icons: [{ src: '/parcerias/icons/icon-192.png', sizes: '192x192', type: 'image/png' }, { src: '/parcerias/icons/icon-512.png', sizes: '512x512', type: 'image/png' }, { src: '/parcerias/icons/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }] }));
   });
 }
 
