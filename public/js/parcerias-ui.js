@@ -9,7 +9,7 @@
   const api = (u, o) => window.api(u, o);
   const toast = (t) => window.showToast && window.showToast(t);
   const P = { list: [], open: null, timer: null, canEdit: false };
-  const PORTAL = () => (location.hostname.includes('localhost') ? `${location.origin}/parcerias/` : 'https://parcerias.velocitaglobal.com.br');
+  const PORTAL = () => `${location.origin}/parcerias/`;
   const ST = { pendente: 'Aguardando contrato', ativa: 'Ativa', pausada: 'Pausada', encerrada: 'Encerrada' };
   P.filter = 'ativas';
 
@@ -58,6 +58,39 @@
     if ($('sw-face')) $('sw-face').onclick = async () => { try { done({ confirmToken: await window.VGPasskey.confirm() }); } catch (er) { toast('Face ID não confirmado.'); } };
   }
 
+  // Popup "Link de acesso": link do portal já com a matrícula, mensagem pronta e envio por WhatsApp ou e-mail
+  function invitePop(p) {
+    const link = `${PORTAL()}?m=${encodeURIComponent(p.matricula)}${p.activated ? '' : '&p=1'}`; const first = (p.name || p.company || '').split(' ')[0] || 'tudo bem';
+    const msg = `Olá, ${first}! Aqui é da Velocita Global.\n\nSeu acesso ao Portal de Parcerias está pronto: ${link}\n\nSua matrícula: ${p.matricula}\n${p.activated ? 'Entre com a matrícula e a senha que você criou.' : `No primeiro acesso, informe a matrícula${p.email ? ' e o e-mail do seu contrato' : ''} e crie a sua senha (6 a 32 caracteres).`}\n\nPelo portal você acompanha vendas, valores a receber, gera ordens, envia notas fiscais e fala com a nossa operação em tempo real. Dá para instalar como app no celular.`;
+    document.getElementById('pc-pop')?.remove();
+    const el = document.createElement('div'); el.id = 'pc-pop'; el.className = 'pc-pop';
+    el.innerHTML = `<div class="pc-pop-box" role="dialog" aria-modal="true" aria-label="Link de acesso do parceiro"><div class="pc-head"><h3 style="margin:0">Link de acesso: ${esc(p.company || p.name)}</h3><button class="btn-secondary btn-sm" id="pp-close">Fechar</button></div>
+      ${p.status === 'pendente' ? '<p class="pc-warn">O acesso ainda não está liberado. Depois do contrato assinado, mude a situação para <b>Ativa</b> na aba Parcerias; até lá o portal recusa o login.</p>' : ''}
+      <div class="pc-mode"><button class="btn-secondary btn-sm pc-on" id="pp-m1">Link simples (o parceiro digita a senha)</button><button class="btn-secondary btn-sm" id="pp-m2" ${p.status === 'pendente' ? 'disabled title="Libere o acesso primeiro"' : ''}>Link que já entra logado</button></div>
+      <p class="mt-note" id="pp-hint" style="margin:6px 0">Abre o portal com a matrícula preenchida. O parceiro entra com a senha dele.</p>
+      <label class="mt-note">Link do portal</label><div class="pc-actions" style="margin-top:4px"><input id="pp-link" readonly value="${esc(link)}" style="flex:1;min-width:220px"><button class="btn-primary btn-sm" id="pp-copy">Copiar link</button></div>
+      <label class="mt-note" style="display:block;margin-top:10px">Mensagem pronta</label><textarea id="pp-msg" rows="9" style="width:100%">${esc(msg)}</textarea>
+      <div class="pc-actions"><button class="btn-secondary btn-sm" id="pp-copymsg">Copiar mensagem</button><a class="btn-primary btn-sm" id="pp-wa" target="_blank" rel="noopener">Enviar por WhatsApp</a><a class="btn-secondary btn-sm" id="pp-mail" ${p.email ? '' : 'style="display:none"'}>Enviar por e-mail</a></div></div>`;
+    document.body.appendChild(el);
+    const text = () => $('pp-msg').value; const num = String(p.phone || '').replace(/\D/g, ''); const wa = num ? `https://wa.me/${num.length <= 11 ? '55' + num : num}` : 'https://wa.me/';
+    const sync = () => { $('pp-wa').href = `${wa}?text=${encodeURIComponent(text())}`; $('pp-mail').href = `mailto:${encodeURIComponent(p.email || '')}?subject=${encodeURIComponent('Seu acesso ao Portal de Parcerias Velocita Global')}&body=${encodeURIComponent(text())}`; };
+    sync(); $('pp-msg').addEventListener('input', sync);
+    // "Link que já entra logado": uso único, 7 dias; deixa o parceiro logado no computador/celular dele
+    const swap = (from, to) => { $('pp-msg').value = $('pp-msg').value.split(from).join(to); sync(); };
+    $('pp-m1').onclick = () => { $('pp-m1').classList.add('pc-on'); $('pp-m2').classList.remove('pc-on'); const cur = $('pp-link').value; if (cur !== link) { swap(cur, link); $('pp-link').value = link; } $('pp-hint').textContent = 'Abre o portal com a matrícula preenchida. O parceiro entra com a senha dele.'; };
+    $('pp-m2').onclick = async () => {
+      try {
+        const r = await api(`/api/parcerias/${p.id}/magic-link`, { method: 'POST' }); const auto = `${PORTAL()}?t=${r.token}`; const cur = $('pp-link').value;
+        $('pp-m2').classList.add('pc-on'); $('pp-m1').classList.remove('pc-on'); swap(cur, auto); $('pp-link').value = auto;
+        $('pp-msg').value = $('pp-msg').value.replace(/(No primeiro acesso|Entre com a matrícula)[^\n]*/, 'Ao abrir o link, você já entra logado neste aparelho.' + (p.activated ? '' : ' Ele vai pedir para você criar uma senha.')); sync();
+        $('pp-hint').innerHTML = `Uso único, válido até <b>${dt(r.expiresAt)}</b>. Quem abrir o link entra logado nesse aparelho (30 dias, renova com o uso). <b>Envie só para o parceiro.</b>`;
+      } catch (er) { toast(er.message); }
+    };
+    const copy = async (v, ok) => { try { await navigator.clipboard.writeText(v); toast(ok); } catch (e) { toast(v); } };
+    $('pp-copy').onclick = () => copy($('pp-link').value, 'Link copiado.'); $('pp-copymsg').onclick = () => copy(text(), 'Mensagem copiada.');
+    const close = () => el.remove(); $('pp-close').onclick = close; el.addEventListener('click', (e) => { if (e.target === el) close(); }); document.addEventListener('keydown', function esc2(e) { if (e.key === 'Escape') { close(); document.removeEventListener('keydown', esc2); } });
+  }
+
   const section = (title, body) => `<div class="mt-card"><h3>${title}</h3>${body}</div>`;
   function drawDetail() {
     const p = P.cur; const s = p.summary; const e = P.canEdit;
@@ -67,7 +100,7 @@
         <p class="mt-note">Entregue ao parceiro o endereço <b>${esc(PORTAL())}</b> e a matrícula. No primeiro acesso ele informa a matrícula${p.email ? ' e o e-mail do contrato' : ''} e cria a própria senha. Último acesso: ${p.lastSeen ? hm(p.lastSeen) : 'nunca'}.</p>
         ${p.activated ? `<p style="margin:6px 0">Senha do parceiro: <b id="d-pw" style="font-family:monospace;font-size:16px">••••••</b> <button class="btn-secondary btn-sm" id="d-showpw">Mostrar</button></p>` : ''}
         ${e ? `<div class="pc-actions"><label style="display:flex;gap:6px;align-items:center">Situação <select id="d-status"><option value="pendente">Aguardando contrato</option><option value="ativa">Ativa (contrato assinado)</option><option value="pausada">Pausada</option><option value="encerrada">Encerrada (derruba o acesso)</option></select></label><label style="display:flex;gap:6px;align-items:center">Comissão da Velocita (%) <input id="d-pct" type="number" min="0" max="100" step="0.5" value="${p.commissionPct}" style="width:90px"></label><button class="btn-secondary btn-sm" id="d-savepct">Salvar comissão</button></div>
-        <div class="pc-actions"><button class="btn-secondary btn-sm" id="d-reset">Apagar senha (parceiro cria outra)</button><button class="btn-secondary btn-sm" id="d-swap">Trocar matrícula</button><button class="btn-secondary btn-sm" id="d-del">Excluir parceria</button></div><div id="d-swapbox"></div>` : ''}
+        <div class="pc-actions"><button class="btn-primary btn-sm" id="d-invite">Gerar link de acesso</button><button class="btn-secondary btn-sm" id="d-reset">Apagar senha (parceiro cria outra)</button><button class="btn-secondary btn-sm" id="d-swap">Trocar matrícula</button><button class="btn-secondary btn-sm" id="d-del">Excluir parceria</button></div><div id="d-swapbox"></div>` : ''}
         ${(p.audit || []).length ? `<details style="margin-top:8px"><summary class="mt-note">Histórico de acessos e trocas</summary>${p.audit.slice().reverse().map((x) => `<p class="mt-note" style="margin:2px 0">${hm(x.at)} · ${esc(x.by)} · ${esc(x.what)}</p>`).join('')}</details>` : ''}`)}
       <div class="pc-kpis"><div class="mt-card pc-k"><span>Vendido no mês</span><b>${brl(s.month.revenue)}</b></div><div class="mt-card pc-k"><span>Custos no mês</span><b>${brl(s.month.cost)}</b></div><div class="mt-card pc-k"><span>Resultado do mês</span><b class="${s.month.profit >= 0 ? 'oc-g' : 'oc-r'}">${brl(s.month.profit)}</b></div><div class="mt-card pc-k"><span>Comissão Velocita (${p.commissionPct}%)</span><b class="oc-g">${brl(s.month.commission)}</b></div><div class="mt-card pc-k"><span>A pagar ao parceiro</span><b>${brl(s.toReceive)}</b></div></div>
       ${section('Chat com o parceiro', `<div class="pc-chat" id="d-chat">${p.messages.slice(-60).map((m) => `<div class="pc-m ${m.from === 'velocita' ? 'me' : 'them'}"><b>${esc(m.name)}</b> ${esc(m.text)}<small>${hm(m.at)}</small></div>`).join('') || '<p class="mt-note">Sem mensagens.</p>'}</div><div class="pc-actions"><input id="d-msg" placeholder="Responder ao parceiro..." style="flex:1"><button class="btn-primary btn-sm" id="d-send">Enviar</button></div>`)}
@@ -85,6 +118,7 @@
     act('d-savepct', async () => { await api(`/api/parcerias/${p.id}`, { method: 'PUT', body: JSON.stringify({ commissionPct: $('d-pct').value }) }); toast('Comissão salva.'); });
     if ($('d-showpw')) $('d-showpw').onclick = async () => { try { const r = await api(`/api/parcerias/${p.id}/password`); $('d-pw').textContent = r.password || r.note || '—'; $('d-showpw').style.display = 'none'; } catch (er) { toast(er.message); } };
     if ($('d-swap')) $('d-swap').onclick = () => swapBox(p);
+    if ($('d-invite')) $('d-invite').onclick = () => invitePop(p);
     act('d-del', async () => { if (!confirm('Excluir esta parceria e todos os dados dela? Não dá para desfazer.')) return; await api(`/api/parcerias/${p.id}`, { method: 'DELETE' }); P.open = null; P.cur = null; });
     act('d-send', async () => { const t = $('d-msg').value.trim(); if (!t) return; await post('messages', { text: t }); });
     act('s-add', async () => { await post('sales', { product: $('s-prod').value, qty: $('s-qty').value, value: $('s-val').value, cost: $('s-cost').value, date: $('s-date').value }); toast('Venda lançada. O parceiro foi avisado.'); });
@@ -109,8 +143,9 @@
       const p = await api(`/api/parcerias/by-deal/${dealId}`); const anchor = $('dd-org-address'); if (!anchor) return;
       let box = $('dd-mat'); if (!box) { box = document.createElement('div'); box.id = 'dd-mat'; box.className = 'dd-pay'; anchor.closest('.dd-meta-item').after(box); }
       const canSwap = !!(window.state && window.state.me && ['matriz', 'admin'].includes(window.state.me.role));
-      box.innerHTML = `<div class="dd-pay-head"><b>Matrícula da empresa</b> <small>(a "identidade" da parceria)</small></div><div class="dd-mat-row"><code>${esc(p.matricula)}</code><button type="button" class="btn-secondary btn-sm" id="dd-mat-copy">Copiar</button>${canSwap ? '<button type="button" class="btn-secondary btn-sm" id="dd-mat-chg">Trocar</button>' : ''}<small>${p.status === 'pendente' ? 'acesso ao portal aguardando contrato' : p.activated ? 'portal ativo' : 'aguardando 1º acesso'}</small></div><div id="dd-mat-swap"></div>`;
+      box.innerHTML = `<div class="dd-pay-head"><b>Matrícula da empresa</b> <small>(a "identidade" da parceria)</small></div><div class="dd-mat-row"><code>${esc(p.matricula)}</code><button type="button" class="btn-secondary btn-sm" id="dd-mat-copy">Copiar</button><button type="button" class="btn-primary btn-sm" id="dd-mat-link">Link de acesso</button>${canSwap ? '<button type="button" class="btn-secondary btn-sm" id="dd-mat-chg">Trocar</button>' : ''}<small>${p.status === 'pendente' ? 'acesso ao portal aguardando contrato' : p.activated ? 'portal ativo' : 'aguardando 1º acesso'}</small></div><div id="dd-mat-swap"></div>`;
       $('dd-mat-copy').onclick = () => { try { navigator.clipboard.writeText(p.matricula); toast('Matrícula copiada.'); } catch (e) { toast(p.matricula); } };
+      $('dd-mat-link').onclick = () => invitePop(p);
       if ($('dd-mat-chg')) $('dd-mat-chg').onclick = () => swapBox({ id: p.id, company: p.company }, (r) => dealBlock(dealId));
     } catch (e) { /* negócio sem permissão ou removido */ }
   }

@@ -21,9 +21,10 @@
   // ---------- carregamento + sessão ----------
   const hideSplash = () => { const s = $('vg-splash'); if (s) { s.classList.add('out'); setTimeout(() => s.remove(), 600); } };
   async function boot() {
-    const t0 = Date.now(); let me = null;
+    const t0 = Date.now(); let me = null; let magicErr = '';
+    try { const tk = new URLSearchParams(location.search).get('t'); if (tk) { history.replaceState(null, '', location.pathname + location.hash); try { await api('/api/p/magic', { method: 'POST', body: JSON.stringify({ token: tk }) }); } catch (e) { magicErr = e.message; } } } catch (e) { /* sem parâmetro */ }
     try { me = await api('/api/p/me'); } catch (e) { /* não logado */ }
-    setTimeout(() => { me ? showApp(me) : showLogin(); hideSplash(); }, Math.max(0, 1700 - (Date.now() - t0)));
+    setTimeout(() => { me ? showApp(me) : showLogin(); if (!me && magicErr) { $('p-err').textContent = magicErr; $('p-err').classList.add('show'); } hideSplash(); }, Math.max(0, 1700 - (Date.now() - t0)));
     if ('serviceWorker' in navigator) { const sub = /^parcerias\./i.test(location.hostname); navigator.serviceWorker.register('/parcerias/sw.js', { scope: sub ? '/' : '/parcerias/' }).catch(() => {}); }
   }
 
@@ -34,7 +35,8 @@
     document.querySelectorAll('[data-f=first]').forEach((e) => { e.style.display = m === 'first' ? '' : 'none'; });
     $('p-passlbl').textContent = m === 'first' ? 'Crie a sua senha (6 a 32 caracteres)' : 'Senha'; $('p-pass').autocomplete = m === 'first' ? 'new-password' : 'current-password'; $('p-go').textContent = m === 'first' ? 'Ativar meu acesso' : 'Entrar'; $('p-err').classList.remove('show');
   }
-  function showLogin() { stopTimers(); $('ai-fab').hidden = true; $('ai-panel').classList.remove('show'); $('p-app').hidden = true; $('p-login').hidden = false; setMode('login'); }
+  function fromLink() { try { const q = new URLSearchParams(location.search); const m = q.get('m'); if (m) { $('p-mat').value = m.toUpperCase(); if (q.get('p') === '1') setMode('first'); history.replaceState(null, '', location.pathname + location.hash); } } catch (e) { /* sem parâmetros */ } }
+  function showLogin() { stopTimers(); $('ai-fab').hidden = true; $('ai-panel').classList.remove('show'); $('p-app').hidden = true; $('p-login').hidden = false; setMode('login'); fromLink(); }
   document.querySelectorAll('.p-tabs2 button').forEach((b) => b.addEventListener('click', () => setMode(b.dataset.m)));
   $('p-form').addEventListener('submit', async (e) => {
     e.preventDefault(); const err = $('p-err'); err.classList.remove('show'); $('p-go').disabled = true;
@@ -48,10 +50,17 @@
 
   // ---------- app ----------
   function showApp(me) {
-    S.me = me; $('p-login').hidden = true; $('p-app').hidden = false; $('ai-fab').hidden = false; loadTips(); $('p-company').textContent = me.company || me.name;
+    S.me = me; $('p-login').hidden = true; $('p-app').hidden = false; $('ai-fab').hidden = false; loadTips(); if (!me.hasPassword) askPassword(); $('p-company').textContent = me.company || me.name;
     renderNav(); go(location.hash.replace('#', '') || 'geral'); stopTimers();
     S.timers.push(setInterval(() => { if (!document.hidden) { refreshMsgs(); if (S.tab === 'geral' || S.tab === 'financeiro' || S.tab === 'vendas') loadTab(true); } }, 6000));
     refreshMsgs();
+  }
+  // quem entrou pelo link ainda não tem senha: cria agora (para poder entrar de novo com matrícula e senha)
+  function askPassword() {
+    if ($('p-setpw')) return; const box = document.createElement('div'); box.id = 'p-setpw'; box.className = 'p-card p-pause'; box.style.margin = '0 0 14px';
+    box.innerHTML = '<h3>Crie a sua senha de acesso</h3><p style="margin:0 0 10px;color:#b7c2d9;font-size:13.5px">Você entrou pelo link da Velocita. Crie uma senha (6 a 32 caracteres) para poder entrar depois com a sua matrícula.</p><form class="p-form" id="pw-form" style="grid-template-columns:1fr auto;align-items:end"><label>Nova senha<input id="pw-new" type="password" autocomplete="new-password"></label><button class="btn-primary" type="submit">Salvar senha</button></form>';
+    $('p-app').insertBefore(box, $('p-main'));
+    $('pw-form').onsubmit = async (e) => { e.preventDefault(); try { await api('/api/p/set-password', { method: 'POST', body: JSON.stringify({ password: $('pw-new').value }) }); S.me.hasPassword = true; box.remove(); toast('Senha criada.'); } catch (er) { toast(er.message); } };
   }
   function stopTimers() { S.timers.forEach(clearInterval); S.timers = []; }
   function renderNav() {

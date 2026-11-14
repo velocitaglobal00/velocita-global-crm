@@ -502,3 +502,12 @@ input[type='checkbox']:disabled, input[type='radio']:disabled { opacity: .5; cur
 .pc-swap { margin-top: 10px; padding: 12px; border: 1px solid var(--vg-orange); border-radius: 12px; background: rgba(244,130,31,.07); }
 .dd-mat-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 6px; } .dd-mat-row code { font-size: 16px; font-weight: 700; letter-spacing: .04em; }
 #dd-mat { margin-top: 10px; }
+
+/* Popup: link de acesso do parceiro */
+.pc-pop { position: fixed; inset: 0; z-index: 9000; background: rgba(5, 10, 22, .72); display: grid; place-items: center; padding: 16px; }
+.pc-pop-box { width: min(640px, 100%); max-height: 92vh; overflow-y: auto; background: var(--vg-surface); border: 1px solid var(--vg-border); border-radius: 16px; padding: 18px 20px; box-shadow: 0 24px 70px rgba(0,0,0,.5); }
+.pc-pop-box textarea, .pc-pop-box input { background: var(--vg-surface-2); color: var(--vg-text); border: 1px solid var(--vg-border); border-radius: 10px; padding: 9px 12px; font: inherit; box-sizing: border-box; }
+.pc-warn { background: rgba(244,130,31,.12); border-left: 3px solid var(--vg-orange); padding: 9px 12px; border-radius: 8px; font-size: 13px; }
+a.btn-primary.btn-sm, a.btn-secondary.btn-sm { text-decoration: none; display: inline-flex; align-items: center; }
+
+.pc-mode { display: flex; gap: 8px; flex-wrap: wrap; }

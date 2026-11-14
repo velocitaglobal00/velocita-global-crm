@@ -104,7 +104,7 @@ function register(app, { db, requireAuth, newId, team, jwt, authSecret, vapidKey
   app.get('/api/parcerias/by-deal/:dealId', requireAuth, (req, res) => {
     const data = db.read(); const d = (data.deals || []).find((x) => x.id === req.params.dealId); if (!d) return res.status(404).json({ error: 'Negócio não encontrado' });
     const before = list(data).length; const p = ensureForDeal(data, d, newId); if (list(data).length > before) db.write(data);
-    res.json({ id: p.id, matricula: p.matricula, status: p.status, activated: !!p.passHash, company: p.company });
+    res.json({ id: p.id, matricula: p.matricula, status: p.status, activated: !!p.passHash, company: p.company, name: p.name, phone: p.phone, email: p.email });
   });
   app.get('/api/parcerias/:id', requireAuth, (req, res) => { const p = byId(db.view(), req.params.id); return p ? res.json(full(p)) : res.status(404).json({ error: 'Parceiro não encontrado' }); });
   app.post('/api/parcerias', requireAuth, adm, (req, res) => {
@@ -128,6 +128,15 @@ function register(app, { db, requireAuth, newId, team, jwt, authSecret, vapidKey
     const data = db.read(); const p = byId(data, req.params.id); if (!p) return res.status(404).json({ error: 'Parceiro não encontrado' });
     if (!p.passEnc) return res.json({ password: '', note: p.passHash ? 'Senha antiga: peça ao parceiro para redefinir (use "Apagar senha").' : 'O parceiro ainda não definiu a senha.' });
     p.audit.push({ at: new Date().toISOString(), by: (req.user && req.user.name) || '', what: 'Visualizou a senha do parceiro' }); db.write(data); res.json({ password: decPass(authSecret, p.passEnc) });
+  });
+  // Link de login automático: uso único, vale 7 dias. Quem abre o link já entra logado naquele computador/celular.
+  app.post('/api/parcerias/:id/magic-link', requireAuth, adm, (req, res) => {
+    const data = db.read(); const p = byId(data, req.params.id); if (!p) return res.status(404).json({ error: 'Parceiro não encontrado' });
+    if (p.status === 'pendente' || p.status === 'encerrada') return res.status(400).json({ error: p.status === 'pendente' ? 'Libere o acesso (situação "Ativa") depois da assinatura do contrato.' : 'Parceria encerrada.' });
+    const token = crypto.randomBytes(24).toString('hex'); p.magic = (p.magic || []).filter((m) => !m.used && m.exp > Date.now()).slice(-4);
+    p.magic.push({ h: crypto.createHash('sha256').update(token).digest('hex'), exp: Date.now() + 7 * 86400000, used: false, by: (req.user && req.user.name) || '' });
+    p.audit.push({ at: new Date().toISOString(), by: (req.user && req.user.name) || '', what: 'Gerou link de login automático (7 dias, uso único)' }); db.write(data);
+    res.json({ token, expiresAt: new Date(Date.now() + 7 * 86400000).toISOString() });
   });
   // trocar a matrícula: só a pedido do parceiro, confirmando com a senha ou o Face ID de quem está trocando
   const swaps = new Map();
@@ -202,6 +211,7 @@ function register(app, { db, requireAuth, newId, team, jwt, authSecret, vapidKey
       const m = /(?:^|;\s*)vgp=([^;]+)/.exec(req.headers.cookie || ''); if (!m) throw new Error('sem sessão');
       const t = jwt.verify(decodeURIComponent(m[1]), authSecret()); const data = db.view(); const p = byId(data, t.pid);
       if (!p || p.sessionV !== t.v || p.status === 'encerrada' || p.status === 'pendente') throw new Error('sessão inválida');
+      if (t.iat && Date.now() / 1000 - t.iat > 3 * 86400) startSession(req, res, p); // mantém logado: renova a cada poucos dias de uso
       req.partnerId = p.id; req.partner = p; next();
     } catch (e) { res.status(401).json({ error: 'Faça login para continuar.' }); }
   };
@@ -226,8 +236,21 @@ function register(app, { db, requireAuth, newId, team, jwt, authSecret, vapidKey
     if (!p || p.status === 'encerrada' || !p.passHash || !team.verifyPassword(b.password || '', p.passHash)) { failed(key); return res.status(401).json({ error: 'Matrícula ou senha incorretas.' }); }
     startSession(req, res, p); touch(p.id); res.json({ ok: true });
   });
+  app.post('/api/p/magic', (req, res) => {
+    const key = `m:${req.ip}`; if (blocked(key)) return res.status(429).json({ error: 'Muitas tentativas. Aguarde alguns minutos.' });
+    const h = crypto.createHash('sha256').update(String((req.body || {}).token || '')).digest('hex'); const data = db.read();
+    const p = list(data).find((x) => (x.magic || []).some((m) => m.h === h)); const m = p && p.magic.find((x) => x.h === h);
+    if (!p || m.used || m.exp < Date.now() || p.status === 'pendente' || p.status === 'encerrada') { failed(key); return res.status(400).json({ error: 'Este link já foi usado ou expirou. Peça um novo à Velocita ou entre com a matrícula e a senha.' }); }
+    m.used = true; p.lastSeen = new Date().toISOString(); p.audit.push({ at: p.lastSeen, by: 'Parceiro', what: 'Entrou pelo link de login automático' }); db.write(data);
+    startSession(req, res, p); res.json({ ok: true });
+  });
+  app.post('/api/p/set-password', pAuth, (req, res) => { // quem entrou pelo link e ainda não tem senha cria a dela
+    const pw = String((req.body || {}).password || ''); if (pw.length < 6 || pw.length > 32) return res.status(400).json({ error: 'A senha precisa ter de 6 a 32 caracteres.' });
+    const data = db.read(); const p = byId(data, req.partnerId); if (p.passHash) return res.status(400).json({ error: 'A senha já foi criada.' });
+    p.passHash = team.hashPassword(pw); p.passEnc = encPass(authSecret, pw); p.activatedAt = new Date().toISOString(); db.write(data); res.json({ ok: true }); notifyTeam(p, 'O parceiro criou a senha de acesso.');
+  });
   app.post('/api/p/logout', (req, res) => { res.clearCookie(COOKIE, { path: '/' }); res.json({ ok: true }); });
-  app.get('/api/p/me', pAuth, (req, res) => { touch(req.partnerId); const p = req.partner; res.json({ id: p.id, name: p.name, company: p.company, matricula: p.matricula, status: p.status, paused: p.paused, contractDate: p.contractDate, commissionPct: num(p.commissionPct) }); });
+  app.get('/api/p/me', pAuth, (req, res) => { touch(req.partnerId); const p = req.partner; res.json({ id: p.id, name: p.name, company: p.company, matricula: p.matricula, status: p.status, paused: p.paused, contractDate: p.contractDate, commissionPct: num(p.commissionPct), hasPassword: !!p.passHash }); });
   app.get('/api/p/dashboard', pAuth, (req, res) => { touch(req.partnerId); const p = req.partner; res.json({ summary: summary(p), tips: tips(p), links: p.links, paused: p.paused, recent: p.sales.slice(-12).reverse(), payouts: p.payouts.slice(-30).reverse() }); });
   app.get('/api/p/sales', pAuth, (req, res) => res.json(req.partner.sales.slice(-400).reverse()));
   app.get('/api/p/orders', pAuth, (req, res) => res.json(req.partner.orders.slice().reverse()));
