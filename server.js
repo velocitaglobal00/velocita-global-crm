@@ -39,7 +39,7 @@ app.use((req, res, next) => {
   if (!/^parcerias\./i.test(req.hostname || '')) return next();
   const p = req.path;
   if (p === '/' || p === '/index.html') return res.sendFile(path.join(__dirname, 'public', 'parcerias', 'index.html'));
-  if (p === '/healthz' || p.startsWith('/parcerias/') || p.startsWith('/api/p/') || /^\/(css|img)\//.test(p) || p === '/robots.txt') return next();
+  if (p === '/healthz' || p.startsWith('/parcerias/') || p.startsWith('/p/') || p.startsWith('/api/p/') || /^\/(css|img)\//.test(p) || p === '/robots.txt') return next();
   res.status(404).type('text/plain').send('Não encontrado');
 });
 

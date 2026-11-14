@@ -80,7 +80,7 @@
     $('pp-m1').onclick = () => { $('pp-m1').classList.add('pc-on'); $('pp-m2').classList.remove('pc-on'); const cur = $('pp-link').value; if (cur !== link) { swap(cur, link); $('pp-link').value = link; } $('pp-hint').textContent = 'Abre o portal com a matrícula preenchida. O parceiro entra com a senha dele.'; };
     $('pp-m2').onclick = async () => {
       try {
-        const r = await api(`/api/parcerias/${p.id}/magic-link`, { method: 'POST' }); const auto = `${PORTAL()}?t=${r.token}`; const cur = $('pp-link').value;
+        const r = await api(`/api/parcerias/${p.id}/magic-link`, { method: 'POST' }); const auto = `${location.origin}/p/${r.token}`; const cur = $('pp-link').value;
         $('pp-m2').classList.add('pc-on'); $('pp-m1').classList.remove('pc-on'); swap(cur, auto); $('pp-link').value = auto;
         $('pp-msg').value = $('pp-msg').value.replace(/(No primeiro acesso|Entre com a matrícula)[^\n]*/, 'Ao abrir o link, você já entra logado neste aparelho.' + (p.activated ? '' : ' Ele vai pedir para você criar uma senha.')); sync();
         $('pp-hint').innerHTML = `Uso único, válido até <b>${dt(r.expiresAt)}</b>. Quem abrir o link entra logado nesse aparelho (30 dias, renova com o uso). <b>Envie só para o parceiro.</b>`;
