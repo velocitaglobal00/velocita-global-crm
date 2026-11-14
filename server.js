@@ -381,11 +381,12 @@ app.get('/api/admin/backups/:day/download', requireAuth, adminOnlyBackup, async 
 
 // Gerador de Leads (busca de empresas, pontuação e envio ao pipeline) — ver leadgen.js
 team.register(app, { db, requireAuth, newId });
-require('./passkey').register(app, { db, requireAuth, startSession, tooManyFailures: tooManyLoginFailures, registerFailure: registerLoginFailure });
+const passkeyMod = require('./passkey'); const partners = require('./partners');
+passkeyMod.register(app, { db, requireAuth, startSession, tooManyFailures: tooManyLoginFailures, registerFailure: registerLoginFailure });
 require('./quotes').register(app, { db, requireAuth, newId });
 require('./calls').register(app, { db, requireAuth, pushToTeam });
 require('./leadgen').register(app, { db, requireAuth, newId, logHistory });
-require('./partners').register(app, { db, requireAuth, newId, team, jwt, authSecret, vapidKeys: (d) => vapidKeys(d), callAi: (sys, q) => callAiProvider((db.view().settings.integrations || {}).ai || {}, sys, q, []) });
+partners.register(app, { db, requireAuth, newId, team, jwt, authSecret, vapidKeys: (d) => vapidKeys(d), consumeConfirm: passkeyMod.consumeConfirm, callAi: (sys, q, hist) => callAiProvider((db.view().settings.integrations || {}).ai || {}, sys, q, hist || []) });
 
 // ---------- Notificações no celular (Web Push / PWA) ----------
 // Chaves VAPID geradas uma vez e guardadas nas configurações (persistem no Turso).
@@ -810,6 +811,7 @@ app.post('/api/deals', requireAuth, (req, res) => {
     stageHistory: [{ stageId, enteredAt: now, exitedAt: null }]
   };
   data.deals.push(deal);
+  partners.ensureForDeal(data, deal, newId); // matrícula da empresa, gerada junto com o negócio
   db.write(data);
   res.status(201).json(deal);
 });
@@ -2742,6 +2744,8 @@ async function migrateTeamChatAttachments() {
     if (team.ensureTeam(d0)) db.write(d0);
     team.load(db.view());
     setInterval(() => team.flush(db), 60000);
+    const mat = () => { try { const d = db.read(); if (partners.backfill(d, newId)) db.write(d); } catch (e) { /* banco carregando */ } };
+    mat(); setInterval(mat, 60000); // negócios criados por outros caminhos (Gerador de Leads, etc.) também ganham matrícula
     db.backupIfNeeded().catch((e) => console.error('Backup diário falhou:', e.message));
     setInterval(() => db.backupIfNeeded().catch((e) => console.error('Backup diário falhou:', e.message)), 30 * 60 * 1000);
   } catch (e) {

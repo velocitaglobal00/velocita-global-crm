@@ -37,15 +37,14 @@
           <li><b>Chat direto</b> com a nossa operação e <b>notas fiscais</b> num só lugar</li>
           <li><b>Velocito</b>, o assistente com dicas para vender mais</li>
         </ul>
-        <small>O acesso é liberado com a <b>matrícula</b> que a Velocita entrega após a assinatura do contrato de parceria.</small>
+        <small>O acesso é liberado com a <b>matrícula</b> da sua empresa, entregue pela Velocita após a assinatura do contrato. No primeiro acesso você cria a sua senha.</small>
       </section>
       <form class="login-card p-login-card" id="p-form" autocomplete="on">
         <h2>Login Parcerias</h2>
         <div class="p-tabs2"><button type="button" class="on" data-m="login">Entrar</button><button type="button" data-m="first">Primeiro acesso</button></div>
         <div class="login-error" id="p-err" role="alert"></div>
         <div class="login-field"><label for="p-mat">Matrícula</label><input id="p-mat" placeholder="VG-XXXX-XXXX" autocapitalize="characters" autocomplete="username" spellcheck="false" /></div>
-        <div class="login-field" data-f="first"><label for="p-code">Código de ativação</label><input id="p-code" placeholder="6 caracteres enviados pela Velocita" autocapitalize="characters" spellcheck="false" /></div>
-        <div class="login-field" data-f="first"><label for="p-mail">Seu e-mail</label><input id="p-mail" type="email" placeholder="voce@empresa.com.br" autocomplete="email" /></div>
+        <div class="login-field" data-f="first"><label for="p-mail">E-mail do seu contrato</label><input id="p-mail" type="email" placeholder="voce@empresa.com.br" autocomplete="email" /></div>
         <div class="login-field"><label for="p-pass" id="p-passlbl">Senha</label><input id="p-pass" type="password" placeholder="Sua senha" autocomplete="current-password" /></div>
         <button type="submit" class="login-btn" id="p-go">Entrar</button>
         <p class="p-help">Não tem matrícula ainda? Fale com a Velocita pelo WhatsApp ou e-mail do seu contrato.</p>
@@ -58,12 +57,21 @@
     <header class="p-top">
       <div class="p-brand"><img src="/img/logo.webp" alt="" width="34" height="34" /><div><b>VELOCITA</b><i>PARCERIAS</i></div></div>
       <div class="p-who"><span id="p-company"></span><span id="p-pill" class="p-pill"></span></div>
-      <div class="p-top-actions"><button class="btn-secondary btn-sm" id="p-notif" type="button" title="Receber avisos no celular">🔔 Avisos</button><button class="btn-secondary btn-sm" id="p-out" type="button">Sair</button></div>
+      <div class="p-top-actions"><button class="btn-secondary btn-sm" id="p-notif" type="button" title="Receber avisos no celular">Avisos</button><button class="btn-secondary btn-sm" id="p-out" type="button">Sair</button></div>
     </header>
     <nav class="p-nav" id="p-nav" aria-label="Seções"></nav>
     <main id="p-main" class="p-main"></main>
   </div>
   <div id="p-toast" class="p-toast" role="status" aria-live="polite"></div>
+
+  <!-- Velo-Cito: balão flutuante, igual ao do CRM -->
+  <button id="ai-fab" type="button" title="Velo-Cito, assistente" hidden><img src="/img/mascot/01_neutro.png" alt="Velo-Cito" /></button>
+  <div id="ai-panel">
+    <div class="ai-panel-header"><strong><img src="/img/mascot/01_neutro.png" alt="" style="width:20px;height:20px;vertical-align:-5px;margin-right:4px;" />Velo-Cito</strong><button class="modal-close" id="ai-panel-close" type="button">&times;</button></div>
+    <div class="tab-pills" style="margin:12px 16px 0;"><button class="tab-pill active" data-aitab="tips" type="button">Dicas</button><button class="tab-pill" data-aitab="chat" type="button">Chat</button></div>
+    <div id="ai-tab-tips" class="ai-panel-body"><div id="ai-tips-list"></div></div>
+    <div id="ai-tab-chat" class="ai-panel-body" style="display:none;"><div class="chat-thread" id="ai-chat-thread"></div><div class="chat-input-row"><textarea id="ai-chat-input" placeholder="Pergunte sobre as suas vendas, margem ou ordens..."></textarea><button class="btn-primary" id="ai-chat-send" type="button">Enviar</button></div></div>
+  </div>
   <script src="/parcerias/p.js"></script>
 </body>
 </html>

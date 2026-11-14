@@ -32,5 +32,17 @@
     });
   }
 
-  window.VGPasskey = { available, enroll, login };
+  // confirma uma ação sensível com Face ID (já logado); devolve o token de uso único
+  async function confirm() {
+    const { options, ch } = await post('/api/passkey/confirm/options');
+    options.challenge = toBuf(options.challenge); (options.allowCredentials || []).forEach((c) => { c.id = toBuf(c.id); });
+    const cred = await navigator.credentials.get({ publicKey: options }); const r = cred.response;
+    const out = await post('/api/passkey/confirm/verify', {
+      ch, response: { id: cred.id, rawId: toB64u(cred.rawId), type: cred.type, authenticatorAttachment: cred.authenticatorAttachment, clientExtensionResults: cred.getClientExtensionResults(),
+        response: { clientDataJSON: toB64u(r.clientDataJSON), authenticatorData: toB64u(r.authenticatorData), signature: toB64u(r.signature), userHandle: r.userHandle ? toB64u(r.userHandle) : undefined } }
+    });
+    return out.token;
+  }
+
+  window.VGPasskey = { available, enroll, login, confirm };
 })();

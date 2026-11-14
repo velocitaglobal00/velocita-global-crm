@@ -1,0 +1,70 @@
+/* Padrão visual do CRM Velocita aplicado ao Gerador de Roteiros (IA).
+   Carregado DEPOIS do <style> de cada página: redefine as mesmas variáveis
+   (--navy = fundo dos painéis, --navy-2 = blocos internos, --bg = fundo da página)
+   e troca o cabeçalho pela barra laranja do CRM. O tema claro/escuro segue a mesma
+   escolha do CRM (chave vg_theme no navegador). */
+:root {
+  --navy: #ffffff;
+  --navy-2: #f3f5f9;
+  --bg: #eef0f3;
+  --border: #d7dce3;
+  --text: #1f2937;
+  --muted: #6b7486;
+  --heading: #1b2a4e;
+  --shadow: rgba(20, 28, 46, 0.08);
+}
+:root[data-theme='dark'] {
+  --navy: #171f2e;
+  --navy-2: #1d2738;
+  --bg: #0f1521;
+  --border: #2b3750;
+  --text: #e7ebf3;
+  --muted: #93a0ba;
+  --heading: #eef1f8;
+  --shadow: rgba(0, 0, 0, 0.45);
+}
+
+body { background: var(--bg) !important; background-image: none !important; color: var(--text); }
+
+/* barra superior laranja, igual ao CRM */
+header {
+  background: #f4821f !important;
+  backdrop-filter: none !important;
+  border-bottom: 3px solid #1b2a4e !important;
+  color: #1b2a4e;
+  padding: 12px 22px !important;
+}
+header .logo { color: #1b2a4e; font-size: 17px; font-weight: 800; }
+header .logo .mark { background: transparent; padding: 0; }
+header .logo .mark img { height: 30px; }
+header .userbox, header .userbox span { color: #1b2a4e; }
+header .userbox b { color: #1b2a4e; }
+header .out {
+  border-color: rgba(27, 42, 78, 0.35) !important;
+  color: #1b2a4e !important;
+  background: rgba(255, 255, 255, 0.18) !important;
+  font-weight: 600;
+}
+header .out:hover { background: rgba(255, 255, 255, 0.35) !important; border-color: #1b2a4e !important; }
+.vg-theme-btn {
+  width: 34px; height: 34px; border-radius: 50%; border: 1px solid rgba(27, 42, 78, 0.35);
+  background: rgba(255, 255, 255, 0.18); color: #1b2a4e; cursor: pointer; display: inline-grid; place-items: center; font-size: 15px;
+}
+.vg-theme-btn:hover { background: rgba(255, 255, 255, 0.35); }
+
+/* painéis = cartões brancos do CRM */
+.panel, .card, .box, .stat, .stats > div {
+  box-shadow: 0 1px 3px var(--shadow);
+}
+.panel h2, .panel h3:not(.block h3), h1, h2 { color: var(--heading); }
+.block h3 { color: #d96e0f; }
+:root[data-theme='dark'] .block h3 { color: #f4821f; }
+.prompt { color: var(--text) !important; }
+.scene .txt, .tags span { color: var(--text); }
+input, select, textarea { background: var(--navy) !important; color: var(--text) !important; }
+:root:not([data-theme='dark']) input, :root:not([data-theme='dark']) select, :root:not([data-theme='dark']) textarea { background: #fff !important; }
+.csv-table th { background: var(--navy) !important; }
+.btn { box-shadow: 0 1px 2px rgba(217, 110, 15, 0.15); }
+.btn:hover { box-shadow: 0 4px 12px rgba(217, 110, 15, 0.3); }
+.err { background: #fdf4f4 !important; border-color: #f3c6c6 !important; }
+:root[data-theme='dark'] .err { background: #3a2026 !important; border-color: #6b3439 !important; }

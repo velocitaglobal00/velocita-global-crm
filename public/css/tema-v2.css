@@ -496,3 +496,9 @@ input[type='checkbox']:disabled, input[type='radio']:disabled { opacity: .5; cur
 .pc-dot { background: #d64545; color: #fff; border-radius: 99px; padding: 2px 8px; font-size: 12px; font-weight: 700; }
 .pc-chat { max-height: 280px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 4px; } .pc-m { max-width: 80%; padding: 8px 12px; border-radius: 12px; font-size: 13.5px; background: var(--vg-surface-2); } .pc-m small { display: block; opacity: .6; font-size: 10.5px; } .pc-m.me { align-self: flex-end; background: var(--vg-orange); color: #0c1528; } .pc-m b { font-size: 11.5px; display: block; }
 .pc-link { display: flex; gap: 8px; align-items: center; margin: 4px 0; }
+
+.pc-on { background: var(--vg-orange) !important; color: #0c1528 !important; border-color: var(--vg-orange) !important; }
+.pc-pendente { background: rgba(147,160,186,.2); color: var(--vg-text-muted); }
+.pc-swap { margin-top: 10px; padding: 12px; border: 1px solid var(--vg-orange); border-radius: 12px; background: rgba(244,130,31,.07); }
+.dd-mat-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 6px; } .dd-mat-row code { font-size: 16px; font-weight: 700; letter-spacing: .04em; }
+#dd-mat { margin-top: 10px; }

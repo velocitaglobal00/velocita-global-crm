@@ -1,0 +1,98 @@
+
+/* ===== operação digital (animações leves: só transform e opacidade) ===== */
+.ops2 { background: radial-gradient(70% 60% at 50% 0%, rgba(244,130,31,.09), transparent 70%); }
+.ops2-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+.ops2-card {
+  position: relative; padding: 26px 24px 26px; border-radius: 22px; overflow: hidden;
+  background: linear-gradient(170deg, #1a2643 0%, #111c36 100%);
+  border: 1px solid rgba(255,255,255,.08);
+  transition: transform .35s cubic-bezier(.2,.7,.2,1), border-color .35s, box-shadow .35s;
+}
+.ops2-card::before {
+  content: ''; position: absolute; left: 0; right: 0; top: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--orange), transparent);
+}
+.ops2-card:hover { transform: translateY(-5px); border-color: rgba(244,130,31,.45); box-shadow: 0 24px 46px rgba(0,0,0,.35); }
+.ops2-tag {
+  display: inline-block; font-family: 'Poppins'; font-size: 11px; font-weight: 600; letter-spacing: .18em;
+  text-transform: uppercase; color: var(--orange-bright); background: rgba(244,130,31,.14);
+  padding: 5px 11px; border-radius: 999px; margin-bottom: 10px;
+}
+.ops2-card h3 { font-size: 1.12rem; }
+.ops2-card > p { font-size: 14.5px; margin-top: 12px; }
+.stage { margin-top: 16px; border-radius: 16px; background: radial-gradient(circle at 50% 40%, rgba(244,130,31,.14), rgba(12,21,40,.4) 75%); border: 1px solid rgba(255,255,255,.06); overflow: hidden; }
+.stage .svg { width: 100%; height: auto; display: block; }
+.svg text { font-family: 'Inter', sans-serif; font-size: 12px; fill: #cfd8ea; text-anchor: middle; font-weight: 600; }
+
+/* 1. campanhas */
+.flow { fill: none; stroke: rgba(244,130,31,.5); stroke-width: 2; stroke-dasharray: 4 6; }
+.chip rect { fill: rgba(255,255,255,.07); stroke: rgba(255,255,255,.18); }
+.chip text { font-size: 11px; fill: #e7ecf6; }
+.ad-card { transform-box: fill-box; transform-origin: center; }
+.ad-bar { transform-box: fill-box; transform-origin: left; transform: scaleX(0); }
+.spark { fill: #ffb36b; opacity: 0; }
+.conv circle:nth-child(2) { transform-box: fill-box; transform-origin: center; }
+.ops2-card.in .flow { animation: dashFlow 1.4s linear infinite; }
+.ops2-card.in .ad-card { animation: floatY 4.5s ease-in-out infinite; }
+.ops2-card.in .ad-bar { animation: barGrow 1.6s .4s cubic-bezier(.2,.7,.2,1) forwards; }
+.ops2-card.in .chip { animation: chipIn .6s cubic-bezier(.2,.7,.2,1) both; }
+.ops2-card.in .chip.c1 { animation-delay: .2s; }
+.ops2-card.in .chip.c2 { animation-delay: .35s; }
+.ops2-card.in .chip.c3 { animation-delay: .5s; }
+.ops2-card.in .spark { animation: sparkRise 2.2s ease-in infinite; }
+.ops2-card.in .spark.s2 { animation-delay: 1.1s; }
+.ops2-card.in .conv circle:nth-child(2) { animation: pulseScale 2s ease-in-out infinite; }
+
+/* 2. hub de canais */
+.link { fill: none; stroke: rgba(244,130,31,.35); stroke-width: 1.6; }
+.node circle { fill: #111c36; stroke: rgba(244,130,31,.8); stroke-width: 2; }
+.node text { font-size: 12px; fill: #fff; font-weight: 700; }
+.hub-t { font-family: 'Poppins', sans-serif; font-size: 22px !important; fill: #111c36 !important; font-weight: 800 !important; }
+.hub-s { font-size: 9px !important; fill: #111c36 !important; font-weight: 700 !important; letter-spacing: .08em; }
+.pulse-ring { fill: none; stroke: #f4821f; stroke-width: 2; opacity: 0; transform-box: fill-box; transform-origin: center; }
+.packet { fill: #ffd29a; filter: drop-shadow(0 0 4px #f4821f); opacity: 0; }
+.ops2-card.in .pulse-ring { animation: ringOut 2.6s ease-out infinite; }
+.ops2-card.in .pulse-ring.pr2 { animation-delay: 1.3s; }
+.ops2-card.in .node { animation: chipIn .6s cubic-bezier(.2,.7,.2,1) both; }
+.ops2-card.in .node.n2 { animation-delay: .15s; }
+.ops2-card.in .node.n3 { animation-delay: .3s; }
+.ops2-card.in .node.n4 { animation-delay: .45s; }
+.ops2-card.in .packet.k1 { animation: packetA 3s linear infinite; }
+.ops2-card.in .packet.k2 { animation: packetB 3s linear infinite .75s; }
+.ops2-card.in .packet.k3 { animation: packetC 3s linear infinite 1.5s; }
+.ops2-card.in .packet.k4 { animation: packetD 3s linear infinite 2.25s; }
+
+/* 3. painel de resultados */
+.grid { stroke: rgba(255,255,255,.08); stroke-width: 1; }
+.area { opacity: 0; }
+.curve { stroke-dasharray: 520; stroke-dashoffset: 520; }
+.end-dot { fill: #fff; stroke: #f4821f; stroke-width: 3; opacity: 0; }
+.kpi rect:first-child { fill: rgba(20,30,58,.85); stroke: rgba(255,255,255,.09); }
+.kbar { fill: #f4821f; transform-box: fill-box; transform-origin: left; transform: scaleX(0); }
+.kbar2 { fill: rgba(255,255,255,.18); transform-box: fill-box; transform-origin: left; transform: scaleX(0); }
+.ops2-card.in .area { animation: fadeIn 1s .6s forwards; }
+.ops2-card.in .curve { animation: draw 1.8s .2s cubic-bezier(.4,0,.2,1) forwards; }
+.ops2-card.in .end-dot { animation: fadeIn .4s 1.9s forwards, pulseScale 2s 2.3s ease-in-out infinite; }
+.ops2-card.in .kbar { animation: barGrow 1.2s .8s cubic-bezier(.2,.7,.2,1) forwards; }
+.ops2-card.in .kbar2 { animation: barGrow 1.2s 1s cubic-bezier(.2,.7,.2,1) forwards; }
+.ops2-card.in .kpi { animation: chipIn .6s cubic-bezier(.2,.7,.2,1) both; }
+.ops2-card.in .kpi.k2 { animation-delay: .15s; }
+.ops2-card.in .kpi.k3 { animation-delay: .3s; }
+
+/* keyframes */
+@keyframes dashFlow { to { stroke-dashoffset: -20; } }
+@keyframes floatY { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+@keyframes barGrow { to { transform: scale(1); } }
+@keyframes chipIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes sparkRise { 0% { opacity: 0; transform: translateY(0); } 20% { opacity: 1; } 100% { opacity: 0; transform: translateY(-40px); } }
+@keyframes pulseScale { 0%,100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+@keyframes ringOut { 0% { opacity: .8; transform: scale(1); } 100% { opacity: 0; transform: scale(1.9); } }
+@keyframes fadeIn { to { opacity: 1; } }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+@keyframes packetA { 0% { transform: translate(180px,130px); opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { transform: translate(70px,60px); opacity: 0; } }
+@keyframes packetB { 0% { transform: translate(180px,130px); opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { transform: translate(290px,60px); opacity: 0; } }
+@keyframes packetC { 0% { transform: translate(180px,130px); opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { transform: translate(70px,200px); opacity: 0; } }
+@keyframes packetD { 0% { transform: translate(180px,130px); opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { transform: translate(290px,200px); opacity: 0; } }
+
+@media (max-width: 960px) { .ops2-grid { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { .ops2-card * { animation: none !important; } .ops2-card .area, .ops2-card .curve, .ops2-card .end-dot { opacity: 1; stroke-dashoffset: 0; } .ops2-card .kbar, .ops2-card .kbar2, .ops2-card .ad-bar { transform: scale(1); } }

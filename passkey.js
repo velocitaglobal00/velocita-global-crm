@@ -19,6 +19,9 @@ function context(req) {
   return base ? { rpID: base.hostname, origin: base.origin } : { rpID: host.split(':')[0], origin: `${req.protocol}://${host}` };
 }
 
+const confirms = new Map(); // token de confirmação (Face ID) -> { uid, exp }
+function consumeConfirm(uid, token) { const r = confirms.get(String(token || '')); confirms.delete(String(token || '')); return !!(r && r.uid === uid && r.exp > Date.now()); }
+
 function register(app, { db, requireAuth, startSession, tooManyFailures, registerFailure }) {
   const notMatriz = (req, res, next) => (req.user && req.user.role === 'matriz' ? res.status(403).json({ error: 'A conta matriz usa apenas usuário e senha.' }) : next());
 
@@ -58,6 +61,26 @@ function register(app, { db, requireAuth, startSession, tooManyFailures, registe
     u.passkeys = (u.passkeys || []).filter((p) => p.id !== req.params.id); db.write(data); res.json({ ok: true });
   });
 
+  // ---- confirmar uma ação sensível com Face ID (já logado): devolve um token de uso único, válido por 2 minutos ----
+  app.post('/api/passkey/confirm/options', requireAuth, notMatriz, async (req, res) => {
+    const u = db.view().users.find((x) => x.id === req.user.id); if (!u || !(u.passkeys || []).length) return res.status(400).json({ error: 'Este usuário não tem Face ID cadastrado.' });
+    const { rpID } = context(req);
+    const options = await generateAuthenticationOptions({ rpID, userVerification: 'required', allowCredentials: u.passkeys.map((p) => ({ id: p.id, type: 'public-key', transports: p.transports })) });
+    const ch = crypto.randomBytes(12).toString('hex'); keep('cfm:' + ch, { challenge: options.challenge, uid: u.id }); res.json({ options, ch });
+  });
+  app.post('/api/passkey/confirm/verify', requireAuth, notMatriz, async (req, res) => {
+    const { ch, response } = req.body || {}; const rec = take('cfm:' + ch); const { rpID, origin } = context(req);
+    if (!rec || rec.uid !== req.user.id || !response || !response.id) return res.status(400).json({ error: 'O pedido expirou. Tente de novo.' });
+    const u = db.view().users.find((x) => x.id === req.user.id); const pk = (u.passkeys || []).find((p) => p.id === response.id); if (!pk) return res.status(401).json({ error: 'Este aparelho não é o seu.' });
+    try {
+      const v = await verifyAuthenticationResponse({ response, expectedChallenge: rec.challenge, expectedOrigin: origin, expectedRPID: rpID, requireUserVerification: true,
+        authenticator: { credentialID: fromB64u(pk.id), credentialPublicKey: fromB64u(pk.publicKey), counter: pk.counter || 0, transports: pk.transports } });
+      if (!v.verified) return res.status(401).json({ error: 'Face ID não confirmado.' });
+      const data = db.read(); const uu = data.users.find((x) => x.id === u.id); const k = uu.passkeys.find((p) => p.id === pk.id); k.counter = v.authenticationInfo.newCounter; k.lastUsedAt = new Date().toISOString(); db.write(data);
+      const token = crypto.randomBytes(18).toString('hex'); confirms.set(token, { uid: u.id, exp: Date.now() + 2 * 60 * 1000 }); res.json({ token });
+    } catch (e) { return res.status(401).json({ error: 'Não foi possível confirmar com Face ID.' }); }
+  });
+
   // ---- entrar com Face ID (sem estar logado) ----
   app.post('/api/passkey/login/options', async (req, res) => {
     if (tooManyFailures(req.ip)) return res.status(429).json({ error: 'Muitas tentativas. Aguarde alguns minutos.' });
@@ -89,4 +112,4 @@ function register(app, { db, requireAuth, startSession, tooManyFailures, registe
   });
 }
 
-module.exports = { register };
+module.exports = { register, consumeConfirm };
