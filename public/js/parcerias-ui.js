@@ -9,12 +9,14 @@
   const api = (u, o) => window.api(u, o);
   const toast = (t) => window.showToast && window.showToast(t);
   const P = { list: [], open: null, timer: null, canEdit: false };
-  const PORTAL = () => `${location.origin}/parcerias/`;
+  P.base = location.origin; // endereço público do CRM (vem do servidor): os links e e-mails usam sempre o domínio próprio, nunca o do Render
+  const PORTAL = () => `${P.base}/parcerias/`;
   const ST = { pendente: 'Aguardando contrato', ativa: 'Ativa', pausada: 'Pausada', encerrada: 'Encerrada' };
   P.filter = 'ativas';
 
   window.initParcerias = async function () {
     P.canEdit = !!(window.state && window.state.me && ['matriz', 'admin'].includes(window.state.me.role));
+    try { const c = await api('/api/parcerias/config'); if (c.publicUrl) P.base = c.publicUrl.replace(/\/$/, ''); } catch (e) { /* usa o endereço atual */ }
     clearInterval(P.timer);
     P.timer = setInterval(() => { const v = $('view-parcerias'); if (v && v.classList.contains('active') && !document.hidden && !document.activeElement.matches('input,textarea,select')) refresh(true); }, 8000);
     await refresh(false);
@@ -85,7 +87,7 @@
 
   // E-mail de convite: layout da marca, estilos inline (funciona no Gmail, Outlook e celular)
   function inviteEmailHtml(p, link, auto) {
-    const nome = esc((p.name || p.company || '').split(' ')[0] || 'tudo bem'); const logo = `${location.origin}/img/icon-192.png`;
+    const nome = esc((p.name || p.company || '').split(' ')[0] || 'tudo bem'); const logo = `${P.base}/img/icon-192.png`;
     const passo = auto
       ? `<li style="margin:0 0 8px">Clique no botão abaixo: você já entra logado neste aparelho (o link vale por 7 dias e só pode ser usado uma vez).</li>${p.activated ? '' : '<li style="margin:0 0 8px">Na primeira vez, crie a sua senha de acesso (de 6 a 32 caracteres).</li>'}`
       : `<li style="margin:0 0 8px">Clique no botão abaixo. A sua matrícula já vem preenchida.</li><li style="margin:0 0 8px">${p.activated ? 'Informe a senha que você criou e entre.' : `No <b>Primeiro acesso</b>, informe${p.email ? ' o e-mail do seu contrato e' : ''} crie a sua senha (de 6 a 32 caracteres).`}</li>`;
@@ -135,7 +137,7 @@
     $('pp-m1').onclick = () => { $('pp-m1').classList.add('pc-on'); $('pp-m2').classList.remove('pc-on'); const cur = $('pp-link').value; if (cur !== link) { swap(cur, link); $('pp-link').value = link; } $('pp-hint').textContent = 'Abre o portal com a matrícula preenchida. O parceiro entra com a senha dele.'; };
     $('pp-m2').onclick = async () => {
       try {
-        const r = await api(`/api/parcerias/${p.id}/magic-link`, { method: 'POST' }); const auto = `${location.origin}/p/${r.token}`; const cur = $('pp-link').value;
+        const r = await api(`/api/parcerias/${p.id}/magic-link`, { method: 'POST' }); const auto = `${P.base}/p/${r.token}`; const cur = $('pp-link').value;
         $('pp-m2').classList.add('pc-on'); $('pp-m1').classList.remove('pc-on'); swap(cur, auto); $('pp-link').value = auto;
         $('pp-msg').value = $('pp-msg').value.replace(/(No primeiro acesso|Entre com a matrícula)[^\n]*/, 'Ao abrir o link, você já entra logado neste aparelho.' + (p.activated ? '' : ' Ele vai pedir para você criar uma senha.')); sync();
         $('pp-hint').innerHTML = `Uso único, válido até <b>${dt(r.expiresAt)}</b>. Quem abrir o link entra logado nesse aparelho (30 dias, renova com o uso). <b>Envie só para o parceiro.</b>`;

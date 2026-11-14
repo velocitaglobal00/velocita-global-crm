@@ -33,6 +33,16 @@ app.use((req, res, next) => {
   next();
 });
 
+// O endereço antigo (...onrender.com) leva as páginas para o domínio próprio (PUBLIC_URL). A API, os webhooks e o health check seguem como estão.
+app.use((req, res, next) => {
+  const pub = process.env.PUBLIC_URL; if (!pub || req.method !== 'GET') return next();
+  try {
+    const want = new URL(pub).host.toLowerCase(); const host = String(req.hostname || '').toLowerCase();
+    if (/\.onrender\.com$/.test(host) && host !== want && !req.path.startsWith('/api') && req.path !== '/healthz') return res.redirect(302, pub.replace(/\/$/, '') + req.originalUrl);
+  } catch (e) { /* PUBLIC_URL inválida: não redireciona */ }
+  next();
+});
+
 // Subdomínio do portal de parcerias (parcerias.velocitaglobal.com.br): só o portal e a API dele ficam acessíveis ali.
 // O CRM (/app, /login.html, /api/...) NÃO abre por esse endereço.
 app.use((req, res, next) => {
@@ -411,7 +421,8 @@ function pushToTeam(data, { except, only, title, body, url, tag, tone }) {
   );
   if (!subs.length) return;
   const keys = vapidKeys(data);
-  webpush.setVapidDetails('mailto:velocitaglobal@gmail.com', keys.publicKey, keys.privateKey);
+  // contato exigido pelo padrão de notificações push: usa o endereço do site (ou VAPID_CONTACT), sem expor e-mail pessoal
+  webpush.setVapidDetails(process.env.VAPID_CONTACT || 'https://crm.velocitaglobal.com.br', keys.publicKey, keys.privateKey);
   const payload = JSON.stringify({ title, body: String(body || '').slice(0, 240), url: url || '/app', tag: tag || undefined, tone: tone || 'ok' });
   setImmediate(async () => {
     const dead = [];
@@ -2142,7 +2153,7 @@ app.get('/api/google/oauth-start', requireAuth, (req, res) => {
 });
 
 // Conexão separada (não por usuário) para ler a caixa de entrada real de um
-// e-mail compartilhado (ex: velocitaglobal@gmail.com) na aba E-mail > Caixa de
+// e-mail compartilhado da empresa (a caixa da equipe) na aba E-mail > Caixa de
 // Entrada (Gmail). Usa o mesmo Client ID/Secret do Google Calendar, mas com o
 // escopo gmail.readonly, e reaproveita a mesma redirect_uri (identificado pelo
 // state="gmail-inbox" em vez de um id de usuário).

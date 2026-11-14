@@ -75,7 +75,7 @@ const TESTS = {
     return { name: j.shop && j.shop.name, metrics: { Loja: j.shop && j.shop.name, Moeda: j.shop && j.shop.currency, 'Pedidos': c.count != null ? c.count : 'indisponível' } };
   },
   async nuvemshop(f) {
-    const h = { Authentication: `bearer ${f.accessToken || ''}`, 'User-Agent': 'Velocita Global (velocitaglobal@gmail.com)' }; const r = await fetchT(`https://api.nuvemshop.com.br/v1/${encodeURIComponent(f.storeId || '')}/store`, { headers: h }); const j = await jsonOf(r); if (!r.ok) throw new Error(human(r.status, j));
+    const h = { Authentication: `bearer ${f.accessToken || ''}`, 'User-Agent': 'Velocita Global CRM' }; const r = await fetchT(`https://api.nuvemshop.com.br/v1/${encodeURIComponent(f.storeId || '')}/store`, { headers: h }); const j = await jsonOf(r); if (!r.ok) throw new Error(human(r.status, j));
     const o = await fetchT(`https://api.nuvemshop.com.br/v1/${encodeURIComponent(f.storeId)}/orders?per_page=1`, { headers: h }); const nm = (j.name && (j.name.pt || j.name.es || Object.values(j.name)[0])) || 'Loja Nuvemshop';
     return { name: nm, metrics: { Loja: nm, Pedidos: o.headers.get('x-total-count') || 'indisponível', Moeda: j.main_currency } };
   },
@@ -100,7 +100,7 @@ function decPass(authSecret, s) { try { const [iv, tag, e] = String(s).split('.'
 function register(app, { db, requireAuth, newId, team, jwt, authSecret, vapidKeys, callAi, consumeConfirm }) {
   const adm = (req, res, next) => (team.isAdminLike(req.user) ? next() : res.status(403).json({ error: 'Somente administradores.' }));
   // ---------- notificações ----------
-  const pushKeys = () => { const k = vapidKeys(db.view()); webpush.setVapidDetails('mailto:velocitaglobal@gmail.com', k.publicKey, k.privateKey); };
+  const pushKeys = () => { const k = vapidKeys(db.view()); webpush.setVapidDetails(process.env.VAPID_CONTACT || 'https://crm.velocitaglobal.com.br', k.publicKey, k.privateKey); };
   function pushPartner(partnerId, { title, body, url, tag, tone }) { // celular do parceiro
     const data = db.view(); const subs = (data.partnerPush || []).filter((s) => s.partnerId === partnerId); if (!subs.length) return;
     pushKeys(); const payload = JSON.stringify({ title, body: str(body, 240), url: url || '/parcerias/', tag, tone: tone || 'ok' });
@@ -153,6 +153,8 @@ function register(app, { db, requireAuth, newId, team, jwt, authSecret, vapidKey
   const full = (p) => ({ ...row(p), audit: (p.audit || []).slice(-20), notes: p.notes, sales: p.sales, payouts: p.payouts, orders: p.orders, messages: p.messages, invoices: p.invoices, links: p.links, suggestions: p.suggestions });
 
   app.get('/api/parcerias', requireAuth, (req, res) => res.json(list(db.view()).map(row)));
+  // endereço público do CRM, usado nos links e e-mails de convite (sempre o domínio próprio)
+  app.get('/api/parcerias/config', requireAuth, (req, res) => res.json({ publicUrl: process.env.PUBLIC_URL || '' }));
   // matrícula do negócio aberto no Pipeline (cria se ainda não existir)
   app.get('/api/parcerias/by-deal/:dealId', requireAuth, (req, res) => {
     const data = db.read(); const d = (data.deals || []).find((x) => x.id === req.params.dealId); if (!d) return res.status(404).json({ error: 'Negócio não encontrado' });
