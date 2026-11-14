@@ -58,6 +58,25 @@
     if ($('sw-face')) $('sw-face').onclick = async () => { try { done({ confirmToken: await window.VGPasskey.confirm() }); } catch (er) { toast('Face ID não confirmado.'); } };
   }
 
+  // E-mail de convite: layout da marca, estilos inline (funciona no Gmail, Outlook e celular)
+  function inviteEmailHtml(p, link, auto) {
+    const nome = esc((p.name || p.company || '').split(' ')[0] || 'tudo bem'); const logo = `${location.origin}/img/icon-192.png`;
+    const passo = auto
+      ? `<li style="margin:0 0 8px">Clique no botão abaixo: você já entra logado neste aparelho (o link vale por 7 dias e só pode ser usado uma vez).</li>${p.activated ? '' : '<li style="margin:0 0 8px">Na primeira vez, crie a sua senha de acesso (de 6 a 32 caracteres).</li>'}`
+      : `<li style="margin:0 0 8px">Clique no botão abaixo. A sua matrícula já vem preenchida.</li><li style="margin:0 0 8px">${p.activated ? 'Informe a senha que você criou e entre.' : `No <b>Primeiro acesso</b>, informe${p.email ? ' o e-mail do seu contrato e' : ''} crie a sua senha (de 6 a 32 caracteres).`}</li>`;
+    return `<!doctype html><html lang="pt-BR"><body style="margin:0;padding:0;background:#eef0f3"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef0f3;padding:24px 12px"><tr><td align="center">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;background:#ffffff;border-radius:14px;overflow:hidden;font-family:Arial,Helvetica,sans-serif;color:#1f2937">
+<tr><td style="background:#1b2a4e;padding:22px 28px;border-bottom:4px solid #f4821f"><table role="presentation" cellpadding="0" cellspacing="0"><tr><td><img src="${logo}" width="48" height="48" alt="" style="display:block;border-radius:10px"></td><td style="padding-left:14px"><div style="font-size:20px;font-weight:bold;letter-spacing:2px;color:#ffffff">VELOCITA</div><div style="font-size:11px;letter-spacing:6px;color:#ff9a3d">GLOBAL</div></td></tr></table></td></tr>
+<tr><td style="padding:30px 28px 8px"><div style="font-size:13px;letter-spacing:2px;color:#f4821f;font-weight:bold">PORTAL DE PARCERIAS</div><h1 style="margin:6px 0 14px;font-size:24px;line-height:1.25;color:#1b2a4e">Olá, ${nome}! Seu acesso está pronto.</h1>
+<p style="margin:0 0 16px;font-size:15px;line-height:1.6">Bem-vindo à parceria com a <b>Velocita Global</b>. No portal você acompanha a sua operação em tempo real: vendas, valores a receber, custos e produtos mais vendidos. Também gera ordens para a Velocita, envia notas fiscais, pausa a operação quando precisar e fala direto com a nossa equipe.</p></td></tr>
+<tr><td style="padding:0 28px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fff6ec;border:1px solid #f9d3ac;border-radius:12px"><tr><td style="padding:16px 18px"><div style="font-size:12px;color:#8a5a1f;letter-spacing:1px">SUA MATRÍCULA</div><div style="font-size:26px;font-weight:bold;letter-spacing:3px;color:#1b2a4e;margin-top:4px">${esc(p.matricula)}</div><div style="font-size:12px;color:#6b7280;margin-top:4px">É a identidade da sua empresa na Velocita. Guarde com cuidado.</div></td></tr></table></td></tr>
+<tr><td style="padding:20px 28px 4px"><div style="font-size:15px;font-weight:bold;color:#1b2a4e;margin-bottom:8px">Como entrar</div><ol style="margin:0;padding-left:20px;font-size:14.5px;line-height:1.55">${passo}</ol></td></tr>
+<tr><td align="center" style="padding:22px 28px 10px"><a href="${esc(link)}" style="display:inline-block;background:#f4821f;color:#1b2a4e;font-weight:bold;font-size:16px;text-decoration:none;padding:14px 34px;border-radius:10px">Acessar o Portal de Parcerias</a><div style="font-size:12px;color:#6b7280;margin-top:10px">Se o botão não abrir, copie este endereço no navegador:<br><a href="${esc(link)}" style="color:#d96e0f;word-break:break-all">${esc(link)}</a></div></td></tr>
+<tr><td style="padding:14px 28px 6px"><p style="margin:0;font-size:13px;line-height:1.55;color:#4b5563">Dá para instalar o portal como aplicativo no celular (Android e iPhone) e receber avisos de vendas, mensagens e pagamentos. ${auto ? '<b>Este link é pessoal: não encaminhe para outras pessoas.</b>' : ''}</p></td></tr>
+<tr><td style="padding:22px 28px 26px"><div style="border-top:1px solid #e5e7eb;padding-top:16px"><div style="font-size:14px;color:#1f2937">Qualquer dúvida, é só responder este e-mail ou falar com a gente pelo chat do portal.</div><div style="margin-top:14px;font-size:14px"><b style="color:#1b2a4e">Equipe Velocita Global LTDA</b><br><span style="color:#6b7280">velocitaglobal.com.br</span></div></div></td></tr>
+</table><div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#9ca3af;margin-top:12px;max-width:600px">Você recebeu este e-mail porque a Velocita Global liberou o seu acesso ao Portal de Parcerias.</div></td></tr></table></body></html>`;
+  }
+
   // Popup "Link de acesso": link do portal já com a matrícula, mensagem pronta e envio por WhatsApp ou e-mail
   function invitePop(p) {
     const link = `${PORTAL()}?m=${encodeURIComponent(p.matricula)}${p.activated ? '' : '&p=1'}`; const first = (p.name || p.company || '').split(' ')[0] || 'tudo bem';
@@ -70,10 +89,13 @@
       <p class="mt-note" id="pp-hint" style="margin:6px 0">Abre o portal com a matrícula preenchida. O parceiro entra com a senha dele.</p>
       <label class="mt-note">Link do portal</label><div class="pc-actions" style="margin-top:4px"><input id="pp-link" readonly value="${esc(link)}" style="flex:1;min-width:220px"><button class="btn-primary btn-sm" id="pp-copy">Copiar link</button></div>
       <label class="mt-note" style="display:block;margin-top:10px">Mensagem pronta</label><textarea id="pp-msg" rows="9" style="width:100%">${esc(msg)}</textarea>
-      <div class="pc-actions"><button class="btn-secondary btn-sm" id="pp-copymsg">Copiar mensagem</button><a class="btn-primary btn-sm" id="pp-wa" target="_blank" rel="noopener">Enviar por WhatsApp</a><a class="btn-secondary btn-sm" id="pp-mail" ${p.email ? '' : 'style="display:none"'}>Enviar por e-mail</a></div></div>`;
+      <div class="pc-actions"><button class="btn-secondary btn-sm" id="pp-copymsg">Copiar mensagem</button><a class="btn-primary btn-sm" id="pp-wa" target="_blank" rel="noopener">Enviar por WhatsApp</a></div>
+      <div class="pc-mailbox"><b>Enviar por e-mail</b><p class="mt-note" style="margin:2px 0 6px">E-mail com o layout da Velocita, assinado como Equipe Velocita Global LTDA, enviado pela caixa compartilhada.</p>
+        <div class="pc-form" style="margin:0"><input id="pp-to" type="email" placeholder="E-mail do fornecedor" value="${esc(p.email || '')}"><input id="pp-subj" value="Seu acesso ao Portal de Parcerias da Velocita Global"></div>
+        <div class="pc-actions"><button class="btn-secondary btn-sm" id="pp-prev">Pré-visualizar e-mail</button><button class="btn-primary btn-sm" id="pp-send">Enviar e-mail agora</button></div><iframe id="pp-frame" title="Pré-visualização do e-mail" style="display:none;width:100%;height:520px;border:1px solid var(--vg-border);border-radius:10px;margin-top:8px;background:#fff"></iframe></div></div>`;
     document.body.appendChild(el);
     const text = () => $('pp-msg').value; const num = String(p.phone || '').replace(/\D/g, ''); const wa = num ? `https://wa.me/${num.length <= 11 ? '55' + num : num}` : 'https://wa.me/';
-    const sync = () => { $('pp-wa').href = `${wa}?text=${encodeURIComponent(text())}`; $('pp-mail').href = `mailto:${encodeURIComponent(p.email || '')}?subject=${encodeURIComponent('Seu acesso ao Portal de Parcerias Velocita Global')}&body=${encodeURIComponent(text())}`; };
+    const sync = () => { $('pp-wa').href = `${wa}?text=${encodeURIComponent(text())}`; if ($('pp-frame').style.display !== 'none') $('pp-frame').srcdoc = inviteEmailHtml(p, $('pp-link').value, $('pp-link').value.includes('/p/')); };
     sync(); $('pp-msg').addEventListener('input', sync);
     // "Link que já entra logado": uso único, 7 dias; deixa o parceiro logado no computador/celular dele
     const swap = (from, to) => { $('pp-msg').value = $('pp-msg').value.split(from).join(to); sync(); };
@@ -87,6 +109,15 @@
       } catch (er) { toast(er.message); }
     };
     const copy = async (v, ok) => { try { await navigator.clipboard.writeText(v); toast(ok); } catch (e) { toast(v); } };
+    $('pp-prev').onclick = () => { const f = $('pp-frame'); const show = f.style.display === 'none'; f.style.display = show ? '' : 'none'; $('pp-prev').textContent = show ? 'Esconder pré-visualização' : 'Pré-visualizar e-mail'; if (show) sync(); };
+    $('pp-send').onclick = async () => {
+      const to = $('pp-to').value.trim(); if (!/^\S+@\S+\.\S+$/.test(to)) return toast('Informe um e-mail válido do fornecedor.');
+      if (!window.confirm(`Enviar o e-mail de acesso para ${to}?`)) return; const b = $('pp-send'); b.disabled = true; b.textContent = 'Enviando...';
+      try {
+        const link = $('pp-link').value; await api('/api/mail/gmail/send', { method: 'POST', body: JSON.stringify({ to, subject: $('pp-subj').value, html: inviteEmailHtml(p, link, link.includes('/p/')), noSignature: true, fromName: 'Equipe Velocita Global LTDA', attendantId: (window.state && window.state.attendantId) || null }) });
+        toast('E-mail enviado para ' + to + '.'); b.textContent = 'E-mail enviado';
+      } catch (er) { toast(er.code === 'GOOGLE_RECONNECT' || /conect/i.test(er.message) ? 'Conecte o Gmail da caixa compartilhada em E-mail (Reconectar Google) e tente de novo.' : er.message); b.disabled = false; b.textContent = 'Enviar e-mail agora'; }
+    };
     $('pp-copy').onclick = () => copy($('pp-link').value, 'Link copiado.'); $('pp-copymsg').onclick = () => copy(text(), 'Mensagem copiada.');
     const close = () => el.remove(); $('pp-close').onclick = close; el.addEventListener('click', (e) => { if (e.target === el) close(); }); document.addEventListener('keydown', function esc2(e) { if (e.key === 'Escape') { close(); document.removeEventListener('keydown', esc2); } });
   }

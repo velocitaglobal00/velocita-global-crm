@@ -511,3 +511,5 @@ input[type='checkbox']:disabled, input[type='radio']:disabled { opacity: .5; cur
 a.btn-primary.btn-sm, a.btn-secondary.btn-sm { text-decoration: none; display: inline-flex; align-items: center; }
 
 .pc-mode { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.pc-mailbox { margin-top: 14px; padding: 12px 14px; border: 1px solid var(--vg-border); border-radius: 12px; background: var(--vg-surface-2); }

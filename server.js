@@ -2383,11 +2383,11 @@ app.post('/api/mail/:box/messages/:id/unread', requireAuth, async (req, res) => 
 app.post('/api/mail/:box/send', requireAuth, async (req, res) => {
   const data = db.read();
   const mb = resolveMailbox(data, req.params.box, req.body.attendantId);
-  const { to, cc, subject, text, html, inReplyTo, references, threadId } = req.body || {};
+  const { to, cc, subject, text, html, inReplyTo, references, threadId } = req.body || {}; const fromName = String((req.body || {}).fromName || '').trim().slice(0, 80);
   if (!to || !String(to).includes('@')) return res.status(400).json({ error: 'Informe pelo menos um destinatário válido.' });
   try {
     const token = await getGoogleAccessTokenGeneric(mb.gcal, mb.refreshToken, mb.label);
-    const from = mb.user ? `${mimeWord(mb.user.name)} <${mb.email}>` : `Velocita Global <${mb.email}>`;
+    const from = fromName ? `${mimeWord(fromName)} <${mb.email}>` : mb.user ? `${mimeWord(mb.user.name)} <${mb.email}>` : `Velocita Global <${mb.email}>`;
     const bodyHtml = html || escapeHtmlServer(String(text || '')).replace(/\n/g, '<br>');
     const bodyWithSig = req.body.noSignature ? bodyHtml : bodyHtml + signatureHtmlFor(req.user);
     const raw = buildRawEmail({ from, to, cc, subject, html: `<div style="font-family:Arial,sans-serif;font-size:14px;">${bodyWithSig}</div>`, inReplyTo, references });
