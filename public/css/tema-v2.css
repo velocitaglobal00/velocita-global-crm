@@ -486,3 +486,13 @@ input[type='checkbox']:disabled, input[type='radio']:disabled { opacity: .5; cur
 .lgh-sum { margin: 6px 0 10px; line-height: 1.5; background: rgba(244, 130, 31, .1); border-left: 3px solid var(--vg-orange); padding: 8px 12px; border-radius: 6px; font-size: 13.5px; }
 .lgh-acts { display: flex; gap: 8px; flex-wrap: wrap; } .lgh-table { overflow-x: auto; margin-top: 12px; } .lgh-table table { min-width: 760px; font-size: 13px; }
 .lg-outcome input[data-act='person'] { min-width: 150px; }
+
+/* Parcerias (CRM) */
+.pc-kpis { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); margin-bottom: 12px; } .pc-k span { display: block; color: var(--vg-text-muted); font-size: 12.5px; } .pc-k b { font-size: 22px; }
+.pc-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: space-between; margin-bottom: 10px; } .pc-head h3 { margin: 0; }
+.pc-scroll { overflow-x: auto; } .pc-form { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); margin: 8px 0; align-items: end; } .pc-form label { display: grid; gap: 4px; font-size: 12.5px; }
+.pc-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; align-items: center; }
+.pc-st { font-size: 11.5px; font-weight: 700; padding: 3px 10px; border-radius: 99px; } .pc-ativa { background: rgba(31,157,85,.18); color: #1f9d55; } .pc-pausada { background: rgba(244,130,31,.2); color: var(--vg-orange-dark); } .pc-encerrada { background: rgba(214,69,69,.18); color: #d64545; }
+.pc-dot { background: #d64545; color: #fff; border-radius: 99px; padding: 2px 8px; font-size: 12px; font-weight: 700; }
+.pc-chat { max-height: 280px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 4px; } .pc-m { max-width: 80%; padding: 8px 12px; border-radius: 12px; font-size: 13.5px; background: var(--vg-surface-2); } .pc-m small { display: block; opacity: .6; font-size: 10.5px; } .pc-m.me { align-self: flex-end; background: var(--vg-orange); color: #0c1528; } .pc-m b { font-size: 11.5px; display: block; }
+.pc-link { display: flex; gap: 8px; align-items: center; margin: 4px 0; }

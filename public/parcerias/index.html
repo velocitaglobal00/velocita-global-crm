@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<title>Velocita Parcerias</title>
+<meta name="robots" content="noindex, nofollow" />
+<link rel="icon" href="/img/logo.webp" />
+<link rel="manifest" href="/parcerias/manifest.webmanifest" />
+<meta name="theme-color" content="#0c1528" />
+<link rel="apple-touch-icon" href="/img/apple-touch-icon.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="Parcerias" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Poppins:wght@600;700;800&display=swap">
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/tema-v2.css" />
+<link rel="stylesheet" href="/parcerias/p.css" />
+</head>
+<body class="p-body">
+  <!-- Tela de carregamento: mesma animação do CRM Velocita -->
+  <div id="vg-splash" aria-hidden="true"><div class="sp-glow"></div><div class="sp-box"><img src="/img/logo.webp" alt="" /><div class="sp-word"><b>VELOCITA</b><i>GLOBAL</i></div><div class="sp-tag">PARCERIAS</div><div class="sp-bar"><u></u></div></div></div>
+
+  <!-- Login Parcerias -->
+  <main id="p-login" class="p-login" hidden>
+    <div class="p-login-grid">
+      <section class="p-login-info">
+        <img src="/img/logo.webp" alt="Velocita Global" width="72" height="72" />
+        <h1>Portal de <span>Parcerias</span></h1>
+        <p>Acompanhe a sua operação com a Velocita Global em tempo real, no computador ou no celular.</p>
+        <ul>
+          <li><b>Vendas e resultados</b> da sua loja, atualizados na hora</li>
+          <li><b>Valores a receber</b>, custos e produtos mais vendidos</li>
+          <li><b>Ordens para a Velocita</b>, pausa de operação e sugestões</li>
+          <li><b>Chat direto</b> com a nossa operação e <b>notas fiscais</b> num só lugar</li>
+          <li><b>Velocito</b>, o assistente com dicas para vender mais</li>
+        </ul>
+        <small>O acesso é liberado com a <b>matrícula</b> que a Velocita entrega após a assinatura do contrato de parceria.</small>
+      </section>
+      <form class="login-card p-login-card" id="p-form" autocomplete="on">
+        <h2>Login Parcerias</h2>
+        <div class="p-tabs2"><button type="button" class="on" data-m="login">Entrar</button><button type="button" data-m="first">Primeiro acesso</button></div>
+        <div class="login-error" id="p-err" role="alert"></div>
+        <div class="login-field"><label for="p-mat">Matrícula</label><input id="p-mat" placeholder="VG-XXXX-XXXX" autocapitalize="characters" autocomplete="username" spellcheck="false" /></div>
+        <div class="login-field" data-f="first"><label for="p-code">Código de ativação</label><input id="p-code" placeholder="6 caracteres enviados pela Velocita" autocapitalize="characters" spellcheck="false" /></div>
+        <div class="login-field" data-f="first"><label for="p-mail">Seu e-mail</label><input id="p-mail" type="email" placeholder="voce@empresa.com.br" autocomplete="email" /></div>
+        <div class="login-field"><label for="p-pass" id="p-passlbl">Senha</label><input id="p-pass" type="password" placeholder="Sua senha" autocomplete="current-password" /></div>
+        <button type="submit" class="login-btn" id="p-go">Entrar</button>
+        <p class="p-help">Não tem matrícula ainda? Fale com a Velocita pelo WhatsApp ou e-mail do seu contrato.</p>
+      </form>
+    </div>
+  </main>
+
+  <!-- Área do parceiro -->
+  <div id="p-app" class="p-app" hidden>
+    <header class="p-top">
+      <div class="p-brand"><img src="/img/logo.webp" alt="" width="34" height="34" /><div><b>VELOCITA</b><i>PARCERIAS</i></div></div>
+      <div class="p-who"><span id="p-company"></span><span id="p-pill" class="p-pill"></span></div>
+      <div class="p-top-actions"><button class="btn-secondary btn-sm" id="p-notif" type="button" title="Receber avisos no celular">🔔 Avisos</button><button class="btn-secondary btn-sm" id="p-out" type="button">Sair</button></div>
+    </header>
+    <nav class="p-nav" id="p-nav" aria-label="Seções"></nav>
+    <main id="p-main" class="p-main"></main>
+  </div>
+  <div id="p-toast" class="p-toast" role="status" aria-live="polite"></div>
+  <script src="/parcerias/p.js"></script>
+</body>
+</html>

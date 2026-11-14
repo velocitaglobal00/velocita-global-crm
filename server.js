@@ -33,6 +33,16 @@ app.use((req, res, next) => {
   next();
 });
 
+// Subdomínio do portal de parcerias (parcerias.velocitaglobal.com.br): só o portal e a API dele ficam acessíveis ali.
+// O CRM (/app, /login.html, /api/...) NÃO abre por esse endereço.
+app.use((req, res, next) => {
+  if (!/^parcerias\./i.test(req.hostname || '')) return next();
+  const p = req.path;
+  if (p === '/' || p === '/index.html') return res.sendFile(path.join(__dirname, 'public', 'parcerias', 'index.html'));
+  if (p === '/healthz' || p.startsWith('/parcerias/') || p.startsWith('/api/p/') || /^\/(css|img)\//.test(p) || p === '/robots.txt') return next();
+  res.status(404).type('text/plain').send('Não encontrado');
+});
+
 // Compressão gzip das respostas de texto (HTML, CSS, JS e JSON da API). O app.js
 // sozinho tem ~260KB; comprimido cai para ~60KB, o que pesa muito no celular.
 const COMPRESSIBLE = /^(text\/|application\/(json|javascript|manifest\+json)|image\/svg)/;
@@ -265,7 +275,8 @@ app.get('/app', requirePageAuth, (req, res) => {
     .replace('/js/passkey-ui.js"', `/js/passkey-ui.js?v=${ASSET_VERSION}"`)
     .replace('/js/team-ui.js"', `/js/team-ui.js?v=${ASSET_VERSION}"`)
     .replace('/js/pipeline-v2.js"', `/js/pipeline-v2.js?v=${ASSET_VERSION}"`)
-    .replace('/js/calls-ui.js"', `/js/calls-ui.js?v=${ASSET_VERSION}"`);
+    .replace('/js/calls-ui.js"', `/js/calls-ui.js?v=${ASSET_VERSION}"`)
+    .replace('/js/parcerias-ui.js"', `/js/parcerias-ui.js?v=${ASSET_VERSION}"`);
   res.set('Cache-Control', 'no-cache');
   res.type('html').send(html);
 });
@@ -374,6 +385,7 @@ require('./passkey').register(app, { db, requireAuth, startSession, tooManyFailu
 require('./quotes').register(app, { db, requireAuth, newId });
 require('./calls').register(app, { db, requireAuth, pushToTeam });
 require('./leadgen').register(app, { db, requireAuth, newId, logHistory });
+require('./partners').register(app, { db, requireAuth, newId, team, jwt, authSecret, vapidKeys: (d) => vapidKeys(d), callAi: (sys, q) => callAiProvider((db.view().settings.integrations || {}).ai || {}, sys, q, []) });
 
 // ---------- Notificações no celular (Web Push / PWA) ----------
 // Chaves VAPID geradas uma vez e guardadas nas configurações (persistem no Turso).
