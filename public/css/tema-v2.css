@@ -530,3 +530,7 @@ a.btn-primary.btn-sm, a.btn-secondary.btn-sm { text-decoration: none; display: i
   .pc-scroll { overflow-x: visible; }
   .pc-kpis { grid-template-columns: 1fr 1fr; }
 }
+
+/* Parcerias (CRM): ajuda dentro dos popups */
+.p-q-crm { background: var(--vg-surface-2); color: var(--vg-heading); border: 1.5px solid var(--vg-border); width: 24px; height: 24px; border-radius: 50%; font-weight: 800; cursor: pointer; margin-left: 6px; vertical-align: middle; transition: background .15s, border-color .15s, transform .12s; } .p-q-crm:hover { border-color: var(--vg-orange); background: var(--vg-orange); color: #0c1528; transform: scale(1.08); }
+.pc-help { margin: 8px 0 10px; padding: 10px 14px; border-left: 3px solid var(--vg-orange); border-radius: 8px; background: rgba(244,130,31,.09); font-size: 13px; line-height: 1.5; font-weight: 400; } .pc-help p { margin: 4px 0 0; } .pc-help[hidden] { display: none; }

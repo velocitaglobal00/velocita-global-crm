@@ -15,6 +15,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Poppins:wght@600;700;800&display=swap">
+<script>try{document.documentElement.setAttribute('data-theme',localStorage.getItem('vg_theme')==='light'?'light':'dark')}catch(e){}</script>
 <link rel="stylesheet" href="/css/style.css" />
 <link rel="stylesheet" href="/css/tema-v2.css" />
 <link rel="stylesheet" href="/parcerias/p.css" />
@@ -25,6 +26,7 @@
 
   <!-- Login Parcerias -->
   <main id="p-login" class="p-login" hidden>
+    <div class="p-theme-float"><button class="theme-toggle-btn" id="p-theme-l" type="button" title="Alternar tema claro e escuro" aria-label="Alternar tema claro e escuro"><svg class="ti theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="5"></circle><path d="M12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"></path></svg><svg class="ti theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"></path></svg></button></div>
     <div class="p-login-grid">
       <section class="p-login-info">
         <img src="/img/logo.webp" alt="Velocita Global" width="72" height="72" />
@@ -47,6 +49,8 @@
         <div class="login-field" data-f="first"><label for="p-mail">E-mail do seu contrato</label><input id="p-mail" type="email" placeholder="voce@empresa.com.br" autocomplete="email" /></div>
         <div class="login-field"><label for="p-pass" id="p-passlbl">Senha</label><input id="p-pass" type="password" placeholder="Sua senha" autocomplete="current-password" /></div>
         <button type="submit" class="login-btn" id="p-go">Entrar</button>
+        <button type="button" class="p-help-link" id="p-loginhelp" aria-expanded="false">Como funciona o acesso?</button>
+        <div class="p-loginhelp" id="p-loginhelp-box" hidden><b>Primeiro acesso</b><p>Informe a matrícula que a Velocita enviou, o e-mail do seu contrato e crie uma senha de 6 a 32 caracteres. Depois é só entrar com a matrícula e a senha.</p><b>Recebeu um link?</b><p>Se a Velocita enviou um link de acesso, basta abrir. Ele pode entrar direto ou já abrir esta tela com a matrícula preenchida.</p><b>Não consegue entrar?</b><p>Confira a matrícula (letras e números, sem espaços). Se a senha foi esquecida, a Velocita apaga a senha antiga e você cria outra. Se aparecer "acesso ainda não liberado", o contrato ainda está em andamento.</p></div>
         <p class="p-help">Não tem matrícula ainda? Fale com a Velocita pelo WhatsApp ou e-mail do seu contrato.</p>
       </form>
     </div>
@@ -57,7 +61,7 @@
     <header class="p-top">
       <div class="p-brand"><img src="/img/logo.webp" alt="" width="34" height="34" /><div><b>VELOCITA</b><i>PARCERIAS</i></div></div>
       <div class="p-who"><span id="p-company"></span><span id="p-pill" class="p-pill"></span></div>
-      <div class="p-top-actions"><div class="p-pop-wrap"><button class="btn-secondary btn-sm" id="p-notif" type="button" aria-haspopup="true" aria-expanded="false" title="Avisos e som">Avisos</button><div class="p-pop" id="p-notif-pop" hidden><b>Avisos e som</b><button class="btn-primary btn-sm" id="n-enable" type="button">Ativar avisos neste aparelho</button><button class="btn-secondary btn-sm" id="n-sound" type="button">Som: ligado</button><div class="p-pop-row"><button class="btn-secondary btn-sm" id="n-test-ok" type="button">Testar som da Velocita</button><button class="btn-secondary btn-sm" id="n-test-alert" type="button">Testar som de alerta</button></div><small>O som toca com o portal aberto. No celular, com o app fechado, o aviso usa o som e a vibração do aparelho.</small></div></div><button class="btn-secondary btn-sm" id="p-out" type="button">Sair</button></div>
+      <div class="p-top-actions"><button class="theme-toggle-btn" id="p-theme" type="button" title="Alternar tema claro e escuro" aria-label="Alternar tema claro e escuro"><svg class="ti theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="5"></circle><path d="M12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"></path></svg><svg class="ti theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"></path></svg></button><div class="p-pop-wrap"><button class="btn-secondary btn-sm" id="p-notif" type="button" aria-haspopup="true" aria-expanded="false" title="Avisos e som">Avisos</button><div class="p-pop" id="p-notif-pop" hidden><b>Avisos e som</b><button class="btn-primary btn-sm" id="n-enable" type="button">Ativar avisos neste aparelho</button><button class="btn-secondary btn-sm" id="n-sound" type="button">Som: ligado</button><div class="p-pop-row"><button class="btn-secondary btn-sm" id="n-test-ok" type="button">Testar som da Velocita</button><button class="btn-secondary btn-sm" id="n-test-alert" type="button">Testar som de alerta</button></div><small>O som toca com o portal aberto. No celular, com o app fechado, o aviso usa o som e a vibração do aparelho.</small><button class="btn-secondary btn-sm" id="n-help" type="button">Ajuda sobre avisos e som</button></div></div><button class="btn-secondary btn-sm" id="p-out" type="button">Sair</button></div>
     </header>
     <nav class="p-nav" id="p-nav" aria-label="Seções"></nav>
     <main id="p-main" class="p-main"></main>
@@ -67,7 +71,7 @@
   <!-- Velo-Cito: balão flutuante, igual ao do CRM -->
   <button id="ai-fab" type="button" title="Velo-Cito, assistente" hidden><img src="/img/mascot/01_neutro.png" alt="Velo-Cito" /></button>
   <div id="ai-panel">
-    <div class="ai-panel-header"><strong><img src="/img/mascot/01_neutro.png" alt="" style="width:20px;height:20px;vertical-align:-5px;margin-right:4px;" />Velo-Cito</strong><button class="modal-close" id="ai-panel-close" type="button">&times;</button></div>
+    <div class="ai-panel-header"><strong><img src="/img/mascot/01_neutro.png" alt="" style="width:20px;height:20px;vertical-align:-5px;margin-right:4px;" />Velo-Cito</strong><span><button class="p-q" id="ai-help" type="button" title="Ajuda sobre o Velo-Cito" aria-label="Ajuda sobre o Velo-Cito">?</button><button class="modal-close" id="ai-panel-close" type="button">&times;</button></span></div>
     <div class="tab-pills" style="margin:12px 16px 0;"><button class="tab-pill active" data-aitab="tips" type="button">Dicas</button><button class="tab-pill" data-aitab="chat" type="button">Chat</button></div>
     <div id="ai-tab-tips" class="ai-panel-body"><div id="ai-tips-list"></div></div>
     <div id="ai-tab-chat" class="ai-panel-body" style="display:none;"><div class="chat-thread" id="ai-chat-thread"></div><div class="chat-input-row"><textarea id="ai-chat-input" placeholder="Pergunte sobre as suas vendas, margem ou ordens..."></textarea><button class="btn-primary" id="ai-chat-send" type="button">Enviar</button></div></div>
